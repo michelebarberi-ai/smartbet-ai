@@ -1,4 +1,7 @@
+import 'analysis_detail_screen.dart';
 import 'package:flutter/material.dart';
+import '../ai/smartcore.dart';
+import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../services/match_service.dart';
 
@@ -17,8 +20,10 @@ class AnalysisScreen extends StatelessWidget {
         itemBuilder: (context, index) {
           final match = matches[index];
 
+          final AnalysisResult result = SmartCore.analyze(match);
+
           return Card(
-            margin: const EdgeInsets.only(bottom: 16),
+            margin: const EdgeInsets.only(bottom: 18),
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -27,66 +32,60 @@ class AnalysisScreen extends StatelessWidget {
                   Text(
                     "${match.homeTeam} - ${match.awayTeam}",
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 5),
 
                   Text(
                     "${match.league} • ${match.date}",
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: Colors.grey),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
                   Row(
                     children: [
-                      const Icon(Icons.psychology, color: Color(0xFF00C853)),
-
+                      const Icon(Icons.psychology, color: Colors.green),
                       const SizedBox(width: 8),
-
                       Text(
-                        "Smart Score™ ${match.smartScore}%",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        "Smart Score ${result.smartScore}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
 
                   LinearProgressIndicator(
-                    value: match.smartScore / 100,
+                    value: result.smartScore / 100,
                     minHeight: 10,
                     borderRadius: BorderRadius.circular(20),
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF00C853),
-                    ),
                   ),
 
-                  const SizedBox(height: 18),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _Probability("1", match.homeWin),
-                      _Probability("X", match.draw),
-                      _Probability("2", match.awayWin),
-                    ],
-                  ),
-
-                  const Divider(height: 30),
+                  const SizedBox(height: 20),
 
                   Text(
-                    "💎 Value Bet: ${match.valueBet}",
+                    "Pronostico: ${result.prediction}",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
 
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
 
-                  Text("Quota ${match.odd.toStringAsFixed(2)}"),
+                  Text("Rischio: ${result.risk}"),
+
+                  const SizedBox(height: 6),
+
+                  Text("Value Bet: ${result.valueBet}"),
+
+                  const SizedBox(height: 14),
+
+                  Text(result.explanation),
 
                   const SizedBox(height: 20),
 
@@ -94,7 +93,15 @@ class AnalysisScreen extends StatelessWidget {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () {
-                        // Nella prossima sessione apriremo MatchDetailScreen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AnalysisDetailScreen(
+                              match: match,
+                              result: result,
+                            ),
+                          ),
+                        );
                       },
                       child: const Text("ANALIZZA"),
                     ),
@@ -105,24 +112,6 @@ class AnalysisScreen extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-}
-
-class _Probability extends StatelessWidget {
-  final String label;
-  final int value;
-
-  const _Probability(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Text("$value%"),
-      ],
     );
   }
 }

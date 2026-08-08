@@ -5,10 +5,10 @@ class AnalysisResult {
   final int drawProbability;
   final int awayProbability;
 
-  final String valueBet;
-  final double odd;
-
+  final String prediction;
   final String risk;
+
+  final String valueBet;
 
   final String explanation;
 
@@ -17,9 +17,9 @@ class AnalysisResult {
     required this.homeProbability,
     required this.drawProbability,
     required this.awayProbability,
-    required this.valueBet,
-    required this.odd,
+    required this.prediction,
     required this.risk,
+    required this.valueBet,
     required this.explanation,
   });
 }
