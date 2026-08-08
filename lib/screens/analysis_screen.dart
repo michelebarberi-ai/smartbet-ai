@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
-import '../services/match_service.dart';
+import '../repositories/match_repository.dart';
 
 class AnalysisScreen extends StatelessWidget {
   const AnalysisScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<MatchModel> matches = MatchService.getTodayMatches();
-
+    final List<MatchModel> matches = MatchRepository.getTodayMatches();
     return Scaffold(
       appBar: AppBar(title: const Text("Analisi Partite")),
       body: ListView.builder(
