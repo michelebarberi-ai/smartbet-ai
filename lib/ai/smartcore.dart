@@ -1,33 +1,362 @@
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../models/team_analysis.dart';
-
-import 'decision_engine.dart';
-import 'match_analyzer.dart';
+import '../services/team_form_service.dart';
+import 'statistics_engine.dart';
 import 'team_analyzer.dart';
 
 class SmartCore {
-  static AnalysisResult analyze(MatchModel match) {
-    final TeamAnalysis home = TeamAnalyzer.analyze(
-      teamName: match.homeTeam,
-      form: 85,
-      attack: 88,
-      defense: 84,
-      homeAway: 92,
-      motivation: 87,
+  const SmartCore._();
+
+  static final TeamFormService _formService = TeamFormService();
+
+  // ============================================================
+  // ANALISI REALE DELLA PARTITA
+  // ============================================================
+
+  static Future<AnalysisResult> analyze(MatchModel match) async {
+    // ----------------------------------------------------------
+    // CONTROLLO ID
+    // ----------------------------------------------------------
+
+    if (!match.hasTeamIds) {
+      return _insufficientDataResult("ID delle squadre non disponibili.");
+    }
+
+    // ----------------------------------------------------------
+    // RECUPERO FORMA SQUADRA CASA
+    // ----------------------------------------------------------
+
+    final homeForm = await _formService.getTeamForm(
+      teamId: match.homeTeamId,
+      last: 10,
     );
 
-    final TeamAnalysis away = TeamAnalyzer.analyze(
-      teamName: match.awayTeam,
-      form: 80,
-      attack: 82,
-      defense: 79,
-      homeAway: 74,
-      motivation: 84,
+    // ----------------------------------------------------------
+    // RECUPERO FORMA SQUADRA OSPITE
+    // ----------------------------------------------------------
+
+    final awayForm = await _formService.getTeamForm(
+      teamId: match.awayTeamId,
+      last: 10,
     );
 
-    final comparison = MatchAnalyzer.analyze(homeTeam: home, awayTeam: away);
+    // ----------------------------------------------------------
+    // DATI NON DISPONIBILI
+    // ----------------------------------------------------------
 
-    return DecisionEngine.analyze(comparison);
+    if (homeForm == null || awayForm == null) {
+      return _insufficientDataResult(
+        "Non sono state trovate abbastanza partite recenti "
+        "per una o entrambe le squadre.",
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CONTROLLO NUMERO PARTITE
+    // ----------------------------------------------------------
+
+    if (homeForm.matchesPlayed < 3 || awayForm.matchesPlayed < 3) {
+      return _insufficientDataResult(
+        "Dati recenti insufficienti per una previsione affidabile.",
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CONVERSIONE DATI → TEAM ANALYSIS
+    // ----------------------------------------------------------
+
+    final TeamAnalysis homeAnalysis = TeamAnalyzer.analyzeFromForm(
+      homeForm,
+      isHome: true,
+    );
+
+    final TeamAnalysis awayAnalysis = TeamAnalyzer.analyzeFromForm(
+      awayForm,
+      isHome: false,
+    );
+
+    // ----------------------------------------------------------
+    // CONTROLLO DATI
+    // ----------------------------------------------------------
+
+    if (!homeAnalysis.hasEnoughData || !awayAnalysis.hasEnoughData) {
+      return _insufficientDataResult(
+        "Dati statistici insufficienti per una previsione affidabile.",
+      );
+    }
+
+    // ----------------------------------------------------------
+    // SMART SCORE
+    // ----------------------------------------------------------
+
+    final smartScore = StatisticsEngine.calculateFromTeams(
+      homeTeam: homeAnalysis,
+      awayTeam: awayAnalysis,
+      competitionWeight: match.aiWeight,
+    );
+
+    // ----------------------------------------------------------
+    // PROBABILITÀ
+    // ----------------------------------------------------------
+
+    final probabilities = StatisticsEngine.calculateProbabilities(
+      homeTeam: homeAnalysis,
+      awayTeam: awayAnalysis,
+    );
+
+    final homeProbability = probabilities['home'] ?? 0;
+
+    final drawProbability = probabilities['draw'] ?? 0;
+
+    final awayProbability = probabilities['away'] ?? 0;
+
+    // ----------------------------------------------------------
+    // PRONOSTICO
+    // ----------------------------------------------------------
+
+    final prediction = _calculatePrediction(
+      homeProbability: homeProbability,
+      drawProbability: drawProbability,
+      awayProbability: awayProbability,
+    );
+
+    // ----------------------------------------------------------
+    // RISCHIO
+    // ----------------------------------------------------------
+
+    final risk = _calculateRisk(smartScore);
+
+    // ----------------------------------------------------------
+    // VALUE BET
+    // ----------------------------------------------------------
+
+    final valueBet = _calculateValueBet(
+      match: match,
+      prediction: prediction,
+      probability: _predictionProbability(
+        prediction: prediction,
+        homeProbability: homeProbability,
+        drawProbability: drawProbability,
+        awayProbability: awayProbability,
+      ),
+    );
+
+    // ----------------------------------------------------------
+    // SPIEGAZIONE
+    // ----------------------------------------------------------
+
+    final explanation = _buildExplanation(
+      home: homeAnalysis,
+      away: awayAnalysis,
+      smartScore: smartScore,
+      prediction: prediction,
+      homeForm: homeForm,
+      awayForm: awayForm,
+    );
+
+    // ----------------------------------------------------------
+    // SALVIAMO I RISULTATI NEL MATCH
+    // ----------------------------------------------------------
+
+    match.smartScore = smartScore;
+
+    match.homeWin = homeProbability;
+
+    match.draw = drawProbability;
+
+    match.awayWin = awayProbability;
+
+    match.valueBet = valueBet;
+
+    // ----------------------------------------------------------
+    // RISULTATO
+    // ----------------------------------------------------------
+
+    return AnalysisResult(
+      smartScore: smartScore,
+      homeProbability: homeProbability,
+      drawProbability: drawProbability,
+      awayProbability: awayProbability,
+      prediction: prediction,
+      valueBet: valueBet,
+      risk: risk,
+      explanation: explanation,
+    );
+  }
+
+  // ============================================================
+  // PRONOSTICO
+  // ============================================================
+
+  static String _calculatePrediction({
+    required int homeProbability,
+    required int drawProbability,
+    required int awayProbability,
+  }) {
+    if (homeProbability >= drawProbability &&
+        homeProbability >= awayProbability) {
+      return "1";
+    }
+
+    if (awayProbability >= homeProbability &&
+        awayProbability >= drawProbability) {
+      return "2";
+    }
+
+    return "X";
+  }
+
+  // ============================================================
+  // PROBABILITÀ DEL PRONOSTICO
+  // ============================================================
+
+  static int _predictionProbability({
+    required String prediction,
+    required int homeProbability,
+    required int drawProbability,
+    required int awayProbability,
+  }) {
+    switch (prediction) {
+      case "1":
+        return homeProbability;
+
+      case "2":
+        return awayProbability;
+
+      case "X":
+        return drawProbability;
+
+      default:
+        return 0;
+    }
+  }
+
+  // ============================================================
+  // RISCHIO
+  // ============================================================
+
+  static String _calculateRisk(int smartScore) {
+    if (smartScore >= 90) {
+      return "Molto Basso";
+    }
+
+    if (smartScore >= 80) {
+      return "Basso";
+    }
+
+    if (smartScore >= 70) {
+      return "Medio";
+    }
+
+    if (smartScore >= 60) {
+      return "Medio-Alto";
+    }
+
+    return "Alto";
+  }
+
+  // ============================================================
+  // VALUE BET
+  // ============================================================
+
+  static String _calculateValueBet({
+    required MatchModel match,
+    required String prediction,
+    required int probability,
+  }) {
+    if (match.odd <= 1.0) {
+      return "Da verificare";
+    }
+
+    final impliedProbability = (1 / match.odd) * 100;
+
+    final difference = probability - impliedProbability;
+
+    if (difference >= 8) {
+      return "SI";
+    }
+
+    if (difference >= 3) {
+      return "Possibile";
+    }
+
+    return "NO";
+  }
+
+  // ============================================================
+  // SPIEGAZIONE
+  // ============================================================
+
+  static String _buildExplanation({
+    required TeamAnalysis home,
+    required TeamAnalysis away,
+    required int smartScore,
+    required String prediction,
+    required TeamFormData homeForm,
+    required TeamFormData awayForm,
+  }) {
+    final homeResults = homeForm.recentResults.isEmpty
+        ? "N/D"
+        : homeForm.recentResults.join(" ");
+
+    final awayResults = awayForm.recentResults.isEmpty
+        ? "N/D"
+        : awayForm.recentResults.join(" ");
+
+    return """
+FORMA CASA: ${home.form}
+FORMA OSPITE: ${away.form}
+
+ULTIME PARTITE CASA:
+$homeResults
+
+ULTIME PARTITE OSPITE:
+$awayResults
+
+ATTACCO CASA: ${home.attack}
+ATTACCO OSPITE: ${away.attack}
+
+DIFESA CASA: ${home.defense}
+DIFESA OSPITE: ${away.defense}
+
+RENDIMENTO CASA: ${home.homePerformance}
+RENDIMENTO TRASFERTA: ${away.awayPerformance}
+
+GOL FATTI CASA: ${homeForm.goalsFor}
+GOL SUBITI CASA: ${homeForm.goalsAgainst}
+
+GOL FATTI OSPITE: ${awayForm.goalsFor}
+GOL SUBITI OSPITE: ${awayForm.goalsAgainst}
+
+SMART SCORE: $smartScore
+
+PRONOSTICO CONSIGLIATO: $prediction
+""";
+  }
+
+  // ============================================================
+  // DATI INSUFFICIENTI
+  // ============================================================
+
+  static AnalysisResult _insufficientDataResult(String reason) {
+    return AnalysisResult(
+      smartScore: 0,
+      homeProbability: 0,
+      drawProbability: 0,
+      awayProbability: 0,
+      prediction: "N/D",
+      valueBet: "N/D",
+      risk: "Dati insufficienti",
+      explanation:
+          """
+ANALISI NON DISPONIBILE
+
+$reason
+
+SmartBet non genera un pronostico
+quando i dati statistici non sono sufficienti.
+""",
+    );
   }
 }

@@ -1,8 +1,10 @@
 import '../models/match_model.dart';
-import '../services/match_service.dart';
+import '../services/api_match_service.dart';
 
 class MatchRepository {
-  static List<MatchModel> getTodayMatches() {
-    return MatchService.getTodayMatches();
+  static final ApiMatchService _api = ApiMatchService();
+
+  static Future<List<MatchModel>> getTodayMatches() async {
+    return await _api.getTodayMatches();
   }
 }

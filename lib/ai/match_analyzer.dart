@@ -6,7 +6,7 @@ class MatchAnalyzer {
     required TeamAnalysis homeTeam,
     required TeamAnalysis awayTeam,
   }) {
-    final difference = homeTeam.teamScore - awayTeam.teamScore;
+    final difference = homeTeam.totalScore - awayTeam.totalScore;
 
     String favorite;
 
@@ -19,9 +19,9 @@ class MatchAnalyzer {
     }
 
     return MatchComparison(
-      homeScore: homeTeam.teamScore,
-      awayScore: awayTeam.teamScore,
-      difference: difference.abs(),
+      homeScore: homeTeam.totalScore.round(),
+      awayScore: awayTeam.totalScore.round(),
+      difference: difference.abs().round(),
       favorite: favorite,
     );
   }

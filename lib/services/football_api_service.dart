@@ -1,17 +1,56 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
+import '../config/api_config.dart';
+
 class FootballApiService {
-  Future<List<dynamic>> getTodayMatches() async {
-    // Per ora è un placeholder.
-    // Nel prossimo step metteremo l'URL reale.
+  Future<List<dynamic>> getNextMatches() async {
+    final now = DateTime.now();
 
-    final response = await http.get(Uri.parse("https://example.com"));
+    final date =
+        "${now.year.toString().padLeft(4, '0')}-"
+        "${now.month.toString().padLeft(2, '0')}-"
+        "${now.day.toString().padLeft(2, '0')}";
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+    final uri = Uri.parse(
+      "${ApiConfig.baseUrl}/fixtures",
+    ).replace(queryParameters: {"date": date, "timezone": "Europe/Rome"});
+
+    print("========================================");
+    print("SMARTBET - TEST PARTITE");
+    print("DATA: $date");
+    print("URL: $uri");
+    print("========================================");
+
+    final response = await http.get(
+      uri,
+      headers: {"x-apisports-key": ApiConfig.apiKey},
+    );
+
+    print("STATUS CODE: ${response.statusCode}");
+
+    if (response.statusCode != 200) {
+      throw Exception("Errore API ${response.statusCode}\n${response.body}");
     }
 
-    return [];
+    final data = jsonDecode(response.body);
+
+    print("ERRORS API: ${data["errors"]}");
+
+    final fixtures = (data["response"] as List<dynamic>?) ?? [];
+
+    print("PARTITE RESTITUITE DA API: ${fixtures.length}");
+
+    for (final fixture in fixtures.take(10)) {
+      print(
+        "${fixture["teams"]?["home"]?["name"]} - "
+        "${fixture["teams"]?["away"]?["name"]}",
+      );
+    }
+
+    print("========================================");
+
+    return fixtures;
   }
 }
