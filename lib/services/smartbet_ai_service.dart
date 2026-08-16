@@ -40,8 +40,7 @@ class SmartBetAiService {
   // BACKEND
   // ============================================================
 
-  static const String backendUrl = 'http://michele.local:3000';
-
+  static const String backendUrl = 'https://smartbet-ai-y6gw.onrender.com';
   // ============================================================
   // ANALISI PARTITA
   // ============================================================

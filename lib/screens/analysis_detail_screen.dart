@@ -521,7 +521,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       final cleaned = _cleanAiText(buffer.toString()).trim();
 
       if (cleaned.isNotEmpty) {
-        result[currentSection!] = cleaned;
+        result[currentSection] = cleaned;
       }
 
       buffer.clear();

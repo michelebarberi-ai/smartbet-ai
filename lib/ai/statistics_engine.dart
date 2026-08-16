@@ -282,8 +282,6 @@ class StatisticsEngine {
 
     final goal = (1.0 - homeZero - awayZero + bothZero).clamp(0.0, 1.0);
 
-    final noGoal = (1.0 - goal).clamp(0.0, 1.0);
-
     // ==========================================================
     // CONVERSIONE IN PERCENTUALI
     // ==========================================================
