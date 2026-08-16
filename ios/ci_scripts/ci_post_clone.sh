@@ -23,6 +23,9 @@ flutter --version
 echo "Recupero dipendenze..."
 flutter pub get
 
+echo "Preparazione configurazione iOS..."
+flutter build ios --config-only --no-codesign
+
 echo "========================================"
 echo "SMARTBET - SETUP COMPLETATO"
 echo "========================================"
