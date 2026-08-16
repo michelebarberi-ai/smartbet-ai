@@ -23,8 +23,12 @@ flutter --version
 echo "Recupero dipendenze..."
 flutter pub get
 
-echo "Preparazione iOS..."
-flutter precache --ios
+echo "Preparazione progetto iOS..."
+cd ios
+
+pod install
+
+cd ..
 
 echo "========================================"
 echo "SMARTBET - SETUP COMPLETATO"
