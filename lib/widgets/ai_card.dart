@@ -1,7 +1,58 @@
 import 'package:flutter/material.dart';
 
 class AiCard extends StatelessWidget {
-  const AiCard({super.key});
+  final double? reliability;
+  final int? matches;
+  final int? valueBets;
+  final int? premium;
+  final bool online;
+
+  const AiCard({
+    super.key,
+    this.reliability,
+    this.matches,
+    this.valueBets,
+    this.premium,
+    this.online = true,
+  });
+
+  // ============================================================
+  // ORARIO AGGIORNAMENTO
+  // ============================================================
+
+  String _currentTime() {
+    final now = DateTime.now();
+
+    final hour = now.hour.toString().padLeft(2, '0');
+
+    final minute = now.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
+  }
+
+  // ============================================================
+  // AFFIDABILITÀ
+  // ============================================================
+
+  double get _progressValue {
+    if (reliability == null) {
+      return 0.0;
+    }
+
+    return (reliability! / 100.0).clamp(0.0, 1.0);
+  }
+
+  String get _reliabilityLabel {
+    if (reliability == null) {
+      return 'In calcolo';
+    }
+
+    return '${reliability!.toStringAsFixed(0)}%';
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +68,7 @@ class AiCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.30),
+            color: Colors.black.withValues(alpha: 0.30),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -26,6 +77,9 @@ class AiCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ======================================================
+          // HEADER
+          // ======================================================
           Row(
             children: [
               const CircleAvatar(
@@ -36,24 +90,27 @@ class AiCard extends StatelessWidget {
 
               const SizedBox(width: 14),
 
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "AI PRONTA",
-                      style: TextStyle(
+                      online ? 'AI PRONTA' : 'AI NON DISPONIBILE',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
 
-                    SizedBox(height: 3),
+                    const SizedBox(height: 3),
 
                     Text(
-                      "Ultimo aggiornamento • 17:35",
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                      'Aggiornato alle ${_currentTime()}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
@@ -68,9 +125,9 @@ class AiCard extends StatelessWidget {
                   color: Colors.white24,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
-                  "ONLINE",
-                  style: TextStyle(
+                child: Text(
+                  online ? 'ONLINE' : 'OFFLINE',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
@@ -82,8 +139,11 @@ class AiCard extends StatelessWidget {
 
           const SizedBox(height: 22),
 
+          // ======================================================
+          // AFFIDABILITÀ
+          // ======================================================
           const Text(
-            "Indice di affidabilità",
+            'Indice di affidabilità',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
 
@@ -91,21 +151,23 @@ class AiCard extends StatelessWidget {
 
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: const LinearProgressIndicator(
-              value: 0.84,
+            child: LinearProgressIndicator(
+              value: _progressValue,
               minHeight: 10,
               backgroundColor: Colors.white24,
-              valueColor: AlwaysStoppedAnimation(Color(0xFFFF9800)),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                reliability == null ? Colors.white38 : const Color(0xFFFF9800),
+              ),
             ),
           ),
 
           const SizedBox(height: 8),
 
-          const Align(
+          Align(
             alignment: Alignment.centerRight,
             child: Text(
-              "84%",
-              style: TextStyle(
+              _reliabilityLabel,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -119,17 +181,28 @@ class AiCard extends StatelessWidget {
 
           const SizedBox(height: 18),
 
-          const Row(
+          // ======================================================
+          // DATI
+          // ======================================================
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _Info(icon: Icons.sports_soccer, value: "18", label: "Partite"),
+              _Info(
+                icon: Icons.sports_soccer,
+                value: matches?.toString() ?? '—',
+                label: 'Partite',
+              ),
 
-              _Info(icon: Icons.trending_up, value: "6", label: "Quote"),
+              _Info(
+                icon: Icons.trending_up,
+                value: valueBets?.toString() ?? '—',
+                label: 'Value Bet',
+              ),
 
               _Info(
                 icon: Icons.workspace_premium,
-                value: "3",
-                label: "Premium",
+                value: premium?.toString() ?? '—',
+                label: 'Premium',
               ),
             ],
           ),
@@ -138,6 +211,10 @@ class AiCard extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// INFO
+// ============================================================
 
 class _Info extends StatelessWidget {
   final IconData icon;

@@ -33,7 +33,7 @@ class HomeHeader extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.green.withOpacity(0.35),
+                  color: Colors.green.withValues(alpha: 0.35),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -87,7 +87,7 @@ class HomeHeader extends StatelessWidget {
               border: Border.all(color: const Color(0xFF00C853), width: 1.5),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withValues(alpha: 0.25),
                   blurRadius: 10,
                   offset: const Offset(0, 5),
                 ),

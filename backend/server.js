@@ -1,0 +1,1153 @@
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const OpenAI = require("openai");
+
+const app = express();
+
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+
+// ============================================================
+// OPENAI
+// ============================================================
+
+const apiKey = process.env.OPENAI_API_KEY;
+
+if (!apiKey) {
+  console.error("ERRORE: OPENAI_API_KEY non trovata.");
+  process.exit(1);
+}
+
+const client = new OpenAI({
+  apiKey,
+});
+
+const PORT = process.env.PORT || 3000;
+
+// ============================================================
+// PRE-MATCH FILTER
+// ============================================================
+
+function getMatchStatus(matchDate) {
+  if (!matchDate) {
+    return "UNKNOWN";
+  }
+
+  const date = new Date(matchDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return "UNKNOWN";
+  }
+
+  const now = new Date();
+
+  if (date.getTime() > now.getTime()) {
+    return "UPCOMING";
+  }
+
+  return "FINISHED_OR_LIVE";
+}
+
+// ============================================================
+// REGOLE PRE-MATCH
+// ============================================================
+
+function buildPreMatchRules(matchDate) {
+  if (!matchDate) {
+    return `
+============================================================
+PROTEZIONE PRE-MATCH
+============================================================
+
+La data della partita non è disponibile.
+
+Non utilizzare informazioni che possano rivelare
+direttamente o indirettamente il risultato della partita.
+
+============================================================
+`;
+  }
+
+  return `
+============================================================
+PROTEZIONE PRE-MATCH OBBLIGATORIA
+============================================================
+
+DATA/ORA PARTITA:
+${matchDate}
+
+Devi effettuare una vera analisi PRE-PARTITA.
+
+Utilizza esclusivamente informazioni che sarebbero
+state disponibili PRIMA dell'inizio della partita.
+
+NON UTILIZZARE MAI:
+
+- risultato finale;
+- risultato parziale;
+- marcatori;
+- assist;
+- tabellino;
+- cronaca della partita;
+- statistiche prodotte durante o dopo la partita;
+- articoli post-partita;
+- interviste post-partita;
+- commenti successivi alla gara;
+- qualsiasi informazione che riveli l'esito.
+
+Se la ricerca web mostra il risultato della partita,
+IGNORALO COMPLETAMENTE.
+
+Se trovi una fonte pubblicata dopo il calcio d'inizio,
+NON utilizzarla per la previsione.
+
+Devi ragionare come se ti trovassi immediatamente
+prima dell'inizio della partita.
+
+============================================================
+`;
+}
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "SmartBet AI Backend",
+    dossierMode: true,
+    preMatchFilter: true,
+    currentLeagueProtection: true,
+    valueBetMode: "dart-mathematical",
+  });
+});
+
+// ============================================================
+// ANALISI AI
+// ============================================================
+
+app.post("/analyze", async (req, res) => {
+  try {
+    const {
+      homeTeam,
+      awayTeam,
+      matchDate,
+      dossier,
+      meta,
+      statistics,
+    } = req.body;
+
+    // ==========================================================
+    // CONTROLLO BASE
+    // ==========================================================
+
+    if (!homeTeam || !awayTeam) {
+      return res.status(400).json({
+        success: false,
+        error: "homeTeam e awayTeam sono obbligatori",
+      });
+    }
+
+    // ==========================================================
+    // DOSSIER
+    // ==========================================================
+
+    const smartBetData =
+      dossier ||
+      statistics ||
+      {};
+
+    const usingDossier =
+      dossier &&
+      typeof dossier === "object";
+
+    // ==========================================================
+    // MATCH STATUS
+    // ==========================================================
+
+    const matchStatus =
+      getMatchStatus(matchDate);
+
+    console.log("");
+    console.log("========================================");
+    console.log("SMARTBET AI - NUOVA ANALISI");
+    console.log("========================================");
+
+    console.log(
+      `Partita: ${homeTeam} - ${awayTeam}`
+    );
+
+    console.log(
+      `Data: ${matchDate || "non disponibile"}`
+    );
+
+    console.log(
+      `Match status: ${matchStatus}`
+    );
+
+    console.log(
+      `Dossier mode: ${usingDossier}`
+    );
+
+    // ==========================================================
+    // DEBUG DOSSIER
+    // ==========================================================
+
+    if (usingDossier) {
+      console.log(
+        `Dossier confidence: ${
+          dossier?.dataQuality?.confidence ??
+          "N/D"
+        }%`
+      );
+
+      console.log(
+        `Pre-match only: ${
+          dossier?.dataQuality?.preMatchOnly ??
+          "N/D"
+        }`
+      );
+
+      console.log(
+        `Forma casa: ${
+          dossier?.homeTeam?.form?.count ??
+          0
+        }`
+      );
+
+      console.log(
+        `Forma ospite: ${
+          dossier?.awayTeam?.form?.count ??
+          0
+        }`
+      );
+
+      console.log(
+        `H2H: ${
+          dossier?.context?.headToHead?.length ??
+          0
+        }`
+      );
+
+      console.log(
+        `Campionato attuale casa: ${
+          dossier
+            ?.homeTeam
+            ?.currentCompetition
+            ?.leagueName ??
+          "N/D"
+        }`
+      );
+
+      console.log(
+        `Fonte statistiche casa: ${
+          dossier
+            ?.homeTeam
+            ?.statisticsSource
+            ?.leagueName ??
+          "N/D"
+        }`
+      );
+
+      console.log(
+        `Campionato attuale ospite: ${
+          dossier
+            ?.awayTeam
+            ?.currentCompetition
+            ?.leagueName ??
+          "N/D"
+        }`
+      );
+
+      console.log(
+        `Fonte statistiche ospite: ${
+          dossier
+            ?.awayTeam
+            ?.statisticsSource
+            ?.leagueName ??
+          "N/D"
+        }`
+      );
+    }
+
+    console.log("========================================");
+
+    // ==========================================================
+    // BLOCCO PARTITE INIZIATE / CONCLUSE
+    // ==========================================================
+
+    if (matchStatus === "FINISHED_OR_LIVE") {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Analisi predittiva bloccata: la partita risulta già iniziata o conclusa.",
+        matchStatus,
+        preMatchProtected: true,
+      });
+    }
+
+    // ==========================================================
+    // DESCRIZIONE PARTITA
+    // ==========================================================
+
+    const matchDescription = `
+============================================================
+PARTITA
+============================================================
+
+Casa:
+${homeTeam}
+
+Ospite:
+${awayTeam}
+
+Data:
+${matchDate || "Non disponibile"}
+
+META PARTITA:
+${JSON.stringify(meta || {}, null, 2)}
+
+============================================================
+MATCH DOSSIER SMARTBET
+============================================================
+
+${JSON.stringify(smartBetData, null, 2)}
+
+============================================================
+`;
+
+    // ==========================================================
+    // OPENAI
+    // ==========================================================
+
+    const response =
+      await client.responses.create({
+        model: "gpt-5.1",
+
+        tools: [
+          {
+            type: "web_search",
+            search_context_size: "medium",
+          },
+        ],
+
+        input: [
+          {
+            role: "system",
+
+            content: `
+Sei SmartBet AI.
+
+Sei un analista professionale specializzato
+nell'analisi PRE-PARTITA delle partite di calcio.
+
+${buildPreMatchRules(matchDate)}
+
+============================================================
+GERARCHIA DELLE INFORMAZIONI
+============================================================
+
+Utilizza le informazioni secondo questa gerarchia
+OBBLIGATORIA:
+
+1. Fixture confermata dal Match Dossier SmartBet
+2. Competizione della partita
+3. Campionato ATTUALE delle squadre
+4. Statistiche quantitative SmartBet
+5. Forma recente
+6. Rendimento casa/trasferta
+7. Head-to-head
+8. Ricerca web
+9. Contesto generale
+
+I seguenti dati SmartBet sono AUTORITATIVI:
+
+- squadra casa;
+- squadra ospite;
+- fixture ID;
+- team ID;
+- data;
+- competizione;
+- currentCompetition.
+
+Il web NON può sostituire questi dati.
+
+============================================================
+CURRENT COMPETITION VS STATISTICS SOURCE
+============================================================
+
+currentCompetition indica il campionato ATTUALE
+della squadra.
+
+statisticsSource indica ESCLUSIVAMENTE il campionato
+e la stagione da cui provengono le statistiche.
+
+Esempio:
+
+currentCompetition:
+Serie B 2026
+
+statisticsSource:
+Serie C - Girone B 2025
+
+INTERPRETAZIONE CORRETTA:
+
+La squadra gioca ATTUALMENTE in Serie B.
+
+Le statistiche utilizzate provengono dalla precedente
+stagione disputata in Serie C.
+
+NON descrivere la squadra come squadra attuale
+di Serie C.
+
+============================================================
+REGOLA RIGIDA SULLE PROMOZIONI
+============================================================
+
+Per il calcio italiano:
+
+Serie A = categoria 1
+Serie B = categoria 2
+Serie C = categoria 3
+
+Il passaggio:
+
+Serie C -> Serie B
+
+è UNA promozione di categoria.
+
+È vietato descriverlo come:
+
+- salto di due categorie;
+- promozione di due categorie;
+- salto di due livelli;
+- salita di due livelli.
+
+La formulazione corretta è:
+
+"promossa dalla Serie C alla Serie B"
+
+oppure:
+
+"neopromossa in Serie B dalla Serie C".
+
+Serie B -> Serie A
+è UNA promozione.
+
+Serie C -> Serie A
+rappresenterebbe invece una differenza di DUE categorie.
+
+============================================================
+CONFRONTO TRA LE SQUADRE
+============================================================
+
+ATTENZIONE:
+
+Se:
+
+Cagliari currentCompetition = Serie A
+
+Arezzo currentCompetition = Serie B
+
+il confronto ATTUALE è:
+
+SERIE A vs SERIE B.
+
+NON:
+
+SERIE A vs SERIE C.
+
+È consentito dire che le statistiche storiche
+dell'Arezzo provengono dalla Serie C.
+
+È consentito dire che quei numeri sono stati ottenuti
+contro avversari di livello inferiore.
+
+NON è consentito trasformare la Serie C storica
+nella categoria attuale dell'Arezzo.
+
+============================================================
+DIFFERENZA TRA CATEGORIA ATTUALE E CAMPIONE STORICO
+============================================================
+
+Puoi spiegare:
+
+"Cagliari è attualmente in Serie A, mentre Arezzo
+è attualmente in Serie B. Le statistiche storiche
+dell'Arezzo derivano dalla precedente stagione
+in Serie C."
+
+NON scrivere:
+
+"il salto di due livelli dell'Arezzo"
+
+perché l'Arezzo è passato dalla Serie C alla Serie B,
+quindi ha effettuato UNA promozione.
+
+Se confronti:
+
+Serie A attuale del Cagliari
+
+con
+
+Serie C storica del campione statistico Arezzo
+
+devi esplicitare che stai confrontando livelli
+di campioni statistici differenti e NON categorie
+attuali delle due squadre.
+
+============================================================
+DATI STORICI
+============================================================
+
+Quando statisticsSource è precedente rispetto
+alla stagione corrente:
+
+- usa comunque i dati;
+- riduci il loro peso;
+- considera il cambio di categoria;
+- considera cambi rosa;
+- considera cambi allenatore;
+- considera il diverso livello degli avversari;
+- riduci la confidence se necessario.
+
+============================================================
+COMPETIZIONE DELLA PARTITA
+============================================================
+
+La competizione della fixture e il campionato
+della squadra sono due concetti differenti.
+
+Esempio:
+
+fixture:
+Coppa Italia
+
+home currentCompetition:
+Serie A
+
+away currentCompetition:
+Serie B
+
+significa:
+
+partita di Coppa Italia tra una squadra
+di Serie A e una squadra di Serie B.
+
+============================================================
+RICERCA WEB
+============================================================
+
+Usa la ricerca web per:
+
+- infortuni;
+- squalifiche;
+- probabili formazioni;
+- allenatori;
+- mercato;
+- trasferimenti;
+- motivazioni;
+- calendario;
+- situazione societaria;
+- notizie pre-partita.
+
+Privilegia:
+
+1. club ufficiali;
+2. lega/federazione;
+3. competizione ufficiale;
+4. fonti giornalistiche affidabili.
+
+Il web NON può sovrascrivere:
+
+- fixture;
+- squadre;
+- data;
+- competizione;
+- currentCompetition.
+
+============================================================
+ANTI-HALLUCINATION
+============================================================
+
+NON inventare informazioni.
+
+Se un dato non è verificabile:
+
+scrivi "Non disponibile".
+
+Se fonti web entrano in conflitto:
+
+- privilegia quella più autorevole;
+- segnala l'incertezza;
+- riduci la confidence.
+
+Se una fonte web entra in conflitto con
+il Match Dossier SmartBet:
+
+MANTIENI IL DATO SMARTBET.
+
+============================================================
+PROBABILITÀ
+============================================================
+
+Devi restituire:
+
+- probabilità 1;
+- probabilità X;
+- probabilità 2.
+
+Le tre probabilità devono sommare
+ESATTAMENTE a 100.
+
+prediction deve corrispondere
+alla probabilità più alta.
+
+NON utilizzare percentuali differenti
+nel testo rispetto ai campi numerici.
+
+============================================================
+CONFIDENCE
+============================================================
+
+La confidence rappresenta la qualità
+dell'analisi e NON la probabilità di vittoria.
+
+Riducila quando:
+
+- statistiche vecchie;
+- assenze sconosciute;
+- lineup sconosciute;
+- squadra neopromossa;
+- cambio rosa;
+- cambio allenatore;
+- inizio stagione;
+- contesto molto volatile;
+- dati contraddittori.
+
+Considera anche:
+
+dataQuality.confidence
+
+presente nel Match Dossier.
+
+============================================================
+VALUE BET
+============================================================
+
+NON devi calcolare la Value Bet.
+
+Il motore matematico Dart calcola la Value Bet usando:
+
+- quote reali;
+- probabilità implicite;
+- overround;
+- probabilità fair;
+- probabilità AI;
+- edge;
+- expected value.
+
+NON inventare quote.
+
+NON utilizzare quote trovate sul web
+per dichiarare value.
+
+Per compatibilità JSON restituisci SEMPRE:
+
+valueBet = "NO"
+
+Il valore verrà sostituito dal motore Dart.
+
+============================================================
+STILE
+============================================================
+
+summary:
+massimo 4 frasi.
+
+statisticalAnalysis:
+massimo 5 punti.
+
+newsAnalysis:
+massimo 5 punti.
+
+positiveFactors:
+massimo 5.
+
+negativeFactors:
+massimo 5.
+
+keyAbsences:
+massimo 5.
+
+finalVerdict:
+massimo 4 frasi.
+
+============================================================
+OBIETTIVO
+============================================================
+
+Produci una valutazione probabilistica basata su:
+
+DATI
++
+FORMA
++
+CONTESTO
++
+WEB
++
+INCERTEZZA
+
+Non devi cercare di "indovinare" il risultato.
+
+============================================================
+`,
+          },
+
+          {
+            role: "user",
+
+            content: `
+Analizza la partita seguente.
+
+${matchDescription}
+
+Utilizza prima il Match Dossier SmartBet.
+
+Ricorda:
+
+currentCompetition = categoria attuale.
+
+statisticsSource = fonte delle statistiche storiche.
+
+Non confondere le due informazioni.
+
+Se una squadra passa da Serie C a Serie B,
+si tratta di UNA promozione di categoria.
+
+Non usare mai l'espressione
+"salto di due livelli"
+per descrivere Serie C -> Serie B.
+
+Usa il web soltanto per integrare il dossier.
+
+Rispetta rigorosamente la protezione pre-match.
+
+NON calcolare la Value Bet.
+
+Restituisci:
+
+valueBet = "NO"
+
+Produci infine la valutazione probabilistica.
+`,
+          },
+        ],
+
+        // ======================================================
+        // STRUCTURED OUTPUT
+        // ======================================================
+
+        text: {
+          format: {
+            type: "json_schema",
+
+            name:
+              "smartbet_match_analysis",
+
+            strict: true,
+
+            schema: {
+              type: "object",
+
+              properties: {
+                prediction: {
+                  type: "string",
+                  enum: [
+                    "1",
+                    "X",
+                    "2",
+                  ],
+                },
+
+                homeProbability: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 100,
+                },
+
+                drawProbability: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 100,
+                },
+
+                awayProbability: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 100,
+                },
+
+                confidence: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 100,
+                },
+
+                risk: {
+                  type: "string",
+                },
+
+                summary: {
+                  type: "string",
+                },
+
+                statisticalAnalysis: {
+                  type: "string",
+                },
+
+                newsAnalysis: {
+                  type: "string",
+                },
+
+                positiveFactors: {
+                  type: "array",
+                  maxItems: 5,
+                  items: {
+                    type: "string",
+                  },
+                },
+
+                negativeFactors: {
+                  type: "array",
+                  maxItems: 5,
+                  items: {
+                    type: "string",
+                  },
+                },
+
+                keyAbsences: {
+                  type: "array",
+                  maxItems: 5,
+                  items: {
+                    type: "string",
+                  },
+                },
+
+                valueBet: {
+                  type: "string",
+                },
+
+                finalVerdict: {
+                  type: "string",
+                },
+              },
+
+              required: [
+                "prediction",
+                "homeProbability",
+                "drawProbability",
+                "awayProbability",
+                "confidence",
+                "risk",
+                "summary",
+                "statisticalAnalysis",
+                "newsAnalysis",
+                "positiveFactors",
+                "negativeFactors",
+                "keyAbsences",
+                "valueBet",
+                "finalVerdict",
+              ],
+
+              additionalProperties:
+                false,
+            },
+          },
+        },
+
+        max_output_tokens:
+          5000,
+      });
+
+    // ==========================================================
+    // OUTPUT AI
+    // ==========================================================
+
+    const rawText =
+      response.output_text;
+
+    console.log("");
+
+    console.log(
+      "RISPOSTA AI RICEVUTA"
+    );
+
+    console.log(
+      `Lunghezza: ${rawText.length}`
+    );
+
+    let analysis;
+
+    try {
+      analysis =
+        JSON.parse(rawText);
+    } catch (error) {
+      console.error("");
+      console.error(
+        "========================================"
+      );
+      console.error(
+        "ERRORE JSON AI"
+      );
+      console.error(
+        "========================================"
+      );
+
+      console.error(rawText);
+
+      return res.status(500).json({
+        success: false,
+        error:
+          "Risposta AI non valida",
+        raw: rawText,
+      });
+    }
+
+    // ==========================================================
+    // CONTROLLO PROBABILITÀ
+    // ==========================================================
+
+    const probabilityTotal =
+      analysis.homeProbability +
+      analysis.drawProbability +
+      analysis.awayProbability;
+
+    if (probabilityTotal !== 100) {
+      console.warn(
+        `SMARTBET WARNING: probabilità = ${probabilityTotal}%`
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          "Le probabilità AI non sommano a 100.",
+        analysis,
+      });
+    }
+
+    // ==========================================================
+    // CONTROLLO PRONOSTICO
+    // ==========================================================
+
+    const probabilities = {
+      "1":
+        analysis.homeProbability,
+
+      "X":
+        analysis.drawProbability,
+
+      "2":
+        analysis.awayProbability,
+    };
+
+    const expectedPrediction =
+      Object.entries(
+        probabilities
+      )
+        .sort(
+          (a, b) =>
+            b[1] - a[1]
+        )[0][0];
+
+    if (
+      analysis.prediction !==
+      expectedPrediction
+    ) {
+      console.warn(
+        "SMARTBET WARNING: pronostico AI incoerente."
+      );
+
+      analysis.prediction =
+        expectedPrediction;
+    }
+
+    // ==========================================================
+    // VALUE BET
+    // ==========================================================
+
+    // L'AI non decide la Value Bet.
+    // Verrà sostituita dal motore Dart.
+
+    analysis.valueBet = "NO";
+
+    // ==========================================================
+    // LOG
+    // ==========================================================
+
+    console.log("");
+    console.log(
+      "========================================"
+    );
+    console.log(
+      "SMARTBET AI - RISULTATO"
+    );
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      `1: ${analysis.homeProbability}%`
+    );
+
+    console.log(
+      `X: ${analysis.drawProbability}%`
+    );
+
+    console.log(
+      `2: ${analysis.awayProbability}%`
+    );
+
+    console.log(
+      `Pronostico: ${analysis.prediction}`
+    );
+
+    console.log(
+      `Confidence: ${analysis.confidence}%`
+    );
+
+    console.log(
+      `Risk: ${analysis.risk}`
+    );
+
+    console.log(
+      "Value Bet AI: DELEGATA AL MOTORE DART"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    // ==========================================================
+    // RISPOSTA FLUTTER
+    // ==========================================================
+
+    return res.json({
+      success: true,
+
+      analysis,
+
+      meta: {
+        matchStatus,
+
+        preMatchProtected:
+          true,
+
+        dossierMode:
+          usingDossier,
+
+        dossierConfidence:
+          dossier
+            ?.dataQuality
+            ?.confidence ??
+          null,
+
+        matchDate:
+          matchDate ||
+          null,
+
+        currentLeagueProtection:
+          true,
+
+        categoryPromotionProtection:
+          true,
+
+        valueBetMode:
+          "dart-mathematical",
+      },
+    });
+  } catch (error) {
+    console.error("");
+    console.error(
+      "========================================"
+    );
+    console.error(
+      "SMARTBET AI ERROR"
+    );
+    console.error(
+      "========================================"
+    );
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+
+      error:
+        error.message ||
+        "Errore AI",
+    });
+  }
+});
+
+// ============================================================
+// SERVER
+// ============================================================
+
+app.listen(PORT, () => {
+  console.log("");
+
+  console.log(
+    "========================================"
+  );
+
+  console.log(
+    "SMARTBET AI BACKEND"
+  );
+
+  console.log(
+    "========================================"
+  );
+
+  console.log(
+    `Server: http://localhost:${PORT}`
+  );
+
+  console.log(
+    "Status: ONLINE"
+  );
+
+  console.log(
+    "Match Dossier: ENABLED"
+  );
+
+  console.log(
+    "Pre-Match Filter: ENABLED"
+  );
+
+  console.log(
+    "Web Search: ENABLED"
+  );
+
+  console.log(
+    "Current League Protection: ENABLED"
+  );
+
+  console.log(
+    "Promotion Level Protection: ENABLED"
+  );
+
+  console.log(
+    "Value Bet Engine: DART"
+  );
+
+  console.log(
+    "========================================"
+  );
+
+  console.log("");
+});

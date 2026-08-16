@@ -63,7 +63,7 @@ class SmartCore {
     }
 
     // ----------------------------------------------------------
-    // CONVERSIONE DATI → TEAM ANALYSIS
+    // CONVERSIONE DATI -> TEAM ANALYSIS
     // ----------------------------------------------------------
 
     final TeamAnalysis homeAnalysis = TeamAnalyzer.analyzeFromForm(
@@ -96,9 +96,9 @@ class SmartCore {
       competitionWeight: match.aiWeight,
     );
 
-    // ----------------------------------------------------------
-    // PROBABILITÀ
-    // ----------------------------------------------------------
+    // ==========================================================
+    // PROBABILITÀ 1X2
+    // ==========================================================
 
     final probabilities = StatisticsEngine.calculateProbabilities(
       homeTeam: homeAnalysis,
@@ -111,8 +111,40 @@ class SmartCore {
 
     final awayProbability = probabilities['away'] ?? 0;
 
+    // ==========================================================
+    // PROBABILITÀ MERCATI GOL
+    // ==========================================================
+
+    final goalMarkets = StatisticsEngine.calculateGoalMarketProbabilities(
+      homeForm: homeForm,
+      awayForm: awayForm,
+    );
+
+    final over25Probability = goalMarkets['over25'] ?? 0;
+
+    final under25Probability = goalMarkets['under25'] ?? 0;
+
+    final goalProbability = goalMarkets['goal'] ?? 0;
+
+    final noGoalProbability = goalMarkets['noGoal'] ?? 0;
+
+    // ==========================================================
+    // EXPECTED GOALS
+    // ==========================================================
+
+    final expectedGoals = StatisticsEngine.calculateExpectedGoals(
+      homeForm: homeForm,
+      awayForm: awayForm,
+    );
+
+    final expectedHomeGoals = expectedGoals['home'] ?? 0.0;
+
+    final expectedAwayGoals = expectedGoals['away'] ?? 0.0;
+
+    final expectedTotalGoals = expectedGoals['total'] ?? 0.0;
+
     // ----------------------------------------------------------
-    // PRONOSTICO
+    // PRONOSTICO 1X2
     // ----------------------------------------------------------
 
     final prediction = _calculatePrediction(
@@ -129,6 +161,12 @@ class SmartCore {
 
     // ----------------------------------------------------------
     // VALUE BET
+    // ----------------------------------------------------------
+    //
+    // Per ora resta riferita all'1X2.
+    //
+    // Nel passaggio successivo collegheremo
+    // quote reali anche a Over/Under e Goal/No Goal.
     // ----------------------------------------------------------
 
     final valueBet = _calculateValueBet(
@@ -153,6 +191,13 @@ class SmartCore {
       prediction: prediction,
       homeForm: homeForm,
       awayForm: awayForm,
+      over25Probability: over25Probability,
+      under25Probability: under25Probability,
+      goalProbability: goalProbability,
+      noGoalProbability: noGoalProbability,
+      expectedHomeGoals: expectedHomeGoals,
+      expectedAwayGoals: expectedAwayGoals,
+      expectedTotalGoals: expectedTotalGoals,
     );
 
     // ----------------------------------------------------------
@@ -175,12 +220,23 @@ class SmartCore {
 
     return AnalysisResult(
       smartScore: smartScore,
+
       homeProbability: homeProbability,
       drawProbability: drawProbability,
       awayProbability: awayProbability,
+
+      over25Probability: over25Probability,
+      under25Probability: under25Probability,
+
+      goalProbability: goalProbability,
+      noGoalProbability: noGoalProbability,
+
       prediction: prediction,
+
       valueBet: valueBet,
+
       risk: risk,
+
       explanation: explanation,
     );
   }
@@ -295,6 +351,15 @@ class SmartCore {
     required String prediction,
     required TeamFormData homeForm,
     required TeamFormData awayForm,
+
+    required int over25Probability,
+    required int under25Probability,
+    required int goalProbability,
+    required int noGoalProbability,
+
+    required double expectedHomeGoals,
+    required double expectedAwayGoals,
+    required double expectedTotalGoals,
   }) {
     final homeResults = homeForm.recentResults.isEmpty
         ? "N/D"
@@ -329,9 +394,21 @@ GOL SUBITI CASA: ${homeForm.goalsAgainst}
 GOL FATTI OSPITE: ${awayForm.goalsFor}
 GOL SUBITI OSPITE: ${awayForm.goalsAgainst}
 
+EXPECTED GOALS CASA: ${expectedHomeGoals.toStringAsFixed(2)}
+EXPECTED GOALS OSPITE: ${expectedAwayGoals.toStringAsFixed(2)}
+EXPECTED GOALS TOTALI: ${expectedTotalGoals.toStringAsFixed(2)}
+
+MERCATI GOL:
+
+OVER 2.5: $over25Probability%
+UNDER 2.5: $under25Probability%
+
+GOAL: $goalProbability%
+NO GOAL: $noGoalProbability%
+
 SMART SCORE: $smartScore
 
-PRONOSTICO CONSIGLIATO: $prediction
+PRONOSTICO 1X2 CONSIGLIATO: $prediction
 """;
   }
 
@@ -342,12 +419,22 @@ PRONOSTICO CONSIGLIATO: $prediction
   static AnalysisResult _insufficientDataResult(String reason) {
     return AnalysisResult(
       smartScore: 0,
+
       homeProbability: 0,
       drawProbability: 0,
       awayProbability: 0,
+
+      over25Probability: 0,
+      under25Probability: 0,
+      goalProbability: 0,
+      noGoalProbability: 0,
+
       prediction: "N/D",
+
       valueBet: "N/D",
+
       risk: "Dati insufficienti",
+
       explanation:
           """
 ANALISI NON DISPONIBILE

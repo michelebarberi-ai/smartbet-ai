@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
 
 class TodayCard extends StatelessWidget {
-  const TodayCard({super.key});
+  final int? matches;
+  final int? valueBets;
+  final int? premium;
+  final bool online;
+
+  const TodayCard({
+    super.key,
+    this.matches,
+    this.valueBets,
+    this.premium,
+    this.online = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +24,7 @@ class TodayCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -22,12 +33,15 @@ class TodayCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ======================================================
+          // TITOLO
+          // ======================================================
           const Row(
             children: [
               Icon(Icons.local_fire_department, color: Colors.orange, size: 28),
               SizedBox(width: 10),
               Text(
-                "OGGI",
+                'OGGI',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
             ],
@@ -35,22 +49,26 @@ class TodayCard extends StatelessWidget {
 
           const SizedBox(height: 20),
 
+          // ======================================================
+          // RIGA 1
+          // ======================================================
           Row(
-            children: const [
+            children: [
               Expanded(
                 child: _TodayItem(
                   icon: Icons.sports_soccer,
                   color: Colors.green,
-                  value: "18",
-                  label: "Partite",
+                  value: matches?.toString() ?? '—',
+                  label: 'Partite',
                 ),
               ),
+
               Expanded(
                 child: _TodayItem(
                   icon: Icons.show_chart,
                   color: Colors.orange,
-                  value: "6",
-                  label: "Quote",
+                  value: valueBets?.toString() ?? '—',
+                  label: 'Value Bet',
                 ),
               ),
             ],
@@ -58,22 +76,26 @@ class TodayCard extends StatelessWidget {
 
           const SizedBox(height: 18),
 
+          // ======================================================
+          // RIGA 2
+          // ======================================================
           Row(
-            children: const [
+            children: [
               Expanded(
                 child: _TodayItem(
                   icon: Icons.workspace_premium,
                   color: Colors.amber,
-                  value: "3",
-                  label: "Premium",
+                  value: premium?.toString() ?? '—',
+                  label: 'Premium',
                 ),
               ),
+
               Expanded(
                 child: _TodayItem(
-                  icon: Icons.check_circle,
-                  color: Color(0xFF00C853),
-                  value: "Online",
-                  label: "AI",
+                  icon: online ? Icons.check_circle : Icons.error_outline,
+                  color: online ? const Color(0xFF00C853) : Colors.redAccent,
+                  value: online ? 'Online' : 'Offline',
+                  label: 'AI',
                 ),
               ),
             ],
@@ -103,19 +125,31 @@ class _TodayItem extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 22,
-          backgroundColor: color.withOpacity(0.15),
+          backgroundColor: color.withValues(alpha: 0.15),
           child: Icon(icon, color: color),
         ),
+
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(label, style: const TextStyle(color: Colors.white70)),
-          ],
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+
+              Text(label, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
         ),
       ],
     );

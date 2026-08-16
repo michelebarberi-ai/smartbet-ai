@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'api_rate_limiter.dart';
 import 'historical_team_service.dart';
 
 class ResolvedTeamData {
@@ -13,6 +14,18 @@ class ResolvedTeamData {
   final String sourceTeamName;
 
   final String dataSource;
+
+  // ============================================================
+  // CATEGORIA ATTUALE
+  // ============================================================
+
+  final int currentLeagueId;
+  final String currentLeagueName;
+  final int currentLeagueSeason;
+
+  // ============================================================
+  // FONTE STATISTICA
+  // ============================================================
 
   final int season;
   final int leagueId;
@@ -44,23 +57,33 @@ class ResolvedTeamData {
     required this.sourceTeamId,
     required this.sourceTeamName,
     required this.dataSource,
+
+    required this.currentLeagueId,
+    required this.currentLeagueName,
+    required this.currentLeagueSeason,
+
     required this.season,
     required this.leagueId,
     required this.leagueName,
+
     required this.matchesPlayed,
     required this.wins,
     required this.draws,
     required this.losses,
+
     required this.goalsFor,
     required this.goalsAgainst,
+
     required this.homeMatches,
     required this.homeWins,
     required this.homeDraws,
     required this.homeLosses,
+
     required this.awayMatches,
     required this.awayWins,
     required this.awayDraws,
     required this.awayLosses,
+
     required this.confidence,
   });
 
@@ -139,10 +162,18 @@ class TeamDataResolver {
   Future<ResolvedTeamData?> resolveTeam({
     required int teamId,
     required String teamName,
+    required DateTime referenceDate,
   }) async {
-    final cacheKey = '$teamId|${teamName.toLowerCase()}';
+    final referenceYear = referenceDate.year;
+
+    final cacheKey = '$teamId|${teamName.toLowerCase()}|$referenceYear';
 
     if (_cache.containsKey(cacheKey)) {
+      print('');
+      print('SMARTBET CACHE HIT');
+      print('Squadra: $teamName');
+      print('Anno riferimento: $referenceYear');
+
       return _cache[cacheKey];
     }
 
@@ -152,383 +183,550 @@ class TeamDataResolver {
     print('========================================');
     print('Squadra: $teamName');
     print('Team ID: $teamId');
+    print('Anno riferimento: $referenceYear');
 
-    // ----------------------------------------------------------
-    // 1. PROVA DATI RECENTI
-    // ----------------------------------------------------------
-
-    final recent = await _tryRecentData(teamId: teamId, teamName: teamName);
-
-    if (recent != null) {
-      print('');
-      print('DATI RECENTI TROVATI');
-      print('Fonte: ${recent.dataSource}');
-      print('Confidence: ${recent.confidence}');
-
-      _cache[cacheKey] = recent;
-      return recent;
-    }
-
-    // ----------------------------------------------------------
-    // 2. FALLBACK STORICO
-    // ----------------------------------------------------------
-
-    print('');
-    print('DATI RECENTI NON DISPONIBILI');
-    print('Avvio fallback storico...');
-
-    final historical = await _resolveHistoricalData(
+    final resolved = await _resolveRecentSeasons(
       teamId: teamId,
       teamName: teamName,
+      referenceYear: referenceYear,
     );
 
-    _cache[cacheKey] = historical;
+    _cache[cacheKey] = resolved;
 
-    return historical;
+    return resolved;
   }
 
   // ============================================================
-  // DATI RECENTI
+  // STAGIONE CORRENTE + PRECEDENTE
   // ============================================================
 
-  Future<ResolvedTeamData?> _tryRecentData({
+  Future<ResolvedTeamData?> _resolveRecentSeasons({
     required int teamId,
     required String teamName,
+    required int referenceYear,
   }) async {
+    final seasons = [referenceYear, referenceYear - 1];
+
     print('');
-    print('RICERCA DATI RECENTI');
-    print('Team: $teamName');
+    print('========================================');
+    print('SMARTBET - RICERCA DATI PERTINENTI');
+    print('========================================');
 
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/fixtures',
-    ).replace(queryParameters: {'team': teamId.toString(), 'last': '10'});
+    // ==========================================================
+    // CATEGORIA ATTUALE
+    // ==========================================================
+    //
+    // Cerchiamo prima la competizione di campionato della
+    // stagione della partita.
+    //
+    // Questa informazione resta separata dalle statistiche.
+    // ==========================================================
 
+    int currentLeagueId = 0;
+    String currentLeagueName = '';
+
+    final currentLeagues = await _getTeamLeagues(
+      teamId: teamId,
+      season: referenceYear,
+    );
+
+    if (currentLeagues.isNotEmpty) {
+      final currentCandidates = _sortLeagueCandidates(currentLeagues);
+
+      for (final candidate in currentCandidates) {
+        final leagueId = _toInt(candidate['leagueId']);
+
+        final leagueName = candidate['leagueName']?.toString() ?? '';
+
+        final leagueType = candidate['leagueType']?.toString() ?? '';
+
+        if (leagueId <= 0) {
+          continue;
+        }
+
+        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+          continue;
+        }
+
+        currentLeagueId = leagueId;
+        currentLeagueName = leagueName;
+
+        break;
+      }
+    }
+
+    print('');
+    print('CATEGORIA ATTUALE');
+    print('Squadra: $teamName');
+
+    if (currentLeagueId > 0) {
+      print('Stagione: $referenceYear');
+      print('League ID: $currentLeagueId');
+      print('Campionato: $currentLeagueName');
+    } else {
+      print('Campionato attuale non identificato');
+    }
+
+    // ==========================================================
+    // RICERCA STATISTICHE
+    // ==========================================================
+
+    for (final season in seasons) {
+      print('');
+      print('----------------------------------------');
+      print('PROVA STAGIONE STATISTICA: $season');
+      print('Squadra: $teamName');
+      print('----------------------------------------');
+
+      final leagues = season == referenceYear
+          ? currentLeagues
+          : await _getTeamLeagues(teamId: teamId, season: season);
+
+      if (leagues.isEmpty) {
+        print(
+          'Nessuna competizione disponibile '
+          'per $teamName nella stagione $season',
+        );
+
+        continue;
+      }
+
+      print('COMPETIZIONI TROVATE: ${leagues.length}');
+
+      final orderedLeagues = _sortLeagueCandidates(leagues);
+
+      // ========================================================
+      // SOLO CAMPIONATI
+      // ========================================================
+
+      for (final candidate in orderedLeagues) {
+        final leagueId = _toInt(candidate['leagueId']);
+
+        final leagueName = candidate['leagueName']?.toString() ?? '';
+
+        final leagueType = candidate['leagueType']?.toString() ?? '';
+
+        if (leagueId <= 0) {
+          continue;
+        }
+
+        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+          print('');
+          print('COMPETIZIONE IGNORATA PER STATISTICHE');
+          print('League: $leagueName');
+          print('Tipo: $leagueType');
+
+          continue;
+        }
+
+        print('');
+        print('PROVA CAMPIONATO');
+        print('League ID: $leagueId');
+        print('League: $leagueName');
+        print('Tipo: $leagueType');
+
+        final historical = await _historicalService.getHistoricalData(
+          teamId: teamId,
+          teamName: teamName,
+          season: season,
+          leagueId: leagueId,
+          leagueName: leagueName,
+        );
+
+        if (historical == null) {
+          print(
+            'Nessuna partita di campionato '
+            'conclusa disponibile.',
+          );
+
+          continue;
+        }
+
+        // ------------------------------------------------------
+        // MINIMO 3 PARTITE
+        // ------------------------------------------------------
+
+        if (historical.matchesPlayed < 3) {
+          print(
+            'Solo ${historical.matchesPlayed} '
+            'partite di campionato concluse.',
+          );
+
+          print(
+            'Campione troppo piccolo: '
+            'provo la stagione precedente.',
+          );
+
+          continue;
+        }
+
+        final confidence = _confidenceForSeason(
+          season: season,
+          referenceYear: referenceYear,
+          matchesPlayed: historical.matchesPlayed,
+        );
+
+        final result = ResolvedTeamData(
+          teamId: teamId,
+          teamName: teamName,
+
+          sourceTeamId: historical.originalTeamId,
+
+          sourceTeamName: historical.originalTeamName,
+
+          dataSource: season == referenceYear
+              ? 'Current season league data'
+              : 'Previous season league data',
+
+          // ====================================================
+          // CATEGORIA ATTUALE
+          // ====================================================
+          currentLeagueId: currentLeagueId,
+
+          currentLeagueName: currentLeagueName,
+
+          currentLeagueSeason: referenceYear,
+
+          // ====================================================
+          // FONTE STATISTICA
+          // ====================================================
+          season: historical.season,
+
+          leagueId: historical.leagueId,
+
+          leagueName: historical.leagueName,
+
+          matchesPlayed: historical.matchesPlayed,
+
+          wins: historical.wins,
+
+          draws: historical.draws,
+
+          losses: historical.losses,
+
+          goalsFor: historical.goalsFor,
+
+          goalsAgainst: historical.goalsAgainst,
+
+          homeMatches: historical.homeMatches,
+
+          homeWins: historical.homeWins,
+
+          homeDraws: historical.homeDraws,
+
+          homeLosses: historical.homeLosses,
+
+          awayMatches: historical.awayMatches,
+
+          awayWins: historical.awayWins,
+
+          awayDraws: historical.awayDraws,
+
+          awayLosses: historical.awayLosses,
+
+          confidence: confidence,
+        );
+
+        print('');
+        print('========================================');
+        print('DATI SMARTBET TROVATI');
+        print('========================================');
+        print('Squadra: $teamName');
+
+        print('');
+        print('CATEGORIA ATTUALE');
+        print(
+          '${result.currentLeagueSeason} - '
+          '${result.currentLeagueName}',
+        );
+
+        print('');
+        print('FONTE STATISTICA');
+        print('Stagione: ${result.season}');
+        print('Campionato: ${result.leagueName}');
+        print('Partite: ${result.matchesPlayed}');
+
+        print(
+          'Record: '
+          '${result.wins}V / '
+          '${result.draws}X / '
+          '${result.losses}S',
+        );
+
+        print(
+          'Gol: '
+          '${result.goalsFor} fatti / '
+          '${result.goalsAgainst} subiti',
+        );
+
+        print(
+          'Confidence: '
+          '${(result.confidence * 100).round()}%',
+        );
+
+        print('Fonte: ${result.dataSource}');
+
+        print('========================================');
+
+        return result;
+      }
+
+      print('');
+      print(
+        'Nessun campionato utilizzabile '
+        'nella stagione $season.',
+      );
+    }
+
+    // ==========================================================
+    // NESSUN DATO SUFFICIENTE
+    // ==========================================================
+
+    print('');
+    print('========================================');
+    print('DATI STATISTICI RECENTI NON DISPONIBILI');
+    print('========================================');
+    print('Squadra: $teamName');
+
+    print(
+      'Provate solamente le stagioni '
+      '$referenceYear e ${referenceYear - 1}.',
+    );
+
+    print(
+      'Amichevoli e coppe NON utilizzate '
+      'come base statistica.',
+    );
+
+    print('Nessun fallback a stagioni più vecchie.');
+
+    print('========================================');
+
+    return null;
+  }
+
+  // ============================================================
+  // CONTROLLO CAMPIONATO PRINCIPALE
+  // ============================================================
+
+  bool _isMainLeague({required String leagueName, required String leagueType}) {
+    final type = leagueType.toLowerCase().trim();
+
+    final name = leagueName.toLowerCase().trim();
+
+    if (type != 'league') {
+      return false;
+    }
+
+    if (_looksLikeFriendlyCompetition(name)) {
+      return false;
+    }
+
+    if (_looksLikeYouthCompetition(name)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ============================================================
+  // API: COMPETIZIONI DELLA SQUADRA
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> _getTeamLeagues({
+    required int teamId,
+    required int season,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/leagues').replace(
+      queryParameters: {'team': teamId.toString(), 'season': season.toString()},
+    );
+
+    print('');
     print('URL: $uri');
 
     try {
+      await ApiRateLimiter.wait();
+
       final response = await _client.get(uri, headers: _headers);
 
-      print(
-        'RECENT FIXTURES STATUS: '
-        '${response.statusCode}',
-      );
+      print('LEAGUES STATUS: ${response.statusCode}');
 
       if (response.statusCode != 200) {
-        return null;
+        return [];
       }
 
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        return null;
+        return [];
       }
 
       final errors = decoded['errors'];
 
       if (errors is Map && errors.isNotEmpty) {
-        print('RECENT API ERROR:');
+        print('LEAGUES API ERROR:');
         print(errors);
-        return null;
+
+        return [];
       }
 
-      final fixtures = decoded['response'];
+      final responseData = decoded['response'];
 
-      if (fixtures is! List || fixtures.isEmpty) {
-        print('NESSUN FIXTURE RECENTE');
-        return null;
+      if (responseData is! List) {
+        return [];
       }
 
-      final data = _calculateRecentData(
-        fixtures,
-        teamId: teamId,
-        teamName: teamName,
-      );
+      final result = <Map<String, dynamic>>[];
 
-      if (data == null) {
-        return null;
+      for (final item in responseData) {
+        if (item is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final league = item['league'];
+
+        if (league is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final leagueId = _toInt(league['id']);
+
+        final leagueName = league['name']?.toString() ?? '';
+
+        final leagueType = league['type']?.toString() ?? '';
+
+        if (leagueId <= 0 || leagueName.isEmpty) {
+          continue;
+        }
+
+        result.add({
+          'leagueId': leagueId,
+          'leagueName': leagueName,
+          'leagueType': leagueType,
+        });
       }
 
-      return data;
+      return result;
     } catch (e) {
-      print('RECENT DATA EXCEPTION: $e');
+      print('LEAGUES EXCEPTION: $e');
 
-      return null;
+      return [];
     }
   }
 
   // ============================================================
-  // CALCOLO DATI RECENTI
+  // ORDINE COMPETIZIONI
   // ============================================================
 
-  ResolvedTeamData? _calculateRecentData(
-    List<dynamic> fixtures, {
-    required int teamId,
-    required String teamName,
+  List<Map<String, dynamic>> _sortLeagueCandidates(
+    List<Map<String, dynamic>> leagues,
+  ) {
+    final result = List<Map<String, dynamic>>.from(leagues);
+
+    result.sort((a, b) {
+      final scoreA = _leaguePriority(a);
+
+      final scoreB = _leaguePriority(b);
+
+      return scoreA.compareTo(scoreB);
+    });
+
+    return result;
+  }
+
+  int _leaguePriority(Map<String, dynamic> league) {
+    final type = league['leagueType']?.toString().toLowerCase() ?? '';
+
+    final name = league['leagueName']?.toString().toLowerCase() ?? '';
+
+    if (type == 'league') {
+      if (_looksLikeYouthCompetition(name)) {
+        return 50;
+      }
+
+      return 0;
+    }
+
+    if (type == 'cup') {
+      return 80;
+    }
+
+    return 100;
+  }
+
+  // ============================================================
+  // CONTROLLO AMICHEVOLI
+  // ============================================================
+
+  bool _looksLikeFriendlyCompetition(String name) {
+    return name.contains('friendly') ||
+        name.contains('friendlies') ||
+        name.contains('amichevol') ||
+        name.contains('club friendly');
+  }
+
+  // ============================================================
+  // CONTROLLO GIOVANILI
+  // ============================================================
+
+  bool _looksLikeYouthCompetition(String name) {
+    return name.contains('u17') ||
+        name.contains('u18') ||
+        name.contains('u19') ||
+        name.contains('u20') ||
+        name.contains('u21') ||
+        name.contains('u23') ||
+        name.contains('youth') ||
+        name.contains('primavera') ||
+        name.contains('junior');
+  }
+
+  // ============================================================
+  // CONFIDENCE
+  // ============================================================
+
+  double _confidenceForSeason({
+    required int season,
+    required int referenceYear,
+    required int matchesPlayed,
   }) {
-    int matchesPlayed = 0;
-
-    int wins = 0;
-    int draws = 0;
-    int losses = 0;
-
-    int goalsFor = 0;
-    int goalsAgainst = 0;
-
-    int homeMatches = 0;
-    int homeWins = 0;
-    int homeDraws = 0;
-    int homeLosses = 0;
-
-    int awayMatches = 0;
-    int awayWins = 0;
-    int awayDraws = 0;
-    int awayLosses = 0;
-
-    int? detectedLeagueId;
-    String detectedLeagueName = '';
-
-    int currentSeason = DateTime.now().year;
-
-    for (final item in fixtures) {
-      if (item is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final fixture = item['fixture'];
-      final teams = item['teams'];
-      final goals = item['goals'];
-      final league = item['league'];
-
-      if (fixture is! Map<String, dynamic>) {
-        continue;
-      }
-
-      if (teams is! Map<String, dynamic>) {
-        continue;
-      }
-
-      if (goals is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final home = teams['home'];
-      final away = teams['away'];
-
-      if (home is! Map<String, dynamic> || away is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final homeId = _toInt(home['id']);
-      final awayId = _toInt(away['id']);
-
-      if (homeId != teamId && awayId != teamId) {
-        continue;
-      }
-
-      if (league is Map<String, dynamic>) {
-        final id = _toInt(league['id']);
-
-        if (id > 0 && detectedLeagueId == null) {
-          detectedLeagueId = id;
-        }
-
-        if (detectedLeagueName.isEmpty) {
-          detectedLeagueName = league['name']?.toString() ?? '';
-        }
-      }
-
-      final homeGoals = _toInt(goals['home']);
-
-      final awayGoals = _toInt(goals['away']);
-
-      matchesPlayed++;
-
-      if (homeId == teamId) {
-        homeMatches++;
-
-        goalsFor += homeGoals;
-        goalsAgainst += awayGoals;
-
-        if (homeGoals > awayGoals) {
-          wins++;
-          homeWins++;
-        } else if (homeGoals == awayGoals) {
-          draws++;
-          homeDraws++;
-        } else {
-          losses++;
-          homeLosses++;
-        }
-      } else {
-        awayMatches++;
-
-        goalsFor += awayGoals;
-        goalsAgainst += homeGoals;
-
-        if (awayGoals > homeGoals) {
-          wins++;
-          awayWins++;
-        } else if (awayGoals == homeGoals) {
-          draws++;
-          awayDraws++;
-        } else {
-          losses++;
-          awayLosses++;
-        }
-      }
-    }
-
-    if (matchesPlayed < 3) {
-      print(
-        'Dati recenti insufficienti: '
-        '$matchesPlayed partite',
-      );
-
-      return null;
-    }
-
-    return ResolvedTeamData(
-      teamId: teamId,
-      teamName: teamName,
-      sourceTeamId: teamId,
-      sourceTeamName: teamName,
-      dataSource: 'API recent fixtures',
-      season: currentSeason,
-      leagueId: detectedLeagueId ?? 0,
-      leagueName: detectedLeagueName,
-      matchesPlayed: matchesPlayed,
-      wins: wins,
-      draws: draws,
-      losses: losses,
-      goalsFor: goalsFor,
-      goalsAgainst: goalsAgainst,
-      homeMatches: homeMatches,
-      homeWins: homeWins,
-      homeDraws: homeDraws,
-      homeLosses: homeLosses,
-      awayMatches: awayMatches,
-      awayWins: awayWins,
-      awayDraws: awayDraws,
-      awayLosses: awayLosses,
-      confidence: 0.85,
-    );
-  }
-
-  // ============================================================
-  // FALLBACK STORICO
-  // ============================================================
-
-  Future<ResolvedTeamData?> _resolveHistoricalData({
-    required int teamId,
-    required String teamName,
-  }) async {
-    int historicalTeamId = 0;
-    String historicalTeamName = '';
-    int season = 2024;
-    int leagueId = 0;
-    String leagueName = '';
-    double confidence = 0.50;
-
     // ----------------------------------------------------------
-    // UNION BRESCIA
+    // STAGIONE DELLA PARTITA
     // ----------------------------------------------------------
 
-    if (_normalize(teamName) == 'union brescia') {
-      historicalTeamId = 884;
-      historicalTeamName = 'Feralpisalo';
-      leagueId = 138;
-      leagueName = 'Serie C - Girone A';
+    if (season == referenceYear) {
+      if (matchesPlayed >= 20) {
+        return 0.90;
+      }
 
-      // La continuità storica è utile,
-      // ma non deve avere lo stesso peso
-      // dei dati della squadra attuale.
-      confidence = 0.45;
-    }
-    // ----------------------------------------------------------
-    // AREZZO
-    // ----------------------------------------------------------
-    else if (_normalize(teamName) == 'arezzo') {
-      historicalTeamId = 876;
-      historicalTeamName = 'Arezzo';
-      leagueId = 942;
-      leagueName = 'Serie C - Girone B';
+      if (matchesPlayed >= 10) {
+        return 0.82;
+      }
 
-      confidence = 0.65;
-    }
-    // ----------------------------------------------------------
-    // SQUADRA NON MAPPATA
-    // ----------------------------------------------------------
-    else {
-      print(
-        'NESSUNO STORICO CONFIGURATO '
-        'PER $teamName',
-      );
+      if (matchesPlayed >= 5) {
+        return 0.72;
+      }
 
-      return null;
+      return 0.60;
     }
 
-    print('');
-    print('FALLBACK STORICO');
-    print('Squadra attuale: $teamName');
-    print('Squadra storico: $historicalTeamName');
-    print('Historical ID: $historicalTeamId');
-    print('Season: $season');
-    print('League ID: $leagueId');
-    print('League: $leagueName');
+    // ----------------------------------------------------------
+    // STAGIONE PRECEDENTE
+    // ----------------------------------------------------------
 
-    final historical = await _historicalService.getHistoricalData(
-      teamId: historicalTeamId,
-      teamName: historicalTeamName,
-      season: season,
-      leagueId: leagueId,
-      leagueName: leagueName,
-    );
+    if (season == referenceYear - 1) {
+      if (matchesPlayed >= 20) {
+        return 0.65;
+      }
 
-    if (historical == null) {
-      print('FALLBACK STORICO NON DISPONIBILE');
+      if (matchesPlayed >= 10) {
+        return 0.58;
+      }
 
-      return null;
+      return 0.50;
     }
 
-    return ResolvedTeamData(
-      teamId: teamId,
-      teamName: teamName,
-      sourceTeamId: historical.originalTeamId,
-      sourceTeamName: historical.originalTeamName,
-      dataSource:
-          'Historical fallback: '
-          '${historical.originalTeamName}',
-      season: historical.season,
-      leagueId: historical.leagueId,
-      leagueName: historical.leagueName,
-      matchesPlayed: historical.matchesPlayed,
-      wins: historical.wins,
-      draws: historical.draws,
-      losses: historical.losses,
-      goalsFor: historical.goalsFor,
-      goalsAgainst: historical.goalsAgainst,
-      homeMatches: historical.homeMatches,
-      homeWins: historical.homeWins,
-      homeDraws: historical.homeDraws,
-      homeLosses: historical.homeLosses,
-      awayMatches: historical.awayMatches,
-      awayWins: historical.awayWins,
-      awayDraws: historical.awayDraws,
-      awayLosses: historical.awayLosses,
-      confidence: confidence,
-    );
-  }
-
-  // ============================================================
-  // NORMALIZZAZIONE
-  // ============================================================
-
-  String _normalize(String value) {
-    return value
-        .toLowerCase()
-        .trim()
-        .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ');
+    return 0.30;
   }
 
   // ============================================================
@@ -565,6 +763,8 @@ class TeamDataResolver {
 
   static void clearCache() {
     _cache.clear();
+
+    HistoricalTeamService.clearCache();
   }
 
   // ============================================================
@@ -572,8 +772,6 @@ class TeamDataResolver {
   // ============================================================
 
   void dispose() {
-    // HistoricalTeamService utilizza lo stesso client,
-    // quindi chiudiamo il client una sola volta.
     _client.close();
   }
 }

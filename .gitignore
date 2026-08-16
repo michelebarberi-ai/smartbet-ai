@@ -44,3 +44,19 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 lib/config/api_config.dart
+
+# SmartBet secrets
+.env
+backend/.env
+
+# Node
+backend/node_modules/
+node_modules/
+
+# Local backups
+backups/
+*.bak
+*.bak_*
+
+# Backend local/debug files
+backend/server_broken.js

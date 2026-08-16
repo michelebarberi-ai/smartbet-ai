@@ -1,5 +1,8 @@
+import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_coupon_service.dart';
+import '../services/smartbet_auto_coupon_service.dart';
+import 'coupon_screen.dart';
 import 'package:flutter/material.dart';
-
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
@@ -18,13 +21,511 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   final Set<String> _expandedCountries = {};
   final Set<String> _expandedLeagues = {};
+  final Set<String> _expandedCompetitionTypes = {};
+
+  // ============================================================
+  // SCHEDINA SMARTBET
+  // ============================================================
+
+  final Map<int, MatchModel> _selectedMatches = {};
+
+  static const int _maximumCouponMatches = 12;
+
+  bool _creatingCoupon = false;
+
+  bool _creatingAutoCoupon = false;
 
   String _searchText = "";
+
+  late DateTime _selectedDate;
 
   @override
   void initState() {
     super.initState();
+
+    _selectedDate = _dateOnly(DateTime.now());
     _matches = MatchRepository.getTodayMatches();
+  }
+
+  // ============================================================
+  // SELEZIONE DATA
+  // ============================================================
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool get _isTodaySelected {
+    return _isSameDate(_selectedDate, _dateOnly(DateTime.now()));
+  }
+
+  Future<void> _selectDate(DateTime date) async {
+    final normalized = _dateOnly(date);
+
+    if (_isSameDate(normalized, _selectedDate)) {
+      return;
+    }
+
+    setState(() {
+      _selectedDate = normalized;
+
+      _selectedMatches.clear();
+      _expandedCountries.clear();
+      _expandedLeagues.clear();
+
+      if (_isSameDate(normalized, _dateOnly(DateTime.now()))) {
+        _matches = MatchRepository.getTodayMatches();
+      } else {
+        _matches = MatchRepository.getMatchesByDate(normalized);
+      }
+    });
+  }
+
+  Future<void> _openDatePicker() async {
+    final today = _dateOnly(DateTime.now());
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate.isBefore(today) ? today : _selectedDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Scegli la data delle partite',
+      cancelText: 'ANNULLA',
+      confirmText: 'SELEZIONA',
+    );
+
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    await _selectDate(picked);
+  }
+
+  String _weekdayLabel(DateTime date) {
+    const labels = <String>['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+    return labels[date.weekday - 1];
+  }
+
+  String _shortDateLabel(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month';
+  }
+
+  Widget _dateChip(DateTime date) {
+    final selected = _isSameDate(date, _selectedDate);
+    final today = _isSameDate(date, _dateOnly(DateTime.now()));
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          _selectDate(date);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 68,
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF00C853) : const Color(0xFF1F2937),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? const Color(0xFF00C853) : Colors.white12,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                today ? 'Oggi' : _weekdayLabel(date),
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _shortDateLabel(date),
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white38,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dateSelector() {
+    final today = _dateOnly(DateTime.now());
+    final dates = List<DateTime>.generate(
+      7,
+      (index) => today.add(Duration(days: index)),
+    );
+
+    final selectedOutsideWeek = !dates.any(
+      (date) => _isSameDate(date, _selectedDate),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.calendar_month_outlined,
+              color: Color(0xFF00C853),
+              size: 18,
+            ),
+            const SizedBox(width: 7),
+            const Text(
+              'Scegli il giorno',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            if (!_isTodaySelected)
+              TextButton(
+                onPressed: () {
+                  _selectDate(today);
+                },
+                child: const Text('TORNA A OGGI'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 62,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              ...dates.map(_dateChip),
+              if (selectedOutsideWeek) _dateChip(_selectedDate),
+              Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: _openDatePicker,
+                  child: Container(
+                    width: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F2937),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: const Icon(
+                      Icons.date_range,
+                      color: Color(0xFF00C853),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // SELEZIONE SCHEDINA
+  // ============================================================
+
+  bool _isSelected(MatchModel match) {
+    return _selectedMatches.containsKey(match.fixtureId);
+  }
+
+  void _toggleSelection(MatchModel match) {
+    setState(() {
+      if (_selectedMatches.containsKey(match.fixtureId)) {
+        _selectedMatches.remove(match.fixtureId);
+        return;
+      }
+
+      if (_selectedMatches.length >= _maximumCouponMatches) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Puoi selezionare al massimo 12 partite per la schedina AI.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      _selectedMatches[match.fixtureId] = match;
+    });
+  }
+
+  void _clearSelections() {
+    setState(() {
+      _selectedMatches.clear();
+    });
+  }
+
+  Future<void> _createCoupon() async {
+    if (_creatingCoupon) {
+      return;
+    }
+
+    if (_selectedMatches.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona almeno 2 partite.')),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _creatingCoupon = true;
+    });
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1F2937),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                'CREAZIONE SCHEDINA AI',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                'SmartBet sta analizzando '
+                '${_selectedMatches.length} partite...',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+
+              const SizedBox(height: 8),
+
+              const Text(
+                'Dossier • Quote • Value Bet • Rischio • Selezione finale',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+
+              const SizedBox(height: 12),
+
+              const Text(
+                'L’analisi può richiedere alcuni minuti.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final service = SmartBetCouponService();
+
+      final result = await service.buildCoupon(
+        matches: _selectedMatches.values.toList(),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) {
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => CouponScreen(result: result)),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Errore durante la creazione della schedina: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creatingCoupon = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // CREA SCHEDINA AI AUTOMATICA
+  // ============================================================
+
+  Future<void> _createAutoCoupon() async {
+    if (_creatingAutoCoupon || _creatingCoupon) {
+      return;
+    }
+
+    setState(() {
+      _creatingAutoCoupon = true;
+    });
+
+    final progress = ValueNotifier<SmartBetAutoCouponProgress>(
+      const SmartBetAutoCouponProgress(
+        phase: 'start',
+        current: 0,
+        total: 1,
+        message: 'Preparazione SmartBet AI...',
+      ),
+    );
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1F2937),
+          content: ValueListenableBuilder<SmartBetAutoCouponProgress>(
+            valueListenable: progress,
+            builder: (context, value, child) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    color: Color(0xFF00C853),
+                    size: 38,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  const Text(
+                    'SCHEDINA AI DEL GIORNO',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  LinearProgressIndicator(
+                    value: value.progress,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  Text(
+                    value.message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70, height: 1.4),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  const Text(
+                    'SmartBet seleziona le candidate migliori '
+                    'prima dell’analisi AI avanzata.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    try {
+      final service = SmartBetAutoCouponService();
+
+      final autoResult = await service.build(
+        onProgress: (value) {
+          progress.value = value;
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) {
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CouponScreen(result: autoResult.coupon),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore durante la schedina AI automatica: $e')),
+      );
+    } finally {
+      progress.dispose();
+
+      if (mounted) {
+        setState(() {
+          _creatingAutoCoupon = false;
+        });
+      }
+    }
   }
 
   // ============================================================
@@ -178,6 +679,165 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ..sort((a, b) => a.key.compareTo(b.key));
 
     return Map.fromEntries(entries);
+  }
+
+  // ============================================================
+  // TIPO COMPETIZIONE
+  // ============================================================
+
+  String _competitionType(MatchModel match) {
+    final type = match.leagueType.toLowerCase().trim();
+    final league = match.league.toLowerCase().trim();
+
+    // ----------------------------------------------------------
+    // FEMMINILI
+    // ----------------------------------------------------------
+
+    if (type.contains('women') ||
+        type.contains('female') ||
+        league.contains('women') ||
+        league.contains('woman') ||
+        league.contains('femminile') ||
+        league.contains('ladies')) {
+      return 'Femminili';
+    }
+
+    // ----------------------------------------------------------
+    // GIOVANILI
+    // ----------------------------------------------------------
+
+    if (type.contains('youth') ||
+        league.contains('u17') ||
+        league.contains('u18') ||
+        league.contains('u19') ||
+        league.contains('u20') ||
+        league.contains('u21') ||
+        league.contains('u23') ||
+        league.contains('primavera') ||
+        league.contains('youth')) {
+      return 'Giovanili';
+    }
+
+    // ----------------------------------------------------------
+    // AMICHEVOLI
+    // ----------------------------------------------------------
+
+    if (type.contains('friendly') ||
+        league.contains('friendly') ||
+        league.contains('friendlies') ||
+        league.contains('amical')) {
+      return 'Amichevoli';
+    }
+
+    // ----------------------------------------------------------
+    // NAZIONALI
+    // ----------------------------------------------------------
+
+    if (type.contains('national')) {
+      return 'Nazionali';
+    }
+
+    // ----------------------------------------------------------
+    // COPPE INTERNAZIONALI
+    // ----------------------------------------------------------
+
+    if (type.contains('european') ||
+        league.contains('champions league') ||
+        league.contains('europa league') ||
+        league.contains('conference league') ||
+        league.contains('libertadores') ||
+        league.contains('sudamericana')) {
+      return 'Internazionali';
+    }
+
+    // ----------------------------------------------------------
+    // COPPE NAZIONALI
+    // ----------------------------------------------------------
+
+    if (type.contains('cup') ||
+        league.contains('coppa') ||
+        league.contains('cup') ||
+        league.contains('copa') ||
+        league.contains('coupe') ||
+        league.contains('pokal') ||
+        league.contains('supercoppa') ||
+        league.contains('super cup')) {
+      return 'Coppe';
+    }
+
+    // ----------------------------------------------------------
+    // CAMPIONATI
+    // ----------------------------------------------------------
+
+    if (type.contains('domestic') || type.contains('league')) {
+      return 'Campionati';
+    }
+
+    return 'Altre competizioni';
+  }
+
+  Map<String, List<MatchModel>> _groupByCompetitionType(
+    List<MatchModel> matches,
+  ) {
+    final grouped = <String, List<MatchModel>>{};
+
+    for (final match in matches) {
+      final type = _competitionType(match);
+
+      grouped.putIfAbsent(type, () => []);
+      grouped[type]!.add(match);
+    }
+
+    const order = <String>[
+      'Campionati',
+      'Coppe',
+      'Internazionali',
+      'Nazionali',
+      'Femminili',
+      'Giovanili',
+      'Amichevoli',
+      'Altre competizioni',
+    ];
+
+    final result = <String, List<MatchModel>>{};
+
+    for (final type in order) {
+      final items = grouped[type];
+
+      if (items != null && items.isNotEmpty) {
+        result[type] = items;
+      }
+    }
+
+    return result;
+  }
+
+  IconData _competitionTypeIcon(String type) {
+    switch (type) {
+      case 'Campionati':
+        return Icons.sports_soccer;
+
+      case 'Coppe':
+        return Icons.emoji_events;
+
+      case 'Internazionali':
+        return Icons.public;
+
+      case 'Nazionali':
+        return Icons.flag;
+
+      case 'Femminili':
+        return Icons.female;
+
+      case 'Giovanili':
+        return Icons.groups;
+
+      case 'Amichevoli':
+        return Icons.handshake;
+
+      default:
+        return Icons.folder_outlined;
+    }
   }
 
   // ============================================================
@@ -520,24 +1180,156 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
                 const SizedBox(height: 13),
 
+                // =================================================
+                // SELEZIONE SCHEDINA
+                // =================================================
+                InkWell(
+                  onTap: () {
+                    _toggleSelection(match);
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _isSelected(match)
+                          ? const Color(0xFF00C853).withValues(alpha: 0.12)
+                          : Colors.white.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _isSelected(match)
+                            ? const Color(0xFF00C853)
+                            : Colors.white12,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _isSelected(match)
+                              ? Icons.check_circle
+                              : Icons.add_circle_outline,
+                          color: _isSelected(match)
+                              ? const Color(0xFF00C853)
+                              : Colors.white54,
+                          size: 21,
+                        ),
+
+                        const SizedBox(width: 9),
+
+                        Expanded(
+                          child: Text(
+                            _isSelected(match)
+                                ? 'SELEZIONATA PER SCHEDINA AI'
+                                : 'AGGIUNGI ALLA SCHEDINA AI',
+                            style: TextStyle(
+                              color: _isSelected(match)
+                                  ? const Color(0xFF00C853)
+                                  : Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
                 // ANALIZZA
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () {
-                      Navigator.push(
+                    onPressed: () async {
+                      // ========================================================
+                      // LOADING
+                      // ========================================================
+
+                      showDialog<void>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) {
+                          return const AlertDialog(
+                            backgroundColor: Color(0xFF1F2937),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+
+                                SizedBox(height: 20),
+
+                                Text(
+                                  'SMARTBET AI',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+
+                                SizedBox(height: 10),
+
+                                Text(
+                                  'Analisi avanzata della partita in corso...',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+
+                                SizedBox(height: 6),
+
+                                Text(
+                                  'Dossier • Quote • AI • Value Bet • Stake',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+
+                      // ========================================================
+                      // SMARTBET AI AVANZATA
+                      // ========================================================
+
+                      final advancedResult = await SmartBetAiService()
+                          .analyzeMatch(match);
+
+                      if (!context.mounted) {
+                        return;
+                      }
+
+                      // Chiude il loading.
+                      Navigator.of(context, rootNavigator: true).pop();
+
+                      if (!context.mounted) {
+                        return;
+                      }
+
+                      // ========================================================
+                      // DETTAGLIO
+                      // ========================================================
+
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => AnalysisDetailScreen(
                             match: match,
-                            result: result,
+                            result: advancedResult,
                           ),
                         ),
                       );
                     },
                     icon: const Icon(Icons.psychology, size: 18),
                     label: const Text(
-                      "ANALIZZA PARTITA",
+                      'ANALIZZA PARTITA',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -631,6 +1423,108 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   // ============================================================
+  // SEZIONE TIPO COMPETIZIONE
+  // ============================================================
+
+  Widget _competitionTypeSection(
+    BuildContext context,
+    String country,
+    String type,
+    List<MatchModel> matches,
+  ) {
+    final key = '$country::$type';
+
+    final expanded = _expandedCompetitionTypes.contains(key);
+
+    final leagues = _groupByLeague(matches);
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              if (expanded) {
+                _expandedCompetitionTypes.remove(key);
+              } else {
+                _expandedCompetitionTypes.add(key);
+              }
+            });
+          },
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(18, 4, 12, 7),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF172033),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(
+                color: expanded
+                    ? const Color(0xFF00C853).withValues(alpha: 0.35)
+                    : Colors.white10,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _competitionTypeIcon(type),
+                  color: expanded ? const Color(0xFF00C853) : Colors.white54,
+                  size: 21,
+                ),
+
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Text(
+                    type,
+                    style: TextStyle(
+                      color: expanded ? Colors.white : Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${matches.length}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 7),
+
+                Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_right,
+                  color: expanded ? const Color(0xFF00C853) : Colors.white38,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        if (expanded)
+          ...leagues.entries.map(
+            (entry) => _leagueSection(context, country, entry.key, entry.value),
+          ),
+      ],
+    );
+  }
+
+  // ============================================================
   // SEZIONE NAZIONE
   // ============================================================
 
@@ -640,7 +1534,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     List<MatchModel> matches,
   ) {
     final expanded = _expandedCountries.contains(country);
-    final leagues = _groupByLeague(matches);
+    final competitionTypes = _groupByCompetitionType(matches);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -709,8 +1603,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ),
 
         if (expanded)
-          ...leagues.entries.map(
-            (entry) => _leagueSection(context, country, entry.key, entry.value),
+          ...competitionTypes.entries.map(
+            (entry) => _competitionTypeSection(
+              context,
+              country,
+              entry.key,
+              entry.value,
+            ),
           ),
 
         const SizedBox(height: 4),
@@ -742,6 +1641,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             "Analisi intelligente delle partite",
             style: TextStyle(color: Colors.white54, fontSize: 13),
           ),
+          const SizedBox(height: 14),
+
+          _dateSelector(),
+
           const SizedBox(height: 14),
 
           // RICERCA
@@ -787,6 +1690,60 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
+
+      bottomNavigationBar: _selectedMatches.isEmpty
+          ? null
+          : SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF172033),
+                  border: Border(top: BorderSide(color: Colors.white12)),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Svuota selezione',
+                      onPressed: _creatingCoupon ? null : _clearSelections,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.white54,
+                      ),
+                    ),
+
+                    const SizedBox(width: 6),
+
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _creatingCoupon ? null : _createCoupon,
+                        icon: _creatingCoupon
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome),
+                        label: Text(
+                          _creatingCoupon
+                              ? 'CREAZIONE...'
+                              : 'CREA SCHEDINA AI (${_selectedMatches.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C853),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
       appBar: AppBar(
         title: const Text(
           "Analisi Partite",
@@ -830,6 +1787,48 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             return Column(
               children: [
                 _header(),
+
+                // ====================================================
+                // PULSANTE SCHEDINA AI DEL GIORNO
+                // ====================================================
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: (_creatingAutoCoupon || _creatingCoupon)
+                          ? null
+                          : _createAutoCoupon,
+                      icon: _creatingAutoCoupon
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(
+                        _creatingAutoCoupon
+                            ? 'CREAZIONE SCHEDINA...'
+                            : (_isTodaySelected
+                                  ? 'SCHEDINA AI DEL GIORNO'
+                                  : 'SCHEDINA AI DI OGGI'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF00C853),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
                 const Expanded(
                   child: Center(
                     child: Text(
@@ -886,6 +1885,48 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           return Column(
             children: [
               _header(),
+
+              // ====================================================
+              // SCHEDINA AI DEL GIORNO - PULSANTE PRINCIPALE
+              // ====================================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: (_creatingAutoCoupon || _creatingCoupon)
+                        ? null
+                        : _createAutoCoupon,
+                    icon: _creatingAutoCoupon
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(
+                      _creatingAutoCoupon
+                          ? 'CREAZIONE SCHEDINA...'
+                          : (_isTodaySelected
+                                ? 'SCHEDINA AI DEL GIORNO'
+                                : 'SCHEDINA AI DI OGGI'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C853),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.only(bottom: 30),

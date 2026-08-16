@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'api_rate_limiter.dart';
 
 class HistoricalTeamData {
   final int originalTeamId;
@@ -130,6 +131,18 @@ class HistoricalTeamService {
   static final Map<String, HistoricalTeamData?> _cache = {};
 
   // ============================================================
+  // STATI CONSIDERATI CONCLUSI
+  // ============================================================
+
+  static const Set<String> _finishedStatuses = {
+    'FT',
+    'AET',
+    'PEN',
+    'AWD',
+    'WO',
+  };
+
+  // ============================================================
   // RECUPERO STORICO
   // ============================================================
 
@@ -141,7 +154,10 @@ class HistoricalTeamService {
     String leagueName = '',
   }) async {
     if (teamId <= 0 || season <= 0 || leagueId <= 0) {
-      print('SMARTBET HISTORICAL: parametri non validi');
+      print(
+        'SMARTBET HISTORICAL: '
+        'parametri non validi',
+      );
 
       return null;
     }
@@ -149,16 +165,23 @@ class HistoricalTeamService {
     final cacheKey = '$teamId-$season-$leagueId';
 
     if (_cache.containsKey(cacheKey)) {
+      print('');
+      print('SMARTBET HISTORICAL CACHE HIT');
+      print('Squadra: $teamName');
+      print('Stagione: $season');
+
       return _cache[cacheKey];
     }
 
     print('');
     print('========================================');
     print('SMARTBET - HISTORICAL DATA');
+    print('========================================');
     print('Squadra: $teamName');
     print('Team ID: $teamId');
     print('Stagione: $season');
     print('League ID: $leagueId');
+    print('League: $leagueName');
     print('========================================');
 
     final uri = Uri.parse('${ApiConfig.baseUrl}/fixtures').replace(
@@ -170,6 +193,20 @@ class HistoricalTeamService {
     );
 
     try {
+      // ========================================================
+      // RATE LIMITER
+      // ========================================================
+      //
+      // Tutte le richieste API-Football vengono distanziate
+      // tramite il limiter condiviso.
+      //
+      // Questo evita picchi di richieste quando TeamDataResolver,
+      // HistoricalTeamService e ContextResearcher lavorano
+      // consecutivamente sulla stessa partita.
+      // ========================================================
+
+      await ApiRateLimiter.wait();
+
       final response = await _client.get(uri, headers: _headers);
 
       print(
@@ -204,12 +241,17 @@ class HistoricalTeamService {
       if (fixtures is! List || fixtures.isEmpty) {
         print(
           'SMARTBET HISTORICAL: '
-          'nessuna partita trovata',
+          'nessuna fixture trovata',
         );
 
         _cache[cacheKey] = null;
         return null;
       }
+
+      print(
+        'FIXTURE TOTALI API: '
+        '${fixtures.length}',
+      );
 
       final data = _calculateStatistics(
         fixtures,
@@ -263,6 +305,10 @@ class HistoricalTeamService {
     int awayDraws = 0;
     int awayLosses = 0;
 
+    int ignoredNotFinished = 0;
+    int ignoredInvalidGoals = 0;
+    int ignoredInvalidTeam = 0;
+
     for (final item in fixtures) {
       if (item is! Map<String, dynamic>) {
         continue;
@@ -272,22 +318,46 @@ class HistoricalTeamService {
       final teams = item['teams'];
       final goals = item['goals'];
 
-      if (fixture is! Map<String, dynamic>) {
+      if (fixture is! Map<String, dynamic> ||
+          teams is! Map<String, dynamic> ||
+          goals is! Map<String, dynamic>) {
         continue;
       }
 
-      if (teams is! Map<String, dynamic>) {
+      // ========================================================
+      // CONTROLLO STATO PARTITA
+      // ========================================================
+
+      final statusData = fixture['status'];
+
+      String statusShort = '';
+
+      if (statusData is Map<String, dynamic>) {
+        statusShort =
+            statusData['short']?.toString().toUpperCase().trim() ?? '';
+      }
+
+      // --------------------------------------------------------
+      // IMPORTANTISSIMO:
+      //
+      // Una fixture futura/non terminata NON deve entrare
+      // nelle statistiche.
+      // --------------------------------------------------------
+
+      if (!_finishedStatuses.contains(statusShort)) {
+        ignoredNotFinished++;
         continue;
       }
 
-      if (goals is! Map<String, dynamic>) {
-        continue;
-      }
+      // ========================================================
+      // CONTROLLO SQUADRE
+      // ========================================================
 
       final home = teams['home'];
       final away = teams['away'];
 
       if (home is! Map<String, dynamic> || away is! Map<String, dynamic>) {
+        ignoredInvalidTeam++;
         continue;
       }
 
@@ -295,22 +365,36 @@ class HistoricalTeamService {
       final awayId = _toInt(away['id']);
 
       if (homeId != teamId && awayId != teamId) {
+        ignoredInvalidTeam++;
         continue;
       }
 
+      // ========================================================
+      // CONTROLLO RISULTATO
+      // ========================================================
+
+      final homeGoals = _nullableInt(goals['home']);
+
+      final awayGoals = _nullableInt(goals['away']);
+
       // --------------------------------------------------------
-      // RISULTATO
+      // NULL NON DEVE DIVENTARE ZERO.
       // --------------------------------------------------------
 
-      final homeGoals = _toInt(goals['home']);
+      if (homeGoals == null || awayGoals == null) {
+        ignoredInvalidGoals++;
+        continue;
+      }
 
-      final awayGoals = _toInt(goals['away']);
+      // ========================================================
+      // PARTITA VALIDA
+      // ========================================================
 
       matchesPlayed++;
 
-      // --------------------------------------------------------
+      // ========================================================
       // CASA
-      // --------------------------------------------------------
+      // ========================================================
 
       if (homeId == teamId) {
         homeMatches++;
@@ -329,9 +413,9 @@ class HistoricalTeamService {
           homeLosses++;
         }
       }
-      // --------------------------------------------------------
+      // ========================================================
       // TRASFERTA
-      // --------------------------------------------------------
+      // ========================================================
       else if (awayId == teamId) {
         awayMatches++;
 
@@ -351,12 +435,65 @@ class HistoricalTeamService {
       }
     }
 
+    // ==========================================================
+    // LOG FILTRAGGIO
+    // ==========================================================
+
+    print('');
+    print('SMARTBET HISTORICAL FILTER');
+
+    print('Fixture API: ${fixtures.length}');
+
+    print(
+      'Partite concluse utilizzate: '
+      '$matchesPlayed',
+    );
+
+    print(
+      'Ignorate non concluse: '
+      '$ignoredNotFinished',
+    );
+
+    print(
+      'Ignorate senza risultato: '
+      '$ignoredInvalidGoals',
+    );
+
+    print(
+      'Ignorate squadra non valida: '
+      '$ignoredInvalidTeam',
+    );
+
+    // ==========================================================
+    // NESSUNA PARTITA GIOCATA
+    // ==========================================================
+
     if (matchesPlayed == 0) {
+      print('');
+      print('========================================');
+      print('NESSUNA PARTITA CONCLUSA');
+      print('========================================');
+      print('Squadra: $teamName');
+      print('Stagione: $season');
+
+      print(
+        'Le fixture esistono ma non risultano '
+        'ancora partite concluse utilizzabili.',
+      );
+
+      print('========================================');
+
       return null;
     }
 
+    // ==========================================================
+    // RISULTATO
+    // ==========================================================
+
     print('');
+    print('========================================');
     print('SMARTBET HISTORICAL RISULTATO');
+    print('========================================');
     print('Squadra: $teamName');
     print('Partite: $matchesPlayed');
     print('Vittorie: $wins');
@@ -364,8 +501,22 @@ class HistoricalTeamService {
     print('Sconfitte: $losses');
     print('Gol fatti: $goalsFor');
     print('Gol subiti: $goalsAgainst');
-    print('Casa: $homeWins V / $homeDraws X / $homeLosses S');
-    print('Trasferta: $awayWins V / $awayDraws X / $awayLosses S');
+
+    print(
+      'Casa: '
+      '$homeWins V / '
+      '$homeDraws X / '
+      '$homeLosses S',
+    );
+
+    print(
+      'Trasferta: '
+      '$awayWins V / '
+      '$awayDraws X / '
+      '$awayLosses S',
+    );
+
+    print('========================================');
 
     return HistoricalTeamData(
       originalTeamId: teamId,
@@ -399,7 +550,7 @@ class HistoricalTeamService {
   }
 
   // ============================================================
-  // CONVERSIONE
+  // CONVERSIONE INT
   // ============================================================
 
   int _toInt(dynamic value) {
@@ -416,6 +567,30 @@ class HistoricalTeamService {
     }
 
     return 0;
+  }
+
+  // ============================================================
+  // CONVERSIONE INT NULLABLE
+  // ============================================================
+
+  int? _nullableInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is double) {
+      return value.round();
+    }
+
+    if (value is String) {
+      return int.tryParse(value);
+    }
+
+    return null;
   }
 
   // ============================================================

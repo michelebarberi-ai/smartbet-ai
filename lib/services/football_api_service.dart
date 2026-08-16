@@ -5,23 +5,36 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 
 class FootballApiService {
+  // ============================================================
+  // PARTITE DI OGGI
+  // ============================================================
+
   Future<List<dynamic>> getNextMatches() async {
     final now = DateTime.now();
 
+    return getMatchesByDate(now);
+  }
+
+  // ============================================================
+  // PARTITE PER DATA SPECIFICA
+  // ============================================================
+
+  Future<List<dynamic>> getMatchesByDate(DateTime selectedDate) async {
     final date =
-        "${now.year.toString().padLeft(4, '0')}-"
-        "${now.month.toString().padLeft(2, '0')}-"
-        "${now.day.toString().padLeft(2, '0')}";
+        "${selectedDate.year.toString().padLeft(4, '0')}-"
+        "${selectedDate.month.toString().padLeft(2, '0')}-"
+        "${selectedDate.day.toString().padLeft(2, '0')}";
 
     final uri = Uri.parse(
       "${ApiConfig.baseUrl}/fixtures",
     ).replace(queryParameters: {"date": date, "timezone": "Europe/Rome"});
 
-    print("========================================");
-    print("SMARTBET - TEST PARTITE");
-    print("DATA: $date");
-    print("URL: $uri");
-    print("========================================");
+    print('');
+    print('========================================');
+    print('SMARTBET - TEST PARTITE');
+    print('DATA: $date');
+    print('URL: $uri');
+    print('========================================');
 
     final response = await http.get(
       uri,
@@ -31,7 +44,10 @@ class FootballApiService {
     print("STATUS CODE: ${response.statusCode}");
 
     if (response.statusCode != 200) {
-      throw Exception("Errore API ${response.statusCode}\n${response.body}");
+      throw Exception(
+        "Errore API ${response.statusCode}\n"
+        "${response.body}",
+      );
     }
 
     final data = jsonDecode(response.body);
@@ -40,7 +56,10 @@ class FootballApiService {
 
     final fixtures = (data["response"] as List<dynamic>?) ?? [];
 
-    print("PARTITE RESTITUITE DA API: ${fixtures.length}");
+    print(
+      "PARTITE RESTITUITE DA API: "
+      "${fixtures.length}",
+    );
 
     for (final fixture in fixtures.take(10)) {
       print(
@@ -49,7 +68,7 @@ class FootballApiService {
       );
     }
 
-    print("========================================");
+    print('========================================');
 
     return fixtures;
   }

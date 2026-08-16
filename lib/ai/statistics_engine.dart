@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import '../models/match_model.dart';
 import '../models/team_analysis.dart';
+import '../services/team_form_service.dart';
 
 class StatisticsEngine {
   const StatisticsEngine._();
@@ -9,7 +12,8 @@ class StatisticsEngine {
   // ============================================================
   //
   // Lo manteniamo per compatibilità con il progetto.
-  //
+  // ============================================================
+
   static int calculateFromMatch(MatchModel match) {
     int score = 50;
 
@@ -25,7 +29,7 @@ class StatisticsEngine {
   }
 
   // ============================================================
-  // NUOVO SMART SCORE
+  // SMART SCORE
   // ============================================================
 
   static int calculateFromTeams({
@@ -103,7 +107,11 @@ class StatisticsEngine {
   }
 
   // ============================================================
-  // PROBABILITÀ
+  // PROBABILITÀ 1X2
+  // ============================================================
+  //
+  // IMPORTANTE:
+  // questa logica rimane invariata.
   // ============================================================
 
   static Map<String, int> calculateProbabilities({
@@ -150,6 +158,240 @@ class StatisticsEngine {
       'draw': drawProbability.round(),
       'away': awayProbability.round(),
     };
+  }
+
+  // ============================================================
+  // NUOVI MERCATI GOL
+  // ============================================================
+  //
+  // Restituisce:
+  //
+  // over25   -> Over 2.5
+  // under25  -> Under 2.5
+  // goal     -> entrambe segnano / BTTS YES
+  // noGoal   -> almeno una non segna / BTTS NO
+  //
+  // Il calcolo utilizza:
+  //
+  // - gol segnati recenti
+  // - gol subiti recenti
+  // - numero partite disponibili
+  //
+  // e costruisce una stima dei gol attesi.
+  // ============================================================
+
+  static Map<String, int> calculateGoalMarketProbabilities({
+    required TeamFormData homeForm,
+    required TeamFormData awayForm,
+  }) {
+    if (homeForm.matchesPlayed <= 0 || awayForm.matchesPlayed <= 0) {
+      return {'over25': 0, 'under25': 0, 'goal': 0, 'noGoal': 0};
+    }
+
+    // ==========================================================
+    // MEDIE RECENTI
+    // ==========================================================
+
+    final homeGoalsForAverage = homeForm.goalsFor / homeForm.matchesPlayed;
+
+    final homeGoalsAgainstAverage =
+        homeForm.goalsAgainst / homeForm.matchesPlayed;
+
+    final awayGoalsForAverage = awayForm.goalsFor / awayForm.matchesPlayed;
+
+    final awayGoalsAgainstAverage =
+        awayForm.goalsAgainst / awayForm.matchesPlayed;
+
+    // ==========================================================
+    // EXPECTED GOALS
+    // ==========================================================
+    //
+    // Casa:
+    // 55% capacità offensiva della squadra di casa
+    // 45% vulnerabilità difensiva dell'avversaria
+    //
+    // Trasferta:
+    // stesso principio.
+    //
+    // Applichiamo un piccolo vantaggio campo.
+    // ==========================================================
+
+    var expectedHomeGoals =
+        (homeGoalsForAverage * 0.55) + (awayGoalsAgainstAverage * 0.45);
+
+    var expectedAwayGoals =
+        (awayGoalsForAverage * 0.55) + (homeGoalsAgainstAverage * 0.45);
+
+    // Piccolo fattore campo.
+    expectedHomeGoals *= 1.06;
+    expectedAwayGoals *= 0.96;
+
+    // Evitiamo stime matematicamente estreme
+    // in presenza di campioni molto piccoli.
+    expectedHomeGoals = expectedHomeGoals.clamp(0.20, 3.50);
+
+    expectedAwayGoals = expectedAwayGoals.clamp(0.15, 3.25);
+
+    final totalExpectedGoals = expectedHomeGoals + expectedAwayGoals;
+
+    // ==========================================================
+    // OVER / UNDER 2.5
+    // ==========================================================
+    //
+    // Se il totale gol segue una distribuzione di Poisson,
+    // Under 2.5 = probabilità di 0, 1 o 2 gol.
+    // ==========================================================
+
+    final probability0Goals = _poissonProbability(
+      lambda: totalExpectedGoals,
+      goals: 0,
+    );
+
+    final probability1Goal = _poissonProbability(
+      lambda: totalExpectedGoals,
+      goals: 1,
+    );
+
+    final probability2Goals = _poissonProbability(
+      lambda: totalExpectedGoals,
+      goals: 2,
+    );
+
+    final under25 = (probability0Goals + probability1Goal + probability2Goals)
+        .clamp(0.0, 1.0);
+
+    final over25 = (1.0 - under25).clamp(0.0, 1.0);
+
+    // ==========================================================
+    // GOAL / NO GOAL
+    // ==========================================================
+    //
+    // P(entrambe segnano) =
+    //
+    // 1
+    // - P(casa = 0)
+    // - P(ospite = 0)
+    // + P(entrambe = 0)
+    // ==========================================================
+
+    final homeZero = math.exp(-expectedHomeGoals);
+
+    final awayZero = math.exp(-expectedAwayGoals);
+
+    final bothZero = homeZero * awayZero;
+
+    final goal = (1.0 - homeZero - awayZero + bothZero).clamp(0.0, 1.0);
+
+    final noGoal = (1.0 - goal).clamp(0.0, 1.0);
+
+    // ==========================================================
+    // CONVERSIONE IN PERCENTUALI
+    // ==========================================================
+
+    var overPercent = (over25 * 100).round();
+
+    var underPercent = 100 - overPercent;
+
+    var goalPercent = (goal * 100).round();
+
+    var noGoalPercent = 100 - goalPercent;
+
+    overPercent = overPercent.clamp(1, 99);
+
+    underPercent = underPercent.clamp(1, 99);
+
+    goalPercent = goalPercent.clamp(1, 99);
+
+    noGoalPercent = noGoalPercent.clamp(1, 99);
+
+    return {
+      'over25': overPercent,
+      'under25': underPercent,
+      'goal': goalPercent,
+      'noGoal': noGoalPercent,
+    };
+  }
+
+  // ============================================================
+  // EXPECTED GOALS
+  // ============================================================
+  //
+  // Metodo utile per mostrare in futuro:
+  //
+  // xG stimati casa
+  // xG stimati ospite
+  // totale gol atteso
+  // ============================================================
+
+  static Map<String, double> calculateExpectedGoals({
+    required TeamFormData homeForm,
+    required TeamFormData awayForm,
+  }) {
+    if (homeForm.matchesPlayed <= 0 || awayForm.matchesPlayed <= 0) {
+      return {'home': 0.0, 'away': 0.0, 'total': 0.0};
+    }
+
+    final homeGoalsForAverage = homeForm.goalsFor / homeForm.matchesPlayed;
+
+    final homeGoalsAgainstAverage =
+        homeForm.goalsAgainst / homeForm.matchesPlayed;
+
+    final awayGoalsForAverage = awayForm.goalsFor / awayForm.matchesPlayed;
+
+    final awayGoalsAgainstAverage =
+        awayForm.goalsAgainst / awayForm.matchesPlayed;
+
+    var homeExpected =
+        (homeGoalsForAverage * 0.55) + (awayGoalsAgainstAverage * 0.45);
+
+    var awayExpected =
+        (awayGoalsForAverage * 0.55) + (homeGoalsAgainstAverage * 0.45);
+
+    homeExpected *= 1.06;
+    awayExpected *= 0.96;
+
+    homeExpected = homeExpected.clamp(0.20, 3.50);
+
+    awayExpected = awayExpected.clamp(0.15, 3.25);
+
+    return {
+      'home': homeExpected,
+      'away': awayExpected,
+      'total': homeExpected + awayExpected,
+    };
+  }
+
+  // ============================================================
+  // POISSON
+  // ============================================================
+
+  static double _poissonProbability({
+    required double lambda,
+    required int goals,
+  }) {
+    if (lambda <= 0.0 || goals < 0) {
+      return 0.0;
+    }
+
+    return (math.pow(lambda, goals) * math.exp(-lambda)) / _factorial(goals);
+  }
+
+  // ============================================================
+  // FATTORIALE
+  // ============================================================
+
+  static int _factorial(int value) {
+    if (value <= 1) {
+      return 1;
+    }
+
+    int result = 1;
+
+    for (int i = 2; i <= value; i++) {
+      result *= i;
+    }
+
+    return result;
   }
 
   // ============================================================

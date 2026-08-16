@@ -11,10 +11,24 @@ class TeamDataResolverTest {
 
     final resolver = TeamDataResolver();
 
-    try {
-      await _test(resolver: resolver, teamId: 876, teamName: 'Arezzo');
+    // Data di riferimento coerente con il test
+    // Cagliari - Arezzo del 14 agosto 2026.
+    final referenceDate = DateTime(2026, 8, 14);
 
-      await _test(resolver: resolver, teamId: 26356, teamName: 'Union Brescia');
+    try {
+      await _test(
+        resolver: resolver,
+        teamId: 876,
+        teamName: 'Arezzo',
+        referenceDate: referenceDate,
+      );
+
+      await _test(
+        resolver: resolver,
+        teamId: 26356,
+        teamName: 'Union Brescia',
+        referenceDate: referenceDate,
+      );
     } finally {
       resolver.dispose();
     }
@@ -29,14 +43,23 @@ class TeamDataResolverTest {
     required TeamDataResolver resolver,
     required int teamId,
     required String teamName,
+    required DateTime referenceDate,
   }) async {
     print('');
     print('========================================');
     print('TEST: $teamName');
     print('ID: $teamId');
+    print(
+      'DATA RIFERIMENTO: '
+      '${referenceDate.toIso8601String()}',
+    );
     print('========================================');
 
-    final data = await resolver.resolveTeam(teamId: teamId, teamName: teamName);
+    final data = await resolver.resolveTeam(
+      teamId: teamId,
+      teamName: teamName,
+      referenceDate: referenceDate,
+    );
 
     if (data == null) {
       print('');
@@ -63,10 +86,49 @@ class TeamDataResolverTest {
     print('SOURCE ID:');
     print(data.sourceTeamId);
 
+    // ==========================================================
+    // CATEGORIA ATTUALE
+    // ==========================================================
+
     print('');
-    print('STAGIONE: ${data.season}');
-    print('LEAGUE ID: ${data.leagueId}');
-    print('CAMPIONATO: ${data.leagueName}');
+    print('CATEGORIA ATTUALE:');
+
+    print(
+      'STAGIONE ATTUALE: '
+      '${data.currentLeagueSeason}',
+    );
+
+    print(
+      'CURRENT LEAGUE ID: '
+      '${data.currentLeagueId}',
+    );
+
+    print(
+      'CURRENT CAMPIONATO: '
+      '${data.currentLeagueName}',
+    );
+
+    // ==========================================================
+    // FONTE STATISTICA
+    // ==========================================================
+
+    print('');
+    print('FONTE STATISTICA:');
+
+    print(
+      'STAGIONE STATISTICHE: '
+      '${data.season}',
+    );
+
+    print(
+      'LEAGUE ID STATISTICHE: '
+      '${data.leagueId}',
+    );
+
+    print(
+      'CAMPIONATO STATISTICHE: '
+      '${data.leagueName}',
+    );
 
     print('');
     print('PARTITE: ${data.matchesPlayed}');
