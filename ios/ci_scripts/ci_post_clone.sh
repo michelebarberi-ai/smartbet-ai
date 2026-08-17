@@ -9,9 +9,10 @@ cd "$CI_PRIMARY_REPOSITORY_PATH"
 
 echo "Installazione Flutter..."
 
-git clone https://github.com/flutter/flutter.git \
+git clone \
   --depth 1 \
-  -b stable \
+  --branch stable \
+  https://github.com/flutter/flutter.git \
   "$HOME/flutter"
 
 export FLUTTER_ROOT="$HOME/flutter"
