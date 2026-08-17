@@ -2,6 +2,9 @@ name: SmartBet iOS TestFlight
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/api
 
 jobs:
   build-ios:
