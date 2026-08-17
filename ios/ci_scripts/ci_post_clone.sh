@@ -26,6 +26,9 @@ echo "Flutter:"
 echo "Disabilitazione Swift Package Manager..."
 "$FLUTTER_ROOT/bin/flutter" config --no-enable-swift-package-manager
 
+echo "Preparazione motore Flutter iOS..."
+"$FLUTTER_ROOT/bin/flutter" precache --ios
+
 echo "Recupero dipendenze Flutter..."
 "$FLUTTER_ROOT/bin/flutter" pub get
 
