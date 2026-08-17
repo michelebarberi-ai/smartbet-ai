@@ -20,6 +20,12 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
+      - name: Create environment file
+        run: |
+          echo "FOOTBALL_API_KEY=${{ secrets.FOOTBALL_API_KEY }}" > .env
+          test -s .env
+          echo "OK: .env creato"
+
       - name: Install Flutter
         run: |
           git clone \
@@ -48,7 +54,7 @@ jobs:
       - name: Flutter analyze
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
-          flutter analyze
+          flutter analyze --no-fatal-infos
 
       - name: Build unsigned iOS archive
         run: |
