@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================"
-echo "SMARTBET - XCODE CLOUD POST CLONE"
+echo "SMARTBET - XCODE CLOUD SETUP"
 echo "========================================"
 
 cd "$CI_PRIMARY_REPOSITORY_PATH"
@@ -23,15 +23,17 @@ fi
 echo "Flutter:"
 "$FLUTTER_ROOT/bin/flutter" --version
 
-echo "Recupero dipendenze..."
+echo "Disabilitazione Swift Package Manager..."
+"$FLUTTER_ROOT/bin/flutter" config --no-enable-swift-package-manager
+
+echo "Recupero dipendenze Flutter..."
 "$FLUTTER_ROOT/bin/flutter" pub get
 
-echo "Generazione package Swift Flutter..."
-"$FLUTTER_ROOT/bin/flutter" build ios --config-only --no-codesign
-
-echo "Verifica package generato..."
-test -f ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift
+echo "Installazione CocoaPods..."
+cd ios
+pod install
+cd ..
 
 echo "========================================"
-echo "SMARTBET - POST CLONE COMPLETATO"
+echo "SMARTBET - SETUP COMPLETATO"
 echo "========================================"
