@@ -286,7 +286,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+			shellScript = "set -e\n\necho \"=== SMARTBET FLUTTER THIN BINARY ===\"\n\nFLUTTER_XCCONFIG=\"$PROJECT_DIR/Flutter/Generated.xcconfig\"\n\nif [ -f \"$FLUTTER_XCCONFIG\" ]; then\n  CONFIG_FLUTTER_ROOT=$(grep '^FLUTTER_ROOT=' \"$FLUTTER_XCCONFIG\" | cut -d= -f2-)\nfi\n\nif [ -n \"$CONFIG_FLUTTER_ROOT\" ]; then\n  export FLUTTER_ROOT=\"$CONFIG_FLUTTER_ROOT\"\nfi\n\necho \"FLUTTER_ROOT=$FLUTTER_ROOT\"\n\nif [ ! -f \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" ]; then\n  echo \"ERRORE: xcode_backend.sh non trovato\"\n  exit 1\nfi\n\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin\n";
 		};
 		5A19CBD89AE43D0A09FCEE38 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -323,7 +323,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "set -e\n\necho \"=== SMARTBET FLUTTER BUILD PHASE ===\"\n\nFLUTTER_XCCONFIG=\"$PROJECT_DIR/Flutter/Generated.xcconfig\"\n\nif [ -f \"$FLUTTER_XCCONFIG\" ]; then\n  CONFIG_FLUTTER_ROOT=$(grep '^FLUTTER_ROOT=' \"$FLUTTER_XCCONFIG\" | cut -d= -f2-)\nfi\n\nif [ -n \"$CONFIG_FLUTTER_ROOT\" ]; then\n  export FLUTTER_ROOT=\"$CONFIG_FLUTTER_ROOT\"\nfi\n\necho \"FLUTTER_ROOT=$FLUTTER_ROOT\"\n\nif [ ! -f \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" ]; then\n  echo \"ERRORE: xcode_backend.sh non trovato\"\n  exit 1\nfi\n\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n";
 		};
 		D450BE7062155A30609784AB /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
