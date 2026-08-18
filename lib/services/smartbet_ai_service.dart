@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../ai/smartcore.dart';
+import '../ai/decision_engine.dart';
 
 import 'match_dossier_builder.dart';
 import 'odds_service.dart';
@@ -86,6 +87,7 @@ class SmartBetAiService {
     // 1X2, dossier, news, value bet e stake.
     //
     // SmartCore calcola invece i mercati:
+    // OVER / UNDER 1.5
     // OVER / UNDER 2.5
     // GOAL / NO GOAL
     // ==========================================================
@@ -96,6 +98,8 @@ class SmartBetAiService {
     print('========================================');
     print('SMARTBET - QUOTE GOL');
     print('========================================');
+    print('OVER 1.5: ${baseResult.over15Probability}%');
+    print('UNDER 1.5: ${baseResult.under15Probability}%');
     print('OVER 2.5: ${baseResult.over25Probability}%');
     print('UNDER 2.5: ${baseResult.under25Probability}%');
     print('GOAL: ${baseResult.goalProbability}%');
@@ -373,13 +377,23 @@ class SmartBetAiService {
     required MatchOdds? odds,
     required AnalysisResult baseResult,
   }) {
-    final prediction = analysis['prediction']?.toString() ?? 'N/D';
+    final backendPrediction = analysis['prediction']?.toString() ?? 'N/D';
 
     final homeProbability = _toInt(analysis['homeProbability']);
 
     final drawProbability = _toInt(analysis['drawProbability']);
 
     final awayProbability = _toInt(analysis['awayProbability']);
+
+    final smartDecision = DecisionEngine.decide(
+      homeProbability: homeProbability,
+      drawProbability: drawProbability,
+      awayProbability: awayProbability,
+    );
+
+    final prediction = smartDecision.outcome;
+
+    final predictionProbability = smartDecision.probability;
 
     final confidence = _toInt(analysis['confidence']);
 
@@ -493,6 +507,8 @@ class SmartBetAiService {
       drawProbability: drawProbability,
       awayProbability: awayProbability,
 
+      over15Probability: baseResult.over15Probability,
+      under15Probability: baseResult.under15Probability,
       over25Probability: baseResult.over25Probability,
       under25Probability: baseResult.under25Probability,
       goalProbability: baseResult.goalProbability,
@@ -536,7 +552,9 @@ class SmartBetAiService {
     print('SMARTBET AI - RISULTATO');
     print('========================================');
 
-    print('Pronostico: $prediction');
+    print('Pronostico SmartBet: $prediction');
+    print('Affidabilità pronostico: $predictionProbability%');
+    print('Pronostico backend originale: $backendPrediction');
 
     print('1: $homeProbability%');
 
@@ -672,12 +690,18 @@ class SmartBetAiService {
         '''
 SMARTBET AI
 
-PRONOSTICO: $prediction
+PRONOSTICO SMARTBET: $prediction
+AFFIDABILITÀ PRONOSTICO: $predictionProbability%
 
-PROBABILITÀ:
+MOTIVAZIONE DECISIONE:
+${smartDecision.reason}
+
+PROBABILITÀ 1X2:
 1: $homeProbability%
 X: $drawProbability%
 2: $awayProbability%
+
+PRONOSTICO BACKEND ORIGINALE: $backendPrediction
 
 CONFIDENCE AI: $confidence%
 
@@ -750,6 +774,8 @@ $finalVerdict
 
       awayProbability: awayProbability,
 
+      over15Probability: baseResult.over15Probability,
+      under15Probability: baseResult.under15Probability,
       over25Probability: baseResult.over25Probability,
 
       under25Probability: baseResult.under25Probability,

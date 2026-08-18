@@ -215,6 +215,51 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                         ),
                         SizedBox(width: 8),
                         Text(
+                          'OVER / UNDER 1.5',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _probabilityBox(
+                            'OVER 1.5',
+                            result.over15Probability,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _probabilityBox(
+                            'UNDER 1.5',
+                            result.under15Probability,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    const Divider(color: Colors.white12, height: 1),
+
+                    const SizedBox(height: 20),
+
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.sports_soccer,
+                          color: Colors.greenAccent,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
                           'OVER / UNDER 2.5',
                           style: TextStyle(
                             color: Colors.white70,

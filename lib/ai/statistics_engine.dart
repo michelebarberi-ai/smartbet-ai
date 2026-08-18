@@ -161,11 +161,13 @@ class StatisticsEngine {
   }
 
   // ============================================================
-  // NUOVI MERCATI GOL
+  // MERCATI GOL
   // ============================================================
   //
   // Restituisce:
   //
+  // over15   -> Over 1.5
+  // under15  -> Under 1.5
   // over25   -> Over 2.5
   // under25  -> Under 2.5
   // goal     -> entrambe segnano / BTTS YES
@@ -185,7 +187,14 @@ class StatisticsEngine {
     required TeamFormData awayForm,
   }) {
     if (homeForm.matchesPlayed <= 0 || awayForm.matchesPlayed <= 0) {
-      return {'over25': 0, 'under25': 0, 'goal': 0, 'noGoal': 0};
+      return {
+        'over15': 0,
+        'under15': 0,
+        'over25': 0,
+        'under25': 0,
+        'goal': 0,
+        'noGoal': 0,
+      };
     }
 
     // ==========================================================
@@ -235,11 +244,7 @@ class StatisticsEngine {
     final totalExpectedGoals = expectedHomeGoals + expectedAwayGoals;
 
     // ==========================================================
-    // OVER / UNDER 2.5
-    // ==========================================================
-    //
-    // Se il totale gol segue una distribuzione di Poisson,
-    // Under 2.5 = probabilità di 0, 1 o 2 gol.
+    // DISTRIBUZIONE DI POISSON
     // ==========================================================
 
     final probability0Goals = _poissonProbability(
@@ -256,6 +261,24 @@ class StatisticsEngine {
       lambda: totalExpectedGoals,
       goals: 2,
     );
+
+    // ==========================================================
+    // OVER / UNDER 1.5
+    // ==========================================================
+    //
+    // Under 1.5 = probabilità di 0 o 1 gol.
+    // ==========================================================
+
+    final under15 = (probability0Goals + probability1Goal).clamp(0.0, 1.0);
+
+    final over15 = (1.0 - under15).clamp(0.0, 1.0);
+
+    // ==========================================================
+    // OVER / UNDER 2.5
+    // ==========================================================
+    //
+    // Under 2.5 = probabilità di 0, 1 o 2 gol.
+    // ==========================================================
 
     final under25 = (probability0Goals + probability1Goal + probability2Goals)
         .clamp(0.0, 1.0);
@@ -286,25 +309,35 @@ class StatisticsEngine {
     // CONVERSIONE IN PERCENTUALI
     // ==========================================================
 
-    var overPercent = (over25 * 100).round();
+    var over15Percent = (over15 * 100).round();
 
-    var underPercent = 100 - overPercent;
+    var under15Percent = 100 - over15Percent;
+
+    var over25Percent = (over25 * 100).round();
+
+    var under25Percent = 100 - over25Percent;
 
     var goalPercent = (goal * 100).round();
 
     var noGoalPercent = 100 - goalPercent;
 
-    overPercent = overPercent.clamp(1, 99);
+    over15Percent = over15Percent.clamp(1, 99);
 
-    underPercent = underPercent.clamp(1, 99);
+    under15Percent = under15Percent.clamp(1, 99);
+
+    over25Percent = over25Percent.clamp(1, 99);
+
+    under25Percent = under25Percent.clamp(1, 99);
 
     goalPercent = goalPercent.clamp(1, 99);
 
     noGoalPercent = noGoalPercent.clamp(1, 99);
 
     return {
-      'over25': overPercent,
-      'under25': underPercent,
+      'over15': over15Percent,
+      'under15': under15Percent,
+      'over25': over25Percent,
+      'under25': under25Percent,
       'goal': goalPercent,
       'noGoal': noGoalPercent,
     };

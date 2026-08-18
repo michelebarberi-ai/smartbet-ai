@@ -217,6 +217,16 @@ class SmartBetCouponService {
     rejectHighRisk: true,
   );
 
+  // Fallback usato SOLTANTO se i tre profili principali
+  // non riescono a costruire una schedina.
+  //
+  // Non crea nuove giocate: lavora esclusivamente su risultati
+  // che hanno già superato Value Bet + Stake Engine
+  // (shouldBet == true e stake valido).
+  static const int _smartFallbackMinimumScore = 58;
+  static const double _smartFallbackMinimumProbability = 0.24;
+  static const double _smartFallbackMaximumOdd = 6.50;
+
   static const List<_CouponProfile> _profiles = [
     _premiumProfile,
     _balancedProfile,
@@ -311,25 +321,48 @@ class SmartBetCouponService {
     }
 
     // ==========================================================
-    // NESSUN PROFILO TROVA ALMENO 2 EVENTI
+    // FALLBACK SMART
+    // ==========================================================
+    //
+    // Se i profili classici non arrivano ad almeno 2 eventi,
+    // proviamo una seconda lettura sulle sole giocate che hanno
+    // GIÀ superato Value Bet e Stake Engine.
+    //
+    // In questo modo evitiamo schedine vuote dovute a un doppio
+    // filtro troppo severo, senza inventare quote o forzare
+    // partite che SmartBet aveva già classificato come "no bet".
     // ==========================================================
 
+    var profileName = selectedProfile?.name ?? '';
+
     if (selectedProfile == null) {
-      return SmartBetCouponResult(
-        selections: const [],
-        analyzedMatches: analyzedMatches,
-        validCandidates: 0,
-        rejectedMatches: analyzedMatches,
-        totalOdd: 0.0,
-        averageSmartScore: 0.0,
-        estimatedCombinedProbability: 0.0,
-        riskLevel: 'Non disponibile',
-        recommendedStakePercent: 0.0,
-        message:
-            'Oggi SmartBet non trova almeno due '
-            'selezioni con un rapporto '
-            'affidabilità/rendimento sufficiente.',
-      );
+      final fallback = analyzed
+          .map(_buildSmartFallbackCandidate)
+          .whereType<_CouponCandidate>()
+          .toList();
+
+      _sortCandidates(fallback);
+
+      if (fallback.length >= minimumSelections) {
+        candidates = fallback;
+        profileName = 'SMART';
+      } else {
+        return SmartBetCouponResult(
+          selections: const [],
+          analyzedMatches: analyzedMatches,
+          validCandidates: fallback.length,
+          rejectedMatches: analyzedMatches - fallback.length,
+          totalOdd: 0.0,
+          averageSmartScore: 0.0,
+          estimatedCombinedProbability: 0.0,
+          riskLevel: 'Non disponibile',
+          recommendedStakePercent: 0.0,
+          message:
+              'Oggi SmartBet non trova almeno due '
+              'giocate già validate da Value Bet e Stake Engine '
+              'con qualità sufficiente.',
+        );
+      }
     }
 
     // ==========================================================
@@ -368,7 +401,7 @@ class SmartBetCouponService {
       riskLevel: riskLevel,
       recommendedStakePercent: stakePercent,
       message:
-          'Profilo ${selectedProfile.name}: '
+          'Profilo $profileName: '
           '${selections.length} selezioni '
           'scelte per equilibrio tra '
           'affidabilità, probabilità e value.',
@@ -465,6 +498,83 @@ class SmartBetCouponService {
       edge: edge,
       profile: profile,
     );
+
+    return _CouponCandidate(
+      selection: selection,
+      aiProbability: probability,
+      impliedProbability: impliedProbability,
+      edge: edge,
+      qualityScore: qualityScore,
+    );
+  }
+
+  // ============================================================
+  // FALLBACK SMART
+  // ============================================================
+
+  _CouponCandidate? _buildSmartFallbackCandidate(
+    SmartBetCouponSelection selection,
+  ) {
+    final result = selection.analysis;
+
+    // Il risultato deve essere già stato approvato dallo Stake Engine.
+    if (!result.shouldBet) {
+      return null;
+    }
+
+    if (selection.outcome.trim().isEmpty) {
+      return null;
+    }
+
+    final odd = selection.odd;
+
+    if (odd < minimumOdd || odd > _smartFallbackMaximumOdd) {
+      return null;
+    }
+
+    if (result.smartScore < _smartFallbackMinimumScore) {
+      return null;
+    }
+
+    final probability = _selectionProbability(selection);
+
+    if (probability < _smartFallbackMinimumProbability) {
+      return null;
+    }
+
+    // Rischio alto ammesso soltanto con score molto forte.
+    if (_isHighRisk(result.risk) && result.smartScore < 72) {
+      return null;
+    }
+
+    final impliedProbability = 1.0 / odd;
+    final edge = probability - impliedProbability;
+
+    // Nel fallback NON imponiamo una seconda soglia edge:
+    // il ValueBetCalculator e lo StakeEngine hanno già deciso
+    // che la giocata possiede valore sufficiente.
+    final scoreComponent = (result.smartScore / 100.0).clamp(0.0, 1.0);
+    final probabilityComponent = probability.clamp(0.0, 1.0);
+    final riskComponent = _riskQuality(result.risk);
+    final stakeComponent = (selection.stakePercent / 2.0).clamp(0.0, 1.0);
+
+    final oddComponent = odd <= 1.80
+        ? 1.00
+        : odd <= 2.40
+        ? 0.92
+        : odd <= 3.20
+        ? 0.78
+        : odd <= 4.50
+        ? 0.58
+        : 0.35;
+
+    final qualityScore =
+        ((scoreComponent * 0.34) +
+            (probabilityComponent * 0.30) +
+            (riskComponent * 0.16) +
+            (oddComponent * 0.10) +
+            (stakeComponent * 0.10)) *
+        100.0;
 
     return _CouponCandidate(
       selection: selection,

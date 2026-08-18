@@ -128,6 +128,11 @@ class SmartBetAutoCouponService {
   // AI avanzata soltanto sulle migliori.
   static const int maximumAdvancedMatches = 12;
 
+  // Pre-analisi concorrente controllata.
+  // Tre partite per volta velocizzano il processo senza
+  // lanciare decine di richieste contemporaneamente.
+  static const int preliminaryBatchSize = 3;
+
   static const double preferredMinimumAiWeight = 0.70;
 
   // ============================================================
@@ -191,33 +196,56 @@ class SmartBetAutoCouponService {
 
     int analyzed = 0;
 
+    final desiredAdvanced = _desiredAdvancedCount(settings.couponSelections);
+
     // ==========================================================
     // PRIMO PASSAGGIO
+    // ==========================================================
+    //
+    // Analizziamo piccoli blocchi in parallelo.
+    // Dopo ogni blocco controlliamo se abbiamo già
+    // abbastanza candidate valide: in quel caso ci fermiamo
+    // senza arrivare necessariamente a 60 partite.
     // ==========================================================
 
     final firstPassCount = metadataPool.length < initialPreliminaryMatches
         ? metadataPool.length
         : initialPreliminaryMatches;
 
-    for (int i = 0; i < firstPassCount; i++) {
-      final match = metadataPool[i];
+    for (int start = 0; start < firstPassCount; start += preliminaryBatchSize) {
+      final end = (start + preliminaryBatchSize) < firstPassCount
+          ? start + preliminaryBatchSize
+          : firstPassCount;
 
-      analyzed++;
+      final batch = metadataPool.sublist(start, end);
 
       onProgress?.call(
         SmartBetAutoCouponProgress(
           phase: 'preliminary',
-          current: analyzed,
-          total: initialPreliminaryMatches,
+          current: end,
+          total: firstPassCount,
           message:
-              'Pre-analisi $analyzed/'
-              '$initialPreliminaryMatches\n'
-              '${match.homeTeam} - '
-              '${match.awayTeam}',
+              'Pre-analisi $end/'
+              '$firstPassCount\n'
+              '${batch.first.homeTeam} - '
+              '${batch.first.awayTeam}'
+              '${batch.length > 1 ? ' + altre ${batch.length - 1}' : ''}',
         ),
       );
 
-      await _analyzePreliminary(match: match, output: preliminary);
+      await _analyzePreliminaryBatch(matches: batch, output: preliminary);
+
+      analyzed = end;
+
+      final currentSelection = _selectPreliminaryCandidates(
+        preliminary,
+        preferredScore: settings.minimumSmartScore,
+        desiredCount: desiredAdvanced,
+      );
+
+      if (currentSelection.length >= desiredAdvanced) {
+        break;
+      }
     }
 
     // ==========================================================
@@ -227,7 +255,7 @@ class SmartBetAutoCouponService {
     var selectedPreliminary = _selectPreliminaryCandidates(
       preliminary,
       preferredScore: settings.minimumSmartScore,
-      desiredCount: _desiredAdvancedCount(settings.couponSelections),
+      desiredCount: desiredAdvanced,
     );
 
     // ==========================================================
@@ -239,40 +267,51 @@ class SmartBetAutoCouponService {
     // analizziamo prima altre partite.
     // ==========================================================
 
-    final desiredAdvanced = _desiredAdvancedCount(settings.couponSelections);
-
     if (selectedPreliminary.length < desiredAdvanced &&
-        metadataPool.length > firstPassCount) {
+        metadataPool.length > analyzed) {
       final expansionEnd = metadataPool.length < expandedPreliminaryMatches
           ? metadataPool.length
           : expandedPreliminaryMatches;
 
-      for (int i = firstPassCount; i < expansionEnd; i++) {
-        final match = metadataPool[i];
+      for (
+        int start = analyzed;
+        start < expansionEnd;
+        start += preliminaryBatchSize
+      ) {
+        final end = (start + preliminaryBatchSize) < expansionEnd
+            ? start + preliminaryBatchSize
+            : expansionEnd;
 
-        analyzed++;
+        final batch = metadataPool.sublist(start, end);
 
         onProgress?.call(
           SmartBetAutoCouponProgress(
             phase: 'expansion',
-            current: analyzed,
+            current: end,
             total: expansionEnd,
             message:
-                'Ricerca ampliata $analyzed/'
+                'Ricerca ampliata $end/'
                 '$expansionEnd\n'
-                '${match.homeTeam} - '
-                '${match.awayTeam}',
+                '${batch.first.homeTeam} - '
+                '${batch.first.awayTeam}'
+                '${batch.length > 1 ? ' + altre ${batch.length - 1}' : ''}',
           ),
         );
 
-        await _analyzePreliminary(match: match, output: preliminary);
-      }
+        await _analyzePreliminaryBatch(matches: batch, output: preliminary);
 
-      selectedPreliminary = _selectPreliminaryCandidates(
-        preliminary,
-        preferredScore: settings.minimumSmartScore,
-        desiredCount: desiredAdvanced,
-      );
+        analyzed = end;
+
+        selectedPreliminary = _selectPreliminaryCandidates(
+          preliminary,
+          preferredScore: settings.minimumSmartScore,
+          desiredCount: desiredAdvanced,
+        );
+
+        if (selectedPreliminary.length >= desiredAdvanced) {
+          break;
+        }
+      }
     }
 
     // ==========================================================
@@ -378,15 +417,29 @@ class SmartBetAutoCouponService {
   // ANALISI PRELIMINARE
   // ============================================================
 
-  Future<void> _analyzePreliminary({
-    required MatchModel match,
+  Future<void> _analyzePreliminaryBatch({
+    required List<MatchModel> matches,
     required List<_PreliminaryCandidate> output,
   }) async {
+    final results = await Future.wait(
+      matches.map(_analyzePreliminaryCandidate),
+    );
+
+    for (final candidate in results) {
+      if (candidate != null) {
+        output.add(candidate);
+      }
+    }
+  }
+
+  Future<_PreliminaryCandidate?> _analyzePreliminaryCandidate(
+    MatchModel match,
+  ) async {
     try {
       final result = await SmartCore.analyze(match);
 
       if (result.smartScore <= 0) {
-        return;
+        return null;
       }
 
       // Manteniamo anche score inferiori alla
@@ -394,13 +447,14 @@ class SmartBetAutoCouponService {
       //
       // Servono per l'adattamento successivo.
       if (result.smartScore < 55) {
-        return;
+        return null;
       }
 
-      output.add(_PreliminaryCandidate(match: match, analysis: result));
+      return _PreliminaryCandidate(match: match, analysis: result);
     } catch (_) {
       // Una partita non deve interrompere
       // l'intera schedina.
+      return null;
     }
   }
 

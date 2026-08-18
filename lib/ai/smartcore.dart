@@ -24,22 +24,20 @@ class SmartCore {
     }
 
     // ----------------------------------------------------------
-    // RECUPERO FORMA SQUADRA CASA
+    // RECUPERO FORMA CASA + OSPITE IN PARALLELO
+    // ----------------------------------------------------------
+    //
+    // Prima queste due richieste venivano eseguite una dopo l'altra.
+    // Ora partono contemporaneamente per ridurre i tempi di attesa.
     // ----------------------------------------------------------
 
-    final homeForm = await _formService.getTeamForm(
-      teamId: match.homeTeamId,
-      last: 10,
-    );
+    final forms = await Future.wait([
+      _formService.getTeamForm(teamId: match.homeTeamId, last: 10),
+      _formService.getTeamForm(teamId: match.awayTeamId, last: 10),
+    ]);
 
-    // ----------------------------------------------------------
-    // RECUPERO FORMA SQUADRA OSPITE
-    // ----------------------------------------------------------
-
-    final awayForm = await _formService.getTeamForm(
-      teamId: match.awayTeamId,
-      last: 10,
-    );
+    final homeForm = forms[0];
+    final awayForm = forms[1];
 
     // ----------------------------------------------------------
     // DATI NON DISPONIBILI
@@ -120,6 +118,10 @@ class SmartCore {
       awayForm: awayForm,
     );
 
+    final over15Probability = goalMarkets['over15'] ?? 0;
+
+    final under15Probability = goalMarkets['under15'] ?? 0;
+
     final over25Probability = goalMarkets['over25'] ?? 0;
 
     final under25Probability = goalMarkets['under25'] ?? 0;
@@ -191,6 +193,8 @@ class SmartCore {
       prediction: prediction,
       homeForm: homeForm,
       awayForm: awayForm,
+      over15Probability: over15Probability,
+      under15Probability: under15Probability,
       over25Probability: over25Probability,
       under25Probability: under25Probability,
       goalProbability: goalProbability,
@@ -224,6 +228,9 @@ class SmartCore {
       homeProbability: homeProbability,
       drawProbability: drawProbability,
       awayProbability: awayProbability,
+
+      over15Probability: over15Probability,
+      under15Probability: under15Probability,
 
       over25Probability: over25Probability,
       under25Probability: under25Probability,
@@ -352,8 +359,12 @@ class SmartCore {
     required TeamFormData homeForm,
     required TeamFormData awayForm,
 
+    required int over15Probability,
+    required int under15Probability,
+
     required int over25Probability,
     required int under25Probability,
+
     required int goalProbability,
     required int noGoalProbability,
 
@@ -400,6 +411,9 @@ EXPECTED GOALS TOTALI: ${expectedTotalGoals.toStringAsFixed(2)}
 
 MERCATI GOL:
 
+OVER 1.5: $over15Probability%
+UNDER 1.5: $under15Probability%
+
 OVER 2.5: $over25Probability%
 UNDER 2.5: $under25Probability%
 
@@ -424,8 +438,12 @@ PRONOSTICO 1X2 CONSIGLIATO: $prediction
       drawProbability: 0,
       awayProbability: 0,
 
+      over15Probability: 0,
+      under15Probability: 0,
+
       over25Probability: 0,
       under25Probability: 0,
+
       goalProbability: 0,
       noGoalProbability: 0,
 

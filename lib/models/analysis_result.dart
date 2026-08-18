@@ -13,6 +13,9 @@ class AnalysisResult {
   // PROBABILITÀ MERCATI GOL
   // ============================================================
 
+  final int over15Probability;
+  final int under15Probability;
+
   final int over25Probability;
   final int under25Probability;
 
@@ -66,8 +69,12 @@ class AnalysisResult {
     required this.drawProbability,
     required this.awayProbability,
 
+    this.over15Probability = 0,
+    this.under15Probability = 0,
+
     this.over25Probability = 0,
     this.under25Probability = 0,
+
     this.goalProbability = 0,
     this.noGoalProbability = 0,
 
@@ -106,6 +113,8 @@ class AnalysisResult {
 
   int get bestGoalMarketProbability {
     final values = <int>[
+      over15Probability,
+      under15Probability,
       over25Probability,
       under25Probability,
       goalProbability,
@@ -121,6 +130,8 @@ class AnalysisResult {
 
   String get bestGoalMarket {
     final values = <String, int>{
+      'OVER 1.5': over15Probability,
+      'UNDER 1.5': under15Probability,
       'OVER 2.5': over25Probability,
       'UNDER 2.5': under25Probability,
       'GOAL': goalProbability,
