@@ -69,6 +69,8 @@ class SmartBetCouponResult {
 
   final String message;
 
+  final String profileName;
+
   const SmartBetCouponResult({
     required this.selections,
     required this.analyzedMatches,
@@ -80,14 +82,65 @@ class SmartBetCouponResult {
     required this.riskLevel,
     required this.recommendedStakePercent,
     required this.message,
+    this.profileName = 'SMART',
   });
 
   bool get hasCoupon {
-    return selections.length >= 2;
+    return selections.isNotEmpty;
   }
 
   int get selectionCount {
     return selections.length;
+  }
+}
+
+// ============================================================
+// TRE STRATEGIE SCHEDINA
+// ============================================================
+
+class SmartBetCouponSet {
+  final SmartBetCouponResult premium;
+  final SmartBetCouponResult balanced;
+  final SmartBetCouponResult value;
+
+  const SmartBetCouponSet({
+    required this.premium,
+    required this.balanced,
+    required this.value,
+  });
+
+  bool get hasAnyCoupon {
+    return premium.hasCoupon || balanced.hasCoupon || value.hasCoupon;
+  }
+
+  SmartBetCouponResult get preferred {
+    if (premium.hasCoupon) {
+      return premium;
+    }
+
+    if (balanced.hasCoupon) {
+      return balanced;
+    }
+
+    return value;
+  }
+
+  int get availableProfiles {
+    var count = 0;
+
+    if (premium.hasCoupon) {
+      count++;
+    }
+
+    if (balanced.hasCoupon) {
+      count++;
+    }
+
+    if (value.hasCoupon) {
+      count++;
+    }
+
+    return count;
   }
 }
 
@@ -163,6 +216,10 @@ class SmartBetCouponService {
 
   static const int minimumSelections = 2;
 
+  // Analisi AI avanzata controllata:
+  // massimo 2 partite contemporaneamente.
+  static const int advancedBatchSize = 2;
+
   static const double minimumOdd = 1.18;
 
   static const double maximumCouponStakePercent = 0.50;
@@ -175,29 +232,29 @@ class SmartBetCouponService {
   // alta qualità, quote relativamente prudenti.
   static const _CouponProfile _premiumProfile = _CouponProfile(
     name: 'PREMIUM',
-    minimumSmartScore: 72,
-    minimumAiProbability: 0.38,
-    minimumEdge: 0.035,
-    maximumOdd: 3.80,
-    highOddThreshold: 3.20,
-    highOddMinimumSmartScore: 78,
-    highOddMinimumProbability: 0.40,
-    highOddMinimumEdge: 0.050,
+    minimumSmartScore: 68,
+    minimumAiProbability: 0.34,
+    minimumEdge: 0.025,
+    maximumOdd: 4.20,
+    highOddThreshold: 3.40,
+    highOddMinimumSmartScore: 72,
+    highOddMinimumProbability: 0.36,
+    highOddMinimumEdge: 0.030,
     rejectHighRisk: true,
   );
 
   // Secondo tentativo:
   // buon compromesso affidabilità/value.
   static const _CouponProfile _balancedProfile = _CouponProfile(
-    name: 'BILANCIATO',
-    minimumSmartScore: 65,
-    minimumAiProbability: 0.29,
-    minimumEdge: 0.020,
-    maximumOdd: 5.25,
-    highOddThreshold: 3.80,
-    highOddMinimumSmartScore: 72,
-    highOddMinimumProbability: 0.31,
-    highOddMinimumEdge: 0.035,
+    name: 'BILANCIATA',
+    minimumSmartScore: 62,
+    minimumAiProbability: 0.27,
+    minimumEdge: 0.012,
+    maximumOdd: 5.75,
+    highOddThreshold: 4.00,
+    highOddMinimumSmartScore: 68,
+    highOddMinimumProbability: 0.29,
+    highOddMinimumEdge: 0.020,
     rejectHighRisk: false,
   );
 
@@ -217,6 +274,38 @@ class SmartBetCouponService {
     rejectHighRisk: true,
   );
 
+  // Profili adattivi: entrano in gioco solo quando il profilo
+  // principale non riesce a produrre una schedina.
+  //
+  // L'obiettivo è mostrare davvero tre strategie differenti,
+  // senza trasformare "Premium" in una soglia irraggiungibile
+  // nelle giornate con poche Value Bet.
+  static const _CouponProfile _premiumAdaptiveProfile = _CouponProfile(
+    name: 'PREMIUM',
+    minimumSmartScore: 60,
+    minimumAiProbability: 0.28,
+    minimumEdge: 0.008,
+    maximumOdd: 4.50,
+    highOddThreshold: 3.60,
+    highOddMinimumSmartScore: 64,
+    highOddMinimumProbability: 0.30,
+    highOddMinimumEdge: 0.012,
+    rejectHighRisk: true,
+  );
+
+  static const _CouponProfile _balancedAdaptiveProfile = _CouponProfile(
+    name: 'BILANCIATA',
+    minimumSmartScore: 58,
+    minimumAiProbability: 0.24,
+    minimumEdge: 0.005,
+    maximumOdd: 6.25,
+    highOddThreshold: 4.25,
+    highOddMinimumSmartScore: 62,
+    highOddMinimumProbability: 0.26,
+    highOddMinimumEdge: 0.008,
+    rejectHighRisk: false,
+  );
+
   // Fallback usato SOLTANTO se i tre profili principali
   // non riescono a costruire una schedina.
   //
@@ -227,12 +316,6 @@ class SmartBetCouponService {
   static const double _smartFallbackMinimumProbability = 0.24;
   static const double _smartFallbackMaximumOdd = 6.50;
 
-  static const List<_CouponProfile> _profiles = [
-    _premiumProfile,
-    _balancedProfile,
-    _controlledValueProfile,
-  ];
-
   // ============================================================
   // CREA SCHEDINA
   // ============================================================
@@ -240,8 +323,45 @@ class SmartBetCouponService {
   Future<SmartBetCouponResult> buildCoupon({
     required List<MatchModel> matches,
   }) async {
+    final set = await buildCouponSet(
+      matches: matches,
+      minimumRequired: minimumSelections,
+    );
+
+    return set.preferred;
+  }
+
+  // ============================================================
+  // CREA LE TRE SCHEDINE CON UNA SOLA ANALISI AI
+  // ============================================================
+
+  Future<SmartBetCouponSet> buildCouponSet({
+    required List<MatchModel> matches,
+    int minimumRequired = minimumSelections,
+  }) async {
+    final safeMinimum = minimumRequired.clamp(1, minimumSelections);
+
     if (matches.isEmpty) {
-      return _emptyResult(message: 'Nessuna partita selezionata.');
+      final emptyPremium = _emptyResult(
+        message: 'Nessuna partita selezionata.',
+        profileName: 'PREMIUM',
+      );
+
+      final emptyBalanced = _emptyResult(
+        message: 'Nessuna partita selezionata.',
+        profileName: 'BILANCIATA',
+      );
+
+      final emptyValue = _emptyResult(
+        message: 'Nessuna partita selezionata.',
+        profileName: 'VALUE',
+      );
+
+      return SmartBetCouponSet(
+        premium: emptyPremium,
+        balanced: emptyBalanced,
+        value: emptyValue,
+      );
     }
 
     final aiService = SmartBetAiService();
@@ -252,125 +372,213 @@ class SmartBetCouponService {
 
     try {
       // ========================================================
-      // UNA SOLA ANALISI AI PER PARTITA
+      // ANALISI AI AVANZATA A COPPIE
+      // ========================================================
+      //
+      // Ogni partita viene analizzata UNA SOLA VOLTA.
+      // Gli stessi risultati vengono poi riutilizzati per
+      // Premium, Bilanciata e Value.
       // ========================================================
 
-      for (final match in matches) {
-        final result = await aiService.analyzeMatch(match);
+      for (int start = 0; start < matches.length; start += advancedBatchSize) {
+        final end = (start + advancedBatchSize) < matches.length
+            ? start + advancedBatchSize
+            : matches.length;
 
-        analyzedMatches++;
+        final batch = matches.sublist(start, end);
 
-        if (!_isBaseValid(result)) {
-          continue;
+        final results = await Future.wait(batch.map(aiService.analyzeMatch));
+
+        for (int i = 0; i < results.length; i++) {
+          final match = batch[i];
+          final result = results[i];
+
+          analyzedMatches++;
+
+          if (!_isBaseValid(result)) {
+            continue;
+          }
+
+          analyzed.add(SmartBetCouponSelection(match: match, analysis: result));
         }
 
-        analyzed.add(SmartBetCouponSelection(match: match, analysis: result));
-
-        await Future.delayed(const Duration(milliseconds: 500));
+        if (end < matches.length) {
+          await Future.delayed(const Duration(milliseconds: 250));
+        }
       }
     } finally {
       aiService.dispose();
     }
 
     if (analyzed.isEmpty) {
-      return SmartBetCouponResult(
-        selections: const [],
-        analyzedMatches: analyzedMatches,
-        validCandidates: 0,
-        rejectedMatches: analyzedMatches,
-        totalOdd: 0.0,
-        averageSmartScore: 0.0,
-        estimatedCombinedProbability: 0.0,
-        riskLevel: 'Non disponibile',
-        recommendedStakePercent: 0.0,
-        message:
-            'Nessuna partita supera i controlli '
-            'base di SmartBet.',
+      final commonMessage =
+          'Nessuna partita ha superato Value Bet e Stake Engine. '
+          'Prova ad aggiungere altre partite alla selezione.';
+
+      return SmartBetCouponSet(
+        premium: _emptyResult(
+          message: commonMessage,
+          profileName: 'PREMIUM',
+          analyzedMatches: analyzedMatches,
+        ),
+        balanced: _emptyResult(
+          message: commonMessage,
+          profileName: 'BILANCIATA',
+          analyzedMatches: analyzedMatches,
+        ),
+        value: _emptyResult(
+          message: commonMessage,
+          profileName: 'VALUE',
+          analyzedMatches: analyzedMatches,
+        ),
       );
     }
 
-    // ==========================================================
-    // PROFILO ADATTIVO
-    // ==========================================================
+    final manualMode = safeMinimum == 1;
 
-    _CouponProfile? selectedProfile;
+    // Ogni strategia ha un numero minimo diverso.
+    //
+    // Automatico:
+    // PREMIUM   -> almeno 2
+    // BILANCIATA -> almeno 3
+    // VALUE      -> almeno 3
+    //
+    // Manuale:
+    // consentiamo anche una singola giocata realmente valida,
+    // perché l'utente può aver selezionato poche partite.
+    final premiumMinimum = manualMode ? 1 : 2;
+    final balancedMinimum = manualMode ? 1 : 3;
+    final valueMinimum = manualMode ? 1 : 3;
 
-    List<_CouponCandidate> candidates = [];
+    final premium = _buildProfileResult(
+      analyzed: analyzed,
+      analyzedMatches: analyzedMatches,
+      profile: _premiumProfile,
+      adaptiveProfile: _premiumAdaptiveProfile,
+      maximumProfileSelections: 2,
+      minimumRequired: premiumMinimum,
+      allowSmartFallback: false,
+      strategy: 'PREMIUM',
+    );
 
-    for (final profile in _profiles) {
-      final current = analyzed
+    final balanced = _buildProfileResult(
+      analyzed: analyzed,
+      analyzedMatches: analyzedMatches,
+      profile: _balancedProfile,
+      adaptiveProfile: _balancedAdaptiveProfile,
+      maximumProfileSelections: 4,
+      minimumRequired: balancedMinimum,
+      allowSmartFallback: false,
+      strategy: 'BILANCIATA',
+    );
+
+    final value = _buildProfileResult(
+      analyzed: analyzed,
+      analyzedMatches: analyzedMatches,
+      profile: _controlledValueProfile,
+      maximumProfileSelections: maximumSelections,
+      minimumRequired: valueMinimum,
+      allowSmartFallback: true,
+      strategy: 'VALUE',
+    );
+
+    return SmartBetCouponSet(
+      premium: premium,
+      balanced: balanced,
+      value: value,
+    );
+  }
+
+  // ============================================================
+  // COSTRUISCE UNA STRATEGIA DA RISULTATI GIÀ ANALIZZATI
+  // ============================================================
+
+  SmartBetCouponResult _buildProfileResult({
+    required List<SmartBetCouponSelection> analyzed,
+    required int analyzedMatches,
+    required _CouponProfile profile,
+    _CouponProfile? adaptiveProfile,
+    required int maximumProfileSelections,
+    required int minimumRequired,
+    required bool allowSmartFallback,
+    required String strategy,
+  }) {
+    var candidates = analyzed
+        .map(
+          (selection) =>
+              _buildCandidate(selection: selection, profile: profile),
+        )
+        .whereType<_CouponCandidate>()
+        .toList();
+
+    _sortCandidatesForStrategy(candidates, strategy);
+
+    var usedFallback = false;
+    var usedAdaptiveProfile = false;
+
+    if (candidates.length < minimumRequired && adaptiveProfile != null) {
+      final adaptiveCandidates = analyzed
           .map(
             (selection) =>
-                _buildCandidate(selection: selection, profile: profile),
+                _buildCandidate(selection: selection, profile: adaptiveProfile),
           )
           .whereType<_CouponCandidate>()
           .toList();
 
-      _sortCandidates(current);
+      _sortCandidatesForStrategy(adaptiveCandidates, strategy);
 
-      // Appena troviamo almeno 2 candidate
-      // sufficientemente valide, ci fermiamo.
-      //
-      // Non forziamo 5-6 eventi abbassando
-      // ancora la qualità.
-      if (current.length >= minimumSelections) {
-        selectedProfile = profile;
-        candidates = current;
-        break;
+      if (adaptiveCandidates.length >= minimumRequired) {
+        candidates = adaptiveCandidates;
+        usedAdaptiveProfile = true;
       }
     }
 
-    // ==========================================================
-    // FALLBACK SMART
-    // ==========================================================
-    //
-    // Se i profili classici non arrivano ad almeno 2 eventi,
-    // proviamo una seconda lettura sulle sole giocate che hanno
-    // GIÀ superato Value Bet e Stake Engine.
-    //
-    // In questo modo evitiamo schedine vuote dovute a un doppio
-    // filtro troppo severo, senza inventare quote o forzare
-    // partite che SmartBet aveva già classificato come "no bet".
-    // ==========================================================
-
-    var profileName = selectedProfile?.name ?? '';
-
-    if (selectedProfile == null) {
+    if (candidates.length < minimumRequired && allowSmartFallback) {
       final fallback = analyzed
           .map(_buildSmartFallbackCandidate)
           .whereType<_CouponCandidate>()
           .toList();
 
-      _sortCandidates(fallback);
+      _sortCandidatesForStrategy(fallback, strategy);
 
-      if (fallback.length >= minimumSelections) {
-        candidates = fallback;
-        profileName = 'SMART';
-      } else {
-        return SmartBetCouponResult(
-          selections: const [],
-          analyzedMatches: analyzedMatches,
-          validCandidates: fallback.length,
-          rejectedMatches: analyzedMatches - fallback.length,
-          totalOdd: 0.0,
-          averageSmartScore: 0.0,
-          estimatedCombinedProbability: 0.0,
-          riskLevel: 'Non disponibile',
-          recommendedStakePercent: 0.0,
-          message:
-              'Oggi SmartBet non trova almeno due '
-              'giocate già validate da Value Bet e Stake Engine '
-              'con qualità sufficiente.',
-        );
+      // Evitiamo duplicati qualora una candidata sia già presente.
+      final knownFixtures = candidates
+          .map((item) => item.selection.match.fixtureId)
+          .toSet();
+
+      for (final item in fallback) {
+        if (knownFixtures.add(item.selection.match.fixtureId)) {
+          candidates.add(item);
+        }
       }
+
+      _sortCandidatesForStrategy(candidates, strategy);
+      usedFallback = true;
     }
 
-    // ==========================================================
-    // SELEZIONI FINALI
-    // ==========================================================
+    if (candidates.length < minimumRequired) {
+      return SmartBetCouponResult(
+        selections: const [],
+        analyzedMatches: analyzedMatches,
+        validCandidates: candidates.length,
+        rejectedMatches: analyzedMatches - candidates.length,
+        totalOdd: 0.0,
+        averageSmartScore: 0.0,
+        estimatedCombinedProbability: 0.0,
+        riskLevel: 'Non disponibile',
+        recommendedStakePercent: 0.0,
+        profileName: profile.name == 'VALUE CONTROLLATO'
+            ? 'VALUE'
+            : profile.name,
+        message:
+            '${profile.name}: non ci sono abbastanza selezioni '
+            'con qualità sufficiente. '
+            'SmartBet non forza eventi deboli.',
+      );
+    }
 
     final selections = candidates
-        .take(maximumSelections)
+        .take(maximumProfileSelections)
         .map((item) => item.selection)
         .toList();
 
@@ -390,6 +598,10 @@ class SmartBetCouponService {
       combinedProbability: combinedProbability,
     );
 
+    final profileName = profile.name == 'VALUE CONTROLLATO'
+        ? 'VALUE'
+        : profile.name;
+
     return SmartBetCouponResult(
       selections: selections,
       analyzedMatches: analyzedMatches,
@@ -400,11 +612,15 @@ class SmartBetCouponService {
       estimatedCombinedProbability: combinedProbability,
       riskLevel: riskLevel,
       recommendedStakePercent: stakePercent,
-      message:
-          'Profilo $profileName: '
-          '${selections.length} selezioni '
-          'scelte per equilibrio tra '
-          'affidabilità, probabilità e value.',
+      profileName: profileName,
+      message: usedFallback
+          ? '$profileName: selezioni validate con fallback SMART '
+                'dopo i controlli Value Bet e Stake Engine.'
+          : usedAdaptiveProfile
+          ? '$profileName: profilo adattivo attivato per usare '
+                'le migliori opportunità disponibili oggi.'
+          : '$profileName: ${selections.length} selezioni scelte '
+                'secondo i criteri specifici del profilo.',
     );
   }
 
@@ -583,6 +799,73 @@ class SmartBetCouponService {
       edge: edge,
       qualityScore: qualityScore,
     );
+  }
+
+  // ============================================================
+  // ORDINA CANDIDATI PER STRATEGIA
+  // ============================================================
+
+  void _sortCandidatesForStrategy(
+    List<_CouponCandidate> items,
+    String strategy,
+  ) {
+    final normalized = strategy.toUpperCase().trim();
+
+    if (normalized == 'PREMIUM') {
+      // PREMIUM:
+      // priorità ad affidabilità, rischio e quota più prudente.
+      items.sort((a, b) {
+        final risk = _riskQuality(
+          b.selection.risk,
+        ).compareTo(_riskQuality(a.selection.risk));
+        if (risk != 0) {
+          return risk;
+        }
+
+        final probability = b.aiProbability.compareTo(a.aiProbability);
+        if (probability != 0) {
+          return probability;
+        }
+
+        final smartScore = b.selection.smartScore.compareTo(
+          a.selection.smartScore,
+        );
+        if (smartScore != 0) {
+          return smartScore;
+        }
+
+        return a.selection.odd.compareTo(b.selection.odd);
+      });
+
+      return;
+    }
+
+    if (normalized == 'VALUE') {
+      // VALUE:
+      // priorità all'expected value reale e poi all'edge.
+      items.sort((a, b) {
+        final aEv = (a.aiProbability * a.selection.odd) - 1.0;
+        final bEv = (b.aiProbability * b.selection.odd) - 1.0;
+
+        final ev = bEv.compareTo(aEv);
+        if (ev != 0) {
+          return ev;
+        }
+
+        final edge = b.edge.compareTo(a.edge);
+        if (edge != 0) {
+          return edge;
+        }
+
+        return b.qualityScore.compareTo(a.qualityScore);
+      });
+
+      return;
+    }
+
+    // BILANCIATA:
+    // usa il ranking composito generale.
+    _sortCandidates(items);
   }
 
   // ============================================================
@@ -917,18 +1200,23 @@ class SmartBetCouponService {
   // RISULTATO VUOTO
   // ============================================================
 
-  SmartBetCouponResult _emptyResult({required String message}) {
+  SmartBetCouponResult _emptyResult({
+    required String message,
+    String profileName = 'SMART',
+    int analyzedMatches = 0,
+  }) {
     return SmartBetCouponResult(
       selections: const [],
-      analyzedMatches: 0,
+      analyzedMatches: analyzedMatches,
       validCandidates: 0,
-      rejectedMatches: 0,
+      rejectedMatches: analyzedMatches,
       totalOdd: 0.0,
       averageSmartScore: 0.0,
       estimatedCombinedProbability: 0.0,
       riskLevel: 'Non disponibile',
       recommendedStakePercent: 0.0,
       message: message,
+      profileName: profileName,
     );
   }
 }

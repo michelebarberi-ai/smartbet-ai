@@ -276,22 +276,29 @@ class SmartBetAiService {
       if (response.statusCode != 200) {
         print('');
         print('SMARTBET AI BACKEND ERROR');
-
         print(response.body);
+
+        var backendReason =
+            'Backend AI non disponibile (HTTP ${response.statusCode}).';
 
         try {
           final errorDecoded = jsonDecode(response.body);
 
           if (errorDecoded is Map<String, dynamic>) {
-            return _errorResult(
-              errorDecoded['error']?.toString() ?? 'Errore backend AI.',
-            );
+            backendReason = errorDecoded['error']?.toString() ?? backendReason;
           }
         } catch (_) {}
 
-        return _errorResult(
-          'Il backend AI ha restituito '
-          'lo stato ${response.statusCode}.',
+        print('');
+        print('SMARTBET: ATTIVO FALLBACK STATISTICO LOCALE');
+        print(backendReason);
+
+        return _localFallbackResult(
+          match: match,
+          baseResult: baseResult,
+          dossierConfidence: dossier.dataConfidence,
+          odds: odds,
+          reason: backendReason,
         );
       }
 
@@ -302,24 +309,34 @@ class SmartBetAiService {
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        return _errorResult(
-          'Risposta backend '
-          'non valida.',
+        return _localFallbackResult(
+          match: match,
+          baseResult: baseResult,
+          dossierConfidence: dossier.dataConfidence,
+          odds: odds,
+          reason: 'Risposta backend AI non valida.',
         );
       }
 
       if (decoded['success'] != true) {
-        return _errorResult(
-          decoded['error']?.toString() ?? 'Errore backend AI.',
+        return _localFallbackResult(
+          match: match,
+          baseResult: baseResult,
+          dossierConfidence: dossier.dataConfidence,
+          odds: odds,
+          reason: decoded['error']?.toString() ?? 'Errore backend AI.',
         );
       }
 
       final analysis = decoded['analysis'];
 
       if (analysis is! Map<String, dynamic>) {
-        return _errorResult(
-          'Analisi AI '
-          'non presente.',
+        return _localFallbackResult(
+          match: match,
+          baseResult: baseResult,
+          dossierConfidence: dossier.dataConfidence,
+          odds: odds,
+          reason: 'Analisi AI non presente nella risposta del backend.',
         );
       }
 
@@ -356,14 +373,137 @@ class SmartBetAiService {
       print('========================================');
       print('SMARTBET AI EXCEPTION');
       print('========================================');
-
       print(e);
 
-      return _errorResult(
-        'Errore di connessione '
-        'al backend AI: $e',
+      print('');
+      print('SMARTBET: ATTIVO FALLBACK STATISTICO LOCALE');
+
+      return _localFallbackResult(
+        match: match,
+        baseResult: baseResult,
+        dossierConfidence: dossier.dataConfidence,
+        odds: odds,
+        reason: 'Errore di connessione al backend AI: $e',
       );
     }
+  }
+
+  // ============================================================
+  // FALLBACK STATISTICO LOCALE
+  // ============================================================
+  //
+  // Se OpenAI/backend è momentaneamente indisponibile (crediti,
+  // 429, 500, rete, JSON non valido...), non azzeriamo più
+  // un'analisi SmartCore già valida.
+  //
+  // Continuiamo a usare:
+  // - probabilità 1/X/2 locali
+  // - DecisionEngine 1/X/2/1X/X2/12
+  // - Over/Under e Goal/No Goal
+  // - quote 1X2, ValueBetCalculator e StakeEngine se disponibili
+  // ============================================================
+
+  AnalysisResult _localFallbackResult({
+    required MatchModel match,
+    required AnalysisResult baseResult,
+    required int dossierConfidence,
+    required MatchOdds? odds,
+    required String reason,
+  }) {
+    if (baseResult.smartScore <= 0) {
+      return _errorResult(reason);
+    }
+
+    final decision = DecisionEngine.decide(
+      homeProbability: baseResult.homeProbability,
+      drawProbability: baseResult.drawProbability,
+      awayProbability: baseResult.awayProbability,
+    );
+
+    final valueResult = _valueBetCalculator.calculate(
+      homeProbability: baseResult.homeProbability,
+      drawProbability: baseResult.drawProbability,
+      awayProbability: baseResult.awayProbability,
+      dataConfidence: dossierConfidence,
+      odds: odds,
+    );
+
+    final fallbackConfidence = baseResult.smartScore.clamp(0, 100);
+
+    final stake = _stakeEngine.calculate(
+      valueResult: valueResult,
+      aiConfidence: fallbackConfidence,
+      dossierConfidence: dossierConfidence,
+      risk: baseResult.risk,
+    );
+
+    final valueBet = valueResult.explanation;
+
+    match.smartScore = fallbackConfidence;
+    match.homeWin = baseResult.homeProbability;
+    match.draw = baseResult.drawProbability;
+    match.awayWin = baseResult.awayProbability;
+    match.valueBet = valueBet;
+
+    final explanation =
+        '''
+SMARTBET AI - MODALITÀ STATISTICA LOCALE
+
+Il servizio AI avanzato non è momentaneamente disponibile.
+SmartBet continua l'analisi usando il motore statistico locale.
+
+MOTIVO:
+$reason
+
+PRONOSTICO SMARTBET: ${decision.outcome}
+AFFIDABILITÀ PRONOSTICO: ${decision.probability}%
+
+PROBABILITÀ 1X2:
+1: ${baseResult.homeProbability}%
+X: ${baseResult.drawProbability}%
+2: ${baseResult.awayProbability}%
+
+MERCATI GOL:
+OVER 1.5: ${baseResult.over15Probability}%
+UNDER 1.5: ${baseResult.under15Probability}%
+OVER 2.5: ${baseResult.over25Probability}%
+UNDER 2.5: ${baseResult.under25Probability}%
+GOAL: ${baseResult.goalProbability}%
+NO GOAL: ${baseResult.noGoalProbability}%
+
+VALUE BET:
+$valueBet
+
+STAKE:
+${stake.explanation}
+
+NOTA:
+Dossier AI testuale e analisi notizie avanzata temporaneamente non disponibili.
+''';
+
+    return AnalysisResult(
+      smartScore: fallbackConfidence,
+      homeProbability: baseResult.homeProbability,
+      drawProbability: baseResult.drawProbability,
+      awayProbability: baseResult.awayProbability,
+      over15Probability: baseResult.over15Probability,
+      under15Probability: baseResult.under15Probability,
+      over25Probability: baseResult.over25Probability,
+      under25Probability: baseResult.under25Probability,
+      goalProbability: baseResult.goalProbability,
+      noGoalProbability: baseResult.noGoalProbability,
+      prediction: decision.outcome,
+      valueBet: valueBet,
+      risk: baseResult.risk,
+      shouldBet: stake.shouldBet,
+      recommendedStakePercent: stake.stakePercent,
+      recommendedStakeUnits: stake.stakeUnits,
+      stakeOutcome: stake.outcome,
+      stakeOdd: stake.odd,
+      stakeBookmaker: stake.bookmakerName,
+      stakeRecommendation: stake.explanation,
+      explanation: explanation,
+    );
   }
 
   // ============================================================

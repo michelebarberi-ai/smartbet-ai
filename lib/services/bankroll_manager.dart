@@ -269,6 +269,22 @@ class BankrollManager {
     return List.unmodifiable(_history);
   }
 
+  bool hasBet({
+    required String matchLabel,
+    required String outcome,
+    required double odd,
+  }) {
+    final normalizedMatch = matchLabel.trim().toLowerCase();
+    final normalizedOutcome = outcome.trim().toUpperCase();
+
+    return _history.any((bet) {
+      final sameMatch = bet.matchLabel.trim().toLowerCase() == normalizedMatch;
+      final sameOutcome = bet.outcome.trim().toUpperCase() == normalizedOutcome;
+      final sameOdd = (bet.odd - odd).abs() < 0.0001;
+      return sameMatch && sameOutcome && sameOdd;
+    });
+  }
+
   // ============================================================
   // LOAD
   // ============================================================
@@ -413,6 +429,10 @@ class BankrollManager {
     required String bookmaker,
     required double stakePercent,
   }) {
+    if (hasBet(matchLabel: matchLabel, outcome: outcome, odd: odd)) {
+      return null;
+    }
+
     if (_currentBankroll <= 0.0) {
       return null;
     }
@@ -570,6 +590,110 @@ class BankrollManager {
 
   Future<bool> settleVoidAndSave(String betId) async {
     final result = settleVoid(betId);
+
+    if (result) {
+      await save();
+    }
+
+    return result;
+  }
+
+  // ============================================================
+  // SETTLEMENT / CORREZIONE RISULTATO
+  // ============================================================
+  //
+  // Permette sia di chiudere una giocata PENDING sia di
+  // correggere una giocata già chiusa.
+  //
+  // Prima annulliamo l'effetto economico del risultato
+  // precedente, poi applichiamo quello nuovo.
+  // ============================================================
+
+  bool settleAs(String betId, String newStatus) {
+    final normalized = newStatus.toUpperCase().trim();
+
+    if (normalized != 'WIN' &&
+        normalized != 'LOSS' &&
+        normalized != 'VOID' &&
+        normalized != 'PENDING') {
+      return false;
+    }
+
+    final index = _history.indexWhere((bet) => bet.id == betId);
+
+    if (index < 0) {
+      return false;
+    }
+
+    final bet = _history[index];
+
+    // Rimuove dal bankroll l'effetto del vecchio risultato.
+    // PENDING e VOID hanno profitLoss = 0.
+    _currentBankroll -= bet.profitLoss;
+
+    if (_currentBankroll < 0.0) {
+      _currentBankroll = 0.0;
+    }
+
+    double newProfitLoss = 0.0;
+
+    if (normalized == 'WIN') {
+      newProfitLoss = bet.stakeAmount * (bet.odd - 1.0);
+    } else if (normalized == 'LOSS') {
+      newProfitLoss = -bet.stakeAmount;
+    }
+
+    _currentBankroll += newProfitLoss;
+
+    _history[index] = bet.copyWith(
+      status: normalized,
+      profitLoss: newProfitLoss,
+    );
+
+    return true;
+  }
+
+  Future<bool> settleAsAndSave(String betId, String newStatus) async {
+    final result = settleAs(betId, newStatus);
+
+    if (result) {
+      await save();
+    }
+
+    return result;
+  }
+
+  // ============================================================
+  // ELIMINA GIOCATA
+  // ============================================================
+  //
+  // Se la giocata era già stata chiusa, rimuoviamo prima
+  // il suo effetto economico dal bankroll. Se era PENDING,
+  // basta eliminarla: lo stake impegnato si libera da solo.
+  // ============================================================
+
+  bool deleteBet(String betId) {
+    final index = _history.indexWhere((bet) => bet.id == betId);
+
+    if (index < 0) {
+      return false;
+    }
+
+    final bet = _history[index];
+
+    _currentBankroll -= bet.profitLoss;
+
+    if (_currentBankroll < 0.0) {
+      _currentBankroll = 0.0;
+    }
+
+    _history.removeAt(index);
+
+    return true;
+  }
+
+  Future<bool> deleteBetAndSave(String betId) async {
+    final result = deleteBet(betId);
 
     if (result) {
       await save();

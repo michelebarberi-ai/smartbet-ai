@@ -29,6 +29,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   final Map<int, MatchModel> _selectedMatches = {};
 
+  // Evita di rilanciare SmartCore ogni volta che la schermata
+  // viene ridisegnata o si apre/chiude una sezione.
+  final Map<int, Future<AnalysisResult>> _analysisFutures = {};
+
   static const int _maximumCouponMatches = 12;
 
   bool _creatingCoupon = false;
@@ -74,6 +78,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _selectedDate = normalized;
 
       _selectedMatches.clear();
+      _analysisFutures.clear();
       _expandedCountries.clear();
       _expandedLeagues.clear();
 
@@ -351,8 +356,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     try {
       final service = SmartBetCouponService();
 
-      final result = await service.buildCoupon(
+      final coupons = await service.buildCouponSet(
         matches: _selectedMatches.values.toList(),
+        // Nella selezione manuale è meglio mostrare anche una sola
+        // giocata realmente validata, invece di restituire sempre
+        // "nessun risultato" quando una sola supera i filtri.
+        minimumRequired: 1,
       );
 
       if (!mounted) {
@@ -367,7 +376,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => CouponScreen(result: result)),
+        MaterialPageRoute(builder: (_) => CouponScreen(coupons: coupons)),
       );
     } catch (e) {
       if (!mounted) {
@@ -500,7 +509,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CouponScreen(result: autoResult.coupon),
+          builder: (_) => CouponScreen(coupons: autoResult.coupons),
         ),
       );
     } catch (e) {
@@ -892,12 +901,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   // ============================================================
+  // CACHE ANALISI PRELIMINARE
+  // ============================================================
+
+  Future<AnalysisResult> _analysisFutureFor(MatchModel match) {
+    return _analysisFutures.putIfAbsent(
+      match.fixtureId,
+      () => SmartCore.analyze(match),
+    );
+  }
+
+  // ============================================================
   // CARD PARTITA
   // ============================================================
 
   Widget _matchCard(BuildContext context, MatchModel match) {
     return FutureBuilder<AnalysisResult>(
-      future: SmartCore.analyze(match),
+      future: _analysisFutureFor(match),
       builder: (context, snapshot) {
         // --------------------------------------------------------
         // CARICAMENTO
@@ -1102,13 +1122,28 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      result.prediction,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'PRE-ANALISI',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          result.prediction,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1167,7 +1202,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        "Value: ${result.valueBet}",
+                        "Convenienza quota: ${result.valueBet}",
                         textAlign: TextAlign.end,
                         style: const TextStyle(
                           color: Colors.white54,

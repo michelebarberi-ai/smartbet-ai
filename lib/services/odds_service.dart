@@ -11,11 +11,8 @@ import 'api_rate_limiter.dart';
 
 class BestOdd {
   final String outcome;
-
   final double odd;
-
   final int bookmakerId;
-
   final String bookmakerName;
 
   const BestOdd({
@@ -27,22 +24,16 @@ class BestOdd {
 }
 
 // ============================================================
-// MERCATO COMPLETO DI UN BOOKMAKER
+// MERCATO COMPLETO DI UN BOOKMAKER - 1X2
 // ============================================================
 
 class BookmakerOdds {
   final int fixtureId;
-
   final int bookmakerId;
-
   final String bookmakerName;
-
   final double homeOdd;
-
   final double drawOdd;
-
   final double awayOdd;
-
   final DateTime? updatedAt;
 
   const BookmakerOdds({
@@ -55,111 +46,42 @@ class BookmakerOdds {
     required this.updatedAt,
   });
 
-  bool get isComplete {
-    return homeOdd > 1 && drawOdd > 1 && awayOdd > 1;
-  }
+  bool get isComplete => homeOdd > 1 && drawOdd > 1 && awayOdd > 1;
 
-  double get rawHomeProbability {
-    if (homeOdd <= 1) {
-      return 0;
-    }
-
-    return 1 / homeOdd;
-  }
-
-  double get rawDrawProbability {
-    if (drawOdd <= 1) {
-      return 0;
-    }
-
-    return 1 / drawOdd;
-  }
-
-  double get rawAwayProbability {
-    if (awayOdd <= 1) {
-      return 0;
-    }
-
-    return 1 / awayOdd;
-  }
+  double get rawHomeProbability => homeOdd > 1 ? 1 / homeOdd : 0;
+  double get rawDrawProbability => drawOdd > 1 ? 1 / drawOdd : 0;
+  double get rawAwayProbability => awayOdd > 1 ? 1 / awayOdd : 0;
 
   double get overround {
-    if (!isComplete) {
-      return 0;
-    }
-
+    if (!isComplete) return 0;
     return rawHomeProbability + rawDrawProbability + rawAwayProbability;
   }
 
   double get bookmakerMargin {
-    if (!isComplete) {
-      return 0;
-    }
-
+    if (!isComplete) return 0;
     return overround - 1;
   }
 
-  double get fairHomeProbability {
-    if (overround <= 0) {
-      return 0;
-    }
+  double get fairHomeProbability =>
+      overround > 0 ? rawHomeProbability / overround : 0;
 
-    return rawHomeProbability / overround;
-  }
+  double get fairDrawProbability =>
+      overround > 0 ? rawDrawProbability / overround : 0;
 
-  double get fairDrawProbability {
-    if (overround <= 0) {
-      return 0;
-    }
-
-    return rawDrawProbability / overround;
-  }
-
-  double get fairAwayProbability {
-    if (overround <= 0) {
-      return 0;
-    }
-
-    return rawAwayProbability / overround;
-  }
+  double get fairAwayProbability =>
+      overround > 0 ? rawAwayProbability / overround : 0;
 }
 
 // ============================================================
-// RISULTATO COMPLETO QUOTE SMARTBET
+// RISULTATO COMPLETO 1X2
 // ============================================================
 
 class MatchOdds {
   final int fixtureId;
-
-  // ----------------------------------------------------------
-  // MERCATO DI RIFERIMENTO
-  // ----------------------------------------------------------
-  //
-  // Utilizzato esclusivamente per:
-  //
-  // - overround;
-  // - margine bookmaker;
-  // - probabilità fair.
-  //
-  // Le sue tre quote appartengono allo stesso bookmaker.
-  // ----------------------------------------------------------
-
   final BookmakerOdds referenceMarket;
-
-  // ----------------------------------------------------------
-  // BEST ODDS
-  // ----------------------------------------------------------
-
   final BestOdd bestHome;
-
   final BestOdd bestDraw;
-
   final BestOdd bestAway;
-
-  // ----------------------------------------------------------
-  // NUMERO BOOKMAKER
-  // ----------------------------------------------------------
-
   final int bookmakerCount;
 
   const MatchOdds({
@@ -171,31 +93,47 @@ class MatchOdds {
     required this.bookmakerCount,
   });
 
-  bool get isComplete {
-    return referenceMarket.isComplete &&
-        bestHome.odd > 1 &&
-        bestDraw.odd > 1 &&
-        bestAway.odd > 1;
+  bool get isComplete =>
+      referenceMarket.isComplete &&
+      bestHome.odd > 1 &&
+      bestDraw.odd > 1 &&
+      bestAway.odd > 1;
+
+  double get overround => referenceMarket.overround;
+  double get bookmakerMargin => referenceMarket.bookmakerMargin;
+  double get fairHomeProbability => referenceMarket.fairHomeProbability;
+  double get fairDrawProbability => referenceMarket.fairDrawProbability;
+  double get fairAwayProbability => referenceMarket.fairAwayProbability;
+}
+
+// ============================================================
+// QUOTE MULTI-MERCATO SMARTBET
+// ============================================================
+
+class FixtureMarketOdds {
+  final int fixtureId;
+  final MatchOdds? matchWinner;
+  final Map<String, BestOdd> bestByOutcome;
+  final int bookmakerCount;
+
+  const FixtureMarketOdds({
+    required this.fixtureId,
+    required this.matchWinner,
+    required this.bestByOutcome,
+    required this.bookmakerCount,
+  });
+
+  BestOdd? oddFor(String outcome) {
+    final key = _normalizeOutcomeStatic(outcome);
+    return bestByOutcome[key];
   }
 
-  double get overround {
-    return referenceMarket.overround;
-  }
-
-  double get bookmakerMargin {
-    return referenceMarket.bookmakerMargin;
-  }
-
-  double get fairHomeProbability {
-    return referenceMarket.fairHomeProbability;
-  }
-
-  double get fairDrawProbability {
-    return referenceMarket.fairDrawProbability;
-  }
-
-  double get fairAwayProbability {
-    return referenceMarket.fairAwayProbability;
+  static String _normalizeOutcomeStatic(String value) {
+    return value
+        .trim()
+        .toUpperCase()
+        .replaceAll('OVER ', 'OVER ')
+        .replaceAll('UNDER ', 'UNDER ');
   }
 }
 
@@ -208,74 +146,58 @@ class OddsService {
 
   OddsService({http.Client? client}) : _client = client ?? http.Client();
 
-  // ============================================================
-  // CACHE
-  // ============================================================
-
-  static final Map<int, MatchOdds?> _cache = {};
+  static final Map<int, FixtureMarketOdds?> _marketCache = {};
 
   // ============================================================
-  // RECUPERO QUOTE
+  // COMPATIBILITÀ: 1X2
   // ============================================================
 
   Future<MatchOdds?> getMatchWinnerOdds({required int fixtureId}) async {
-    if (fixtureId <= 0) {
-      print('');
-      print('SMARTBET ODDS: fixture ID non valido');
+    final all = await getFixtureMarketOdds(fixtureId: fixtureId);
+    return all?.matchWinner;
+  }
 
+  // ============================================================
+  // TUTTI I MERCATI UTILI A SMARTBET
+  // ============================================================
+
+  Future<FixtureMarketOdds?> getFixtureMarketOdds({
+    required int fixtureId,
+  }) async {
+    if (fixtureId <= 0) {
       return null;
     }
 
-    if (_cache.containsKey(fixtureId)) {
-      print('');
-      print('SMARTBET ODDS CACHE HIT');
-      print('Fixture ID: $fixtureId');
-
-      return _cache[fixtureId];
+    if (_marketCache.containsKey(fixtureId)) {
+      return _marketCache[fixtureId];
     }
-
-    print('');
-    print('========================================');
-    print('SMARTBET - ODDS SERVICE');
-    print('========================================');
-
-    print('Fixture ID: $fixtureId');
 
     final uri = Uri.parse(
       '${ApiConfig.baseUrl}/odds',
     ).replace(queryParameters: {'fixture': fixtureId.toString()});
-
-    print('URL: $uri');
 
     try {
       await ApiRateLimiter.wait();
 
       final response = await _client.get(uri, headers: _headers);
 
-      print('ODDS STATUS: ${response.statusCode}');
-
       if (response.statusCode != 200) {
-        _cache[fixtureId] = null;
-
+        _marketCache[fixtureId] = null;
         return null;
       }
 
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        _cache[fixtureId] = null;
-
+        _marketCache[fixtureId] = null;
         return null;
       }
 
       final errors = decoded['errors'];
 
       if (errors is Map && errors.isNotEmpty) {
-        print('ODDS API ERROR:');
-        print(errors);
-
-        _cache[fixtureId] = null;
-
+        print('ODDS API ERROR: $errors');
+        _marketCache[fixtureId] = null;
         return null;
       }
 
@@ -283,17 +205,13 @@ class OddsService {
 
       if (responseData is! List || responseData.isEmpty) {
         print('QUOTE PRE-MATCH NON DISPONIBILI');
-
-        _cache[fixtureId] = null;
-
+        _marketCache[fixtureId] = null;
         return null;
       }
 
-      final markets = <BookmakerOdds>[];
-
-      // ========================================================
-      // PARSING RISPOSTA
-      // ========================================================
+      final matchWinnerMarkets = <BookmakerOdds>[];
+      final bestByOutcome = <String, BestOdd>{};
+      final bookmakerIds = <int>{};
 
       for (final responseItem in responseData) {
         if (responseItem is! Map<String, dynamic>) {
@@ -301,7 +219,6 @@ class OddsService {
         }
 
         DateTime? updatedAt;
-
         final update = responseItem['update']?.toString();
 
         if (update != null && update.isNotEmpty) {
@@ -314,18 +231,20 @@ class OddsService {
           continue;
         }
 
-        // ======================================================
-        // BOOKMAKER
-        // ======================================================
-
         for (final bookmakerItem in bookmakers) {
           if (bookmakerItem is! Map<String, dynamic>) {
             continue;
           }
 
           final bookmakerId = _toInt(bookmakerItem['id']);
+          final bookmakerName =
+              bookmakerItem['name']?.toString().trim().isNotEmpty == true
+              ? bookmakerItem['name'].toString().trim()
+              : 'Bookmaker $bookmakerId';
 
-          final bookmakerName = bookmakerItem['name']?.toString().trim() ?? '';
+          if (bookmakerId > 0) {
+            bookmakerIds.add(bookmakerId);
+          }
 
           final bets = bookmakerItem['bets'];
 
@@ -333,272 +252,307 @@ class OddsService {
             continue;
           }
 
-          // ====================================================
-          // MERCATO 1X2
-          // ====================================================
-
           for (final betItem in bets) {
             if (betItem is! Map<String, dynamic>) {
               continue;
             }
 
             final betName = betItem['name']?.toString().trim() ?? '';
-
-            if (!_isMatchWinnerBet(betName)) {
-              continue;
-            }
-
             final values = betItem['values'];
 
             if (values is! List) {
               continue;
             }
 
-            double homeOdd = 0;
-            double drawOdd = 0;
-            double awayOdd = 0;
+            // ------------------------------------------------------
+            // MATCH WINNER 1X2
+            // ------------------------------------------------------
+            if (_isMatchWinnerBet(betName)) {
+              double homeOdd = 0;
+              double drawOdd = 0;
+              double awayOdd = 0;
 
-            for (final valueItem in values) {
-              if (valueItem is! Map<String, dynamic>) {
-                continue;
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final label =
+                    valueItem['value']?.toString().trim().toLowerCase() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                if (label == 'home' || label == '1') {
+                  homeOdd = odd;
+                  _setBest(
+                    bestByOutcome,
+                    outcome: '1',
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                } else if (label == 'draw' || label == 'x') {
+                  drawOdd = odd;
+                  _setBest(
+                    bestByOutcome,
+                    outcome: 'X',
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                } else if (label == 'away' || label == '2') {
+                  awayOdd = odd;
+                  _setBest(
+                    bestByOutcome,
+                    outcome: '2',
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                }
               }
 
-              final label =
-                  valueItem['value']?.toString().trim().toLowerCase() ?? '';
+              final market = BookmakerOdds(
+                fixtureId: fixtureId,
+                bookmakerId: bookmakerId,
+                bookmakerName: bookmakerName,
+                homeOdd: homeOdd,
+                drawOdd: drawOdd,
+                awayOdd: awayOdd,
+                updatedAt: updatedAt,
+              );
 
-              final odd = _toDouble(valueItem['odd']);
-
-              if (odd <= 1) {
-                continue;
+              if (market.isComplete) {
+                matchWinnerMarkets.add(market);
               }
 
-              if (label == 'home' || label == '1') {
-                homeOdd = odd;
-                continue;
-              }
-
-              if (label == 'draw' || label == 'x') {
-                drawOdd = odd;
-                continue;
-              }
-
-              if (label == 'away' || label == '2') {
-                awayOdd = odd;
-              }
+              continue;
             }
 
-            final market = BookmakerOdds(
-              fixtureId: fixtureId,
-              bookmakerId: bookmakerId,
-              bookmakerName: bookmakerName.isEmpty
-                  ? 'Bookmaker $bookmakerId'
-                  : bookmakerName,
-              homeOdd: homeOdd,
-              drawOdd: drawOdd,
-              awayOdd: awayOdd,
-              updatedAt: updatedAt,
-            );
+            // ------------------------------------------------------
+            // DOUBLE CHANCE
+            // ------------------------------------------------------
+            if (_isDoubleChanceBet(betName)) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
 
-            if (market.isComplete) {
-              markets.add(market);
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final outcome = _doubleChanceOutcome(raw);
+
+                if (outcome == null) {
+                  continue;
+                }
+
+                _setBest(
+                  bestByOutcome,
+                  outcome: outcome,
+                  odd: odd,
+                  bookmakerId: bookmakerId,
+                  bookmakerName: bookmakerName,
+                );
+              }
+
+              continue;
+            }
+
+            // ------------------------------------------------------
+            // OVER / UNDER GOALS
+            // ------------------------------------------------------
+            if (_isGoalsOverUnderBet(betName)) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final outcome = _goalsOutcome(raw, betName);
+
+                if (outcome == null) {
+                  continue;
+                }
+
+                if (outcome == 'OVER 1.5' ||
+                    outcome == 'UNDER 1.5' ||
+                    outcome == 'OVER 2.5' ||
+                    outcome == 'UNDER 2.5') {
+                  _setBest(
+                    bestByOutcome,
+                    outcome: outcome,
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                }
+              }
+
+              continue;
+            }
+
+            // ------------------------------------------------------
+            // BOTH TEAMS TO SCORE
+            // ------------------------------------------------------
+            if (_isBothTeamsScoreBet(betName)) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final outcome = _bothTeamsOutcome(raw);
+
+                if (outcome == null) {
+                  continue;
+                }
+
+                _setBest(
+                  bestByOutcome,
+                  outcome: outcome,
+                  odd: odd,
+                  bookmakerId: bookmakerId,
+                  bookmakerName: bookmakerName,
+                );
+              }
             }
           }
         }
       }
 
-      if (markets.isEmpty) {
-        print('');
-        print('NESSUN MERCATO 1X2 COMPLETO TROVATO');
+      MatchOdds? matchWinner;
 
-        _cache[fixtureId] = null;
+      if (matchWinnerMarkets.isNotEmpty) {
+        final uniqueMarkets = <int, BookmakerOdds>{};
 
-        return null;
-      }
+        for (final market in matchWinnerMarkets) {
+          final existing = uniqueMarkets[market.bookmakerId];
 
-      // ========================================================
-      // ELIMINA EVENTUALI DUPLICATI BOOKMAKER
-      // ========================================================
+          if (existing == null) {
+            uniqueMarkets[market.bookmakerId] = market;
+            continue;
+          }
 
-      final uniqueMarkets = <int, BookmakerOdds>{};
+          final currentUpdate = market.updatedAt;
+          final oldUpdate = existing.updatedAt;
 
-      for (final market in markets) {
-        final existing = uniqueMarkets[market.bookmakerId];
-
-        if (existing == null) {
-          uniqueMarkets[market.bookmakerId] = market;
-
-          continue;
+          if (currentUpdate != null &&
+              (oldUpdate == null || currentUpdate.isAfter(oldUpdate))) {
+            uniqueMarkets[market.bookmakerId] = market;
+          }
         }
 
-        // Se abbiamo due record dello stesso bookmaker,
-        // teniamo quello aggiornato più recentemente.
+        final finalMarkets = uniqueMarkets.values.toList()
+          ..sort((a, b) => a.overround.compareTo(b.overround));
 
-        final currentUpdate = market.updatedAt;
+        final referenceMarket = finalMarkets.first;
 
-        final oldUpdate = existing.updatedAt;
+        final bestHome = bestByOutcome['1'];
+        final bestDraw = bestByOutcome['X'];
+        final bestAway = bestByOutcome['2'];
 
-        if (currentUpdate != null &&
-            (oldUpdate == null || currentUpdate.isAfter(oldUpdate))) {
-          uniqueMarkets[market.bookmakerId] = market;
+        if (bestHome != null && bestDraw != null && bestAway != null) {
+          matchWinner = MatchOdds(
+            fixtureId: fixtureId,
+            referenceMarket: referenceMarket,
+            bestHome: bestHome,
+            bestDraw: bestDraw,
+            bestAway: bestAway,
+            bookmakerCount: finalMarkets.length,
+          );
         }
       }
 
-      final finalMarkets = uniqueMarkets.values.toList();
-
-      // ========================================================
-      // MERCATO DI RIFERIMENTO
-      // ========================================================
-      //
-      // IMPORTANTISSIMO:
-      //
-      // Le probabilità fair devono derivare
-      // da quote dello STESSO bookmaker.
-      //
-      // Usiamo il bookmaker con l'overround più basso.
-      // ========================================================
-
-      finalMarkets.sort((a, b) => a.overround.compareTo(b.overround));
-
-      final referenceMarket = finalMarkets.first;
-
-      // ========================================================
-      // BEST QUOTA 1
-      // ========================================================
-
-      final bestHomeMarket = finalMarkets.reduce(
-        (current, next) => next.homeOdd > current.homeOdd ? next : current,
-      );
-
-      final bestHome = BestOdd(
-        outcome: '1',
-        odd: bestHomeMarket.homeOdd,
-        bookmakerId: bestHomeMarket.bookmakerId,
-        bookmakerName: bestHomeMarket.bookmakerName,
-      );
-
-      // ========================================================
-      // BEST QUOTA X
-      // ========================================================
-
-      final bestDrawMarket = finalMarkets.reduce(
-        (current, next) => next.drawOdd > current.drawOdd ? next : current,
-      );
-
-      final bestDraw = BestOdd(
-        outcome: 'X',
-        odd: bestDrawMarket.drawOdd,
-        bookmakerId: bestDrawMarket.bookmakerId,
-        bookmakerName: bestDrawMarket.bookmakerName,
-      );
-
-      // ========================================================
-      // BEST QUOTA 2
-      // ========================================================
-
-      final bestAwayMarket = finalMarkets.reduce(
-        (current, next) => next.awayOdd > current.awayOdd ? next : current,
-      );
-
-      final bestAway = BestOdd(
-        outcome: '2',
-        odd: bestAwayMarket.awayOdd,
-        bookmakerId: bestAwayMarket.bookmakerId,
-        bookmakerName: bestAwayMarket.bookmakerName,
-      );
-
-      // ========================================================
-      // RISULTATO
-      // ========================================================
-
-      final result = MatchOdds(
+      final result = FixtureMarketOdds(
         fixtureId: fixtureId,
-        referenceMarket: referenceMarket,
-        bestHome: bestHome,
-        bestDraw: bestDraw,
-        bestAway: bestAway,
-        bookmakerCount: finalMarkets.length,
+        matchWinner: matchWinner,
+        bestByOutcome: Map.unmodifiable(bestByOutcome),
+        bookmakerCount: bookmakerIds.length,
       );
 
       print('');
       print('========================================');
-      print('SMARTBET - BEST ODDS');
+      print('SMARTBET - QUOTE MULTI-MERCATO');
       print('========================================');
 
-      print(
-        'Bookmaker analizzati: '
-        '${result.bookmakerCount}',
-      );
+      for (final key in [
+        '1',
+        'X',
+        '2',
+        '1X',
+        'X2',
+        '12',
+        'OVER 1.5',
+        'UNDER 1.5',
+        'OVER 2.5',
+        'UNDER 2.5',
+        'GOAL',
+        'NO GOAL',
+      ]) {
+        final odd = result.oddFor(key);
 
-      print('');
-
-      print('MERCATO FAIR DI RIFERIMENTO:');
-
-      print(
-        '${referenceMarket.bookmakerName} '
-        '(ID ${referenceMarket.bookmakerId})',
-      );
-
-      print('1: ${referenceMarket.homeOdd}');
-
-      print('X: ${referenceMarket.drawOdd}');
-
-      print('2: ${referenceMarket.awayOdd}');
-
-      print(
-        'Overround: '
-        '${referenceMarket.overround.toStringAsFixed(4)}',
-      );
-
-      print(
-        'Margine: '
-        '${(referenceMarket.bookmakerMargin * 100).toStringAsFixed(2)}%',
-      );
-
-      print('');
-
-      print('MIGLIORE QUOTA 1:');
-      print(
-        '${bestHome.odd.toStringAsFixed(2)} '
-        '- ${bestHome.bookmakerName}',
-      );
-
-      print('');
-
-      print('MIGLIORE QUOTA X:');
-      print(
-        '${bestDraw.odd.toStringAsFixed(2)} '
-        '- ${bestDraw.bookmakerName}',
-      );
-
-      print('');
-
-      print('MIGLIORE QUOTA 2:');
-      print(
-        '${bestAway.odd.toStringAsFixed(2)} '
-        '- ${bestAway.bookmakerName}',
-      );
+        if (odd != null) {
+          print('$key: ${odd.odd.toStringAsFixed(2)} - ${odd.bookmakerName}');
+        }
+      }
 
       print('========================================');
 
-      _cache[fixtureId] = result;
-
+      _marketCache[fixtureId] = result;
       return result;
     } catch (e) {
-      print('');
       print('SMARTBET ODDS EXCEPTION: $e');
-
-      _cache[fixtureId] = null;
-
+      _marketCache[fixtureId] = null;
       return null;
     }
   }
 
   // ============================================================
-  // IDENTIFICAZIONE MERCATO
+  // HELPERS MERCATI
   // ============================================================
 
+  void _setBest(
+    Map<String, BestOdd> map, {
+    required String outcome,
+    required double odd,
+    required int bookmakerId,
+    required String bookmakerName,
+  }) {
+    final key = _normalizeOutcome(outcome);
+    final existing = map[key];
+
+    if (existing == null || odd > existing.odd) {
+      map[key] = BestOdd(
+        outcome: key,
+        odd: odd,
+        bookmakerId: bookmakerId,
+        bookmakerName: bookmakerName,
+      );
+    }
+  }
+
   bool _isMatchWinnerBet(String betName) {
-    final normalized = betName.toLowerCase().trim();
+    final normalized = _normalizeText(betName);
 
     return normalized == 'match winner' ||
         normalized == 'winner' ||
@@ -606,53 +560,128 @@ class OddsService {
         normalized.contains('match winner');
   }
 
-  // ============================================================
-  // CONVERSIONI
-  // ============================================================
+  bool _isDoubleChanceBet(String betName) {
+    final normalized = _normalizeText(betName);
+    return normalized.contains('double chance');
+  }
+
+  bool _isGoalsOverUnderBet(String betName) {
+    final normalized = _normalizeText(betName);
+
+    return normalized.contains('over under') ||
+        normalized.contains('goals over under') ||
+        normalized.contains('total goals');
+  }
+
+  bool _isBothTeamsScoreBet(String betName) {
+    final normalized = _normalizeText(betName);
+
+    return normalized.contains('both teams') &&
+        (normalized.contains('score') || normalized.contains('scor'));
+  }
+
+  String? _doubleChanceOutcome(String raw) {
+    final value = _normalizeText(
+      raw,
+    ).replaceAll(' ', '').replaceAll('/', '').replaceAll('-', '');
+
+    if (value == '1x' ||
+        value == 'homedraw' ||
+        value == 'drawhome' ||
+        value == 'homeordraw') {
+      return '1X';
+    }
+
+    if (value == 'x2' ||
+        value == 'drawaway' ||
+        value == 'awaydraw' ||
+        value == 'draworaway') {
+      return 'X2';
+    }
+
+    if (value == '12' ||
+        value == 'homeaway' ||
+        value == 'awayhome' ||
+        value == 'homeoraway') {
+      return '12';
+    }
+
+    return null;
+  }
+
+  String? _goalsOutcome(String raw, String betName) {
+    final value = '${_normalizeText(betName)} ${_normalizeText(raw)}';
+
+    final isOver = value.contains('over');
+    final isUnder = value.contains('under');
+
+    if (!isOver && !isUnder) {
+      return null;
+    }
+
+    final number = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(value);
+
+    if (number == null) {
+      return null;
+    }
+
+    final line = number.group(1);
+
+    if (line != '1.5' && line != '2.5') {
+      return null;
+    }
+
+    return '${isOver ? 'OVER' : 'UNDER'} $line';
+  }
+
+  String? _bothTeamsOutcome(String raw) {
+    final value = _normalizeText(raw);
+
+    if (value == 'yes' ||
+        value == 'si' ||
+        value == 'goal' ||
+        value == 'both teams score yes') {
+      return 'GOAL';
+    }
+
+    if (value == 'no' || value == 'no goal' || value == 'both teams score no') {
+      return 'NO GOAL';
+    }
+
+    return null;
+  }
+
+  String _normalizeText(String value) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String _normalizeOutcome(String value) {
+    return value.trim().toUpperCase();
+  }
 
   int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-
-    if (value is double) {
-      return value.round();
-    }
-
+    if (value is int) return value;
+    if (value is double) return value.round();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   double _toDouble(dynamic value) {
-    if (value is double) {
-      return value;
-    }
-
-    if (value is int) {
-      return value.toDouble();
-    }
-
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
-
-  // ============================================================
-  // HEADERS
-  // ============================================================
 
   Map<String, String> get _headers {
     return {'x-apisports-key': ApiConfig.apiKey, 'Accept': 'application/json'};
   }
 
-  // ============================================================
-  // CACHE
-  // ============================================================
-
   static void clearCache() {
-    _cache.clear();
+    _marketCache.clear();
   }
-
-  // ============================================================
-  // DISPOSE
-  // ============================================================
 
   void dispose() {
     _client.close();

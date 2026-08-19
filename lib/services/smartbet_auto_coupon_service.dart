@@ -28,7 +28,11 @@ class SmartBetAutoCouponProgress {
 }
 
 class SmartBetAutoCouponResult {
-  final SmartBetCouponResult coupon;
+  final SmartBetCouponSet coupons;
+
+  SmartBetCouponResult get coupon {
+    return coupons.preferred;
+  }
 
   final int totalMatches;
 
@@ -41,7 +45,7 @@ class SmartBetAutoCouponResult {
   final int advancedCandidates;
 
   const SmartBetAutoCouponResult({
-    required this.coupon,
+    required this.coupons,
     required this.totalMatches,
     required this.metadataCandidates,
     required this.preliminaryAnalyzed,
@@ -133,6 +137,12 @@ class SmartBetAutoCouponService {
   // lanciare decine di richieste contemporaneamente.
   static const int preliminaryBatchSize = 3;
 
+  // Manteniamo il riferimento storico al minimo di preselezione.
+  // Il target effettivo viene ora allineato a desiredAdvanced,
+  // perché servono abbastanza candidate per differenziare
+  // Premium, Bilanciata e Value.
+  static const int minimumEarlyStopCandidates = 6;
+
   static const double preferredMinimumAiWeight = 0.70;
 
   // ============================================================
@@ -163,7 +173,7 @@ class SmartBetAutoCouponService {
 
     if (allMatches.isEmpty) {
       return SmartBetAutoCouponResult(
-        coupon: _emptyCoupon('Nessuna partita disponibile oggi.'),
+        coupons: _emptyCouponSet('Nessuna partita disponibile oggi.'),
         totalMatches: 0,
         metadataCandidates: 0,
         preliminaryAnalyzed: 0,
@@ -180,7 +190,7 @@ class SmartBetAutoCouponService {
 
     if (metadataPool.isEmpty) {
       return SmartBetAutoCouponResult(
-        coupon: _emptyCoupon(
+        coupons: _emptyCouponSet(
           'Nessuna partita adatta alla '
           'preselezione automatica.',
         ),
@@ -197,6 +207,11 @@ class SmartBetAutoCouponService {
     int analyzed = 0;
 
     final desiredAdvanced = _desiredAdvancedCount(settings.couponSelections);
+
+    final earlyStopTarget = _earlyStopCandidateCount(
+      requestedSelections: settings.couponSelections,
+      desiredAdvanced: desiredAdvanced,
+    );
 
     // ==========================================================
     // PRIMO PASSAGGIO
@@ -240,10 +255,10 @@ class SmartBetAutoCouponService {
       final currentSelection = _selectPreliminaryCandidates(
         preliminary,
         preferredScore: settings.minimumSmartScore,
-        desiredCount: desiredAdvanced,
+        desiredCount: earlyStopTarget,
       );
 
-      if (currentSelection.length >= desiredAdvanced) {
+      if (currentSelection.length >= earlyStopTarget) {
         break;
       }
     }
@@ -255,7 +270,7 @@ class SmartBetAutoCouponService {
     var selectedPreliminary = _selectPreliminaryCandidates(
       preliminary,
       preferredScore: settings.minimumSmartScore,
-      desiredCount: desiredAdvanced,
+      desiredCount: earlyStopTarget,
     );
 
     // ==========================================================
@@ -267,7 +282,7 @@ class SmartBetAutoCouponService {
     // analizziamo prima altre partite.
     // ==========================================================
 
-    if (selectedPreliminary.length < desiredAdvanced &&
+    if (selectedPreliminary.length < earlyStopTarget &&
         metadataPool.length > analyzed) {
       final expansionEnd = metadataPool.length < expandedPreliminaryMatches
           ? metadataPool.length
@@ -305,10 +320,10 @@ class SmartBetAutoCouponService {
         selectedPreliminary = _selectPreliminaryCandidates(
           preliminary,
           preferredScore: settings.minimumSmartScore,
-          desiredCount: desiredAdvanced,
+          desiredCount: earlyStopTarget,
         );
 
-        if (selectedPreliminary.length >= desiredAdvanced) {
+        if (selectedPreliminary.length >= earlyStopTarget) {
           break;
         }
       }
@@ -320,7 +335,7 @@ class SmartBetAutoCouponService {
 
     if (selectedPreliminary.isEmpty) {
       return SmartBetAutoCouponResult(
-        coupon: _emptyCoupon(
+        coupons: _emptyCouponSet(
           'SmartBet non ha trovato partite '
           'con dati statistici sufficienti.',
         ),
@@ -382,29 +397,40 @@ class SmartBetAutoCouponService {
 
     final couponService = SmartBetCouponService();
 
-    final rawCoupon = await couponService.buildCoupon(
+    final rawCoupons = await couponService.buildCouponSet(
       matches: advancedShortlist,
+      minimumRequired: 2,
     );
 
     // ==========================================================
     // LIMITE IMPOSTAZIONI
     // ==========================================================
 
-    final coupon = _applySelectionLimit(rawCoupon, settings.couponSelections);
+    final coupons = SmartBetCouponSet(
+      premium: _applySelectionLimit(
+        rawCoupons.premium,
+        settings.couponSelections,
+      ),
+      balanced: _applySelectionLimit(
+        rawCoupons.balanced,
+        settings.couponSelections,
+      ),
+      value: _applySelectionLimit(rawCoupons.value, settings.couponSelections),
+    );
 
     onProgress?.call(
       SmartBetAutoCouponProgress(
         phase: 'complete',
         current: advancedShortlist.length,
         total: advancedShortlist.length,
-        message: coupon.hasCoupon
-            ? 'Schedina SmartBet completata.'
+        message: coupons.hasAnyCoupon
+            ? '${coupons.availableProfiles} strategie SmartBet pronte.'
             : 'Nessuna schedina consigliata.',
       ),
     );
 
     return SmartBetAutoCouponResult(
-      coupon: coupon,
+      coupons: coupons,
       totalMatches: allMatches.length,
       metadataCandidates: metadataPool.length,
       preliminaryAnalyzed: analyzed,
@@ -507,6 +533,24 @@ class SmartBetAutoCouponService {
     }
 
     return fallback;
+  }
+
+  // ============================================================
+  // STOP ANTICIPATO PRESELEZIONE
+  // ============================================================
+
+  int _earlyStopCandidateCount({
+    required int requestedSelections,
+    required int desiredAdvanced,
+  }) {
+    // Con tre strategie diverse servono più candidate reali.
+    //
+    // Fermarsi a 8 ha prodotto solo 2 giocate valide e quindi
+    // Premium, Bilanciata e Value finivano identiche.
+    //
+    // Manteniamo quindi l'intero target avanzato:
+    // con 6 selezioni richieste = 12 candidate AI.
+    return desiredAdvanced;
   }
 
   // ============================================================
@@ -689,6 +733,7 @@ class SmartBetAutoCouponService {
           '${original.message} '
           'Limite impostato: '
           '${selections.length} eventi.',
+      profileName: original.profileName,
     );
   }
 
@@ -749,7 +794,15 @@ class SmartBetAutoCouponService {
   // EMPTY
   // ============================================================
 
-  SmartBetCouponResult _emptyCoupon(String message) {
+  SmartBetCouponSet _emptyCouponSet(String message) {
+    return SmartBetCouponSet(
+      premium: _emptyCoupon(message, 'PREMIUM'),
+      balanced: _emptyCoupon(message, 'BILANCIATA'),
+      value: _emptyCoupon(message, 'VALUE'),
+    );
+  }
+
+  SmartBetCouponResult _emptyCoupon(String message, String profileName) {
     return SmartBetCouponResult(
       selections: const [],
       analyzedMatches: 0,
@@ -761,6 +814,7 @@ class SmartBetAutoCouponService {
       riskLevel: 'Non disponibile',
       recommendedStakePercent: 0.0,
       message: message,
+      profileName: profileName,
     );
   }
 }

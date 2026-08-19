@@ -27,9 +27,13 @@ class BankrollStore extends ChangeNotifier {
 
   List<BankrollBet> get history => manager.history;
 
-  // ============================================================
-  // INITIALIZE
-  // ============================================================
+  bool hasBet({
+    required String matchLabel,
+    required String outcome,
+    required double odd,
+  }) {
+    return manager.hasBet(matchLabel: matchLabel, outcome: outcome, odd: odd);
+  }
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -38,18 +42,10 @@ class BankrollStore extends ChangeNotifier {
 
     await manager.load();
 
-    // Se non esiste ancora un capitale salvato,
-    // NON impostiamo nessun valore automatico.
-    // L'utente lo sceglierà dalla Home.
-
     _initialized = true;
 
     notifyListeners();
   }
-
-  // ============================================================
-  // IMPOSTA CAPITALE
-  // ============================================================
 
   Future<void> setInitialBankroll(double bankroll) async {
     if (bankroll <= 0.0) {
@@ -61,10 +57,6 @@ class BankrollStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ============================================================
-  // RESET / MODIFICA CAPITALE
-  // ============================================================
-
   Future<void> resetBankroll(double bankroll) async {
     if (bankroll <= 0.0) {
       return;
@@ -74,10 +66,6 @@ class BankrollStore extends ChangeNotifier {
 
     notifyListeners();
   }
-
-  // ============================================================
-  // PLACE BET
-  // ============================================================
 
   Future<BankrollBet?> placeBet({
     required String matchLabel,
@@ -105,22 +93,24 @@ class BankrollStore extends ChangeNotifier {
     return bet;
   }
 
-  // ============================================================
-  // SETTLEMENT
-  // ============================================================
-
   Future<bool> settleWin(String betId) async {
-    final result = await manager.settleWinAndSave(betId);
-
-    if (result) {
-      notifyListeners();
-    }
-
-    return result;
+    return settleAs(betId, 'WIN');
   }
 
   Future<bool> settleLoss(String betId) async {
-    final result = await manager.settleLossAndSave(betId);
+    return settleAs(betId, 'LOSS');
+  }
+
+  Future<bool> settleVoid(String betId) async {
+    return settleAs(betId, 'VOID');
+  }
+
+  Future<bool> setPending(String betId) async {
+    return settleAs(betId, 'PENDING');
+  }
+
+  Future<bool> settleAs(String betId, String status) async {
+    final result = await manager.settleAsAndSave(betId, status);
 
     if (result) {
       notifyListeners();
@@ -129,8 +119,8 @@ class BankrollStore extends ChangeNotifier {
     return result;
   }
 
-  Future<bool> settleVoid(String betId) async {
-    final result = await manager.settleVoidAndSave(betId);
+  Future<bool> deleteBet(String betId) async {
+    final result = await manager.deleteBetAndSave(betId);
 
     if (result) {
       notifyListeners();

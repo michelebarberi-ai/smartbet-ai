@@ -1,11 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../services/smartbet_coupon_service.dart';
 
-class CouponScreen extends StatelessWidget {
-  final SmartBetCouponResult result;
+enum _CouponView { premium, balanced, value }
 
-  const CouponScreen({super.key, required this.result});
+class CouponScreen extends StatefulWidget {
+  final SmartBetCouponSet coupons;
+
+  const CouponScreen({super.key, required this.coupons});
+
+  @override
+  State<CouponScreen> createState() => _CouponScreenState();
+}
+
+class _CouponScreenState extends State<CouponScreen> {
+  late _CouponView _selectedView;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.coupons.premium.hasCoupon) {
+      _selectedView = _CouponView.premium;
+    } else if (widget.coupons.balanced.hasCoupon) {
+      _selectedView = _CouponView.balanced;
+    } else {
+      _selectedView = _CouponView.value;
+    }
+  }
+
+  SmartBetCouponResult get result {
+    switch (_selectedView) {
+      case _CouponView.premium:
+        return widget.coupons.premium;
+      case _CouponView.balanced:
+        return widget.coupons.balanced;
+      case _CouponView.value:
+        return widget.coupons.value;
+    }
+  }
 
   // ============================================================
   // COLORI
@@ -42,45 +76,130 @@ class CouponScreen extends StatelessWidget {
   // ============================================================
 
   String _couponProfile() {
-    final score = result.averageSmartScore;
-
-    if (score >= 78) {
-      return 'PREMIUM';
-    }
-
-    if (score >= 68) {
-      return 'BILANCIATA';
-    }
-
-    return 'VALUE CONTROLLATO';
+    return result.profileName;
   }
 
   Color _couponProfileColor() {
-    final score = result.averageSmartScore;
-
-    if (score >= 78) {
-      return const Color(0xFF69F0AE);
+    switch (result.profileName.toUpperCase()) {
+      case 'PREMIUM':
+        return const Color(0xFF69F0AE);
+      case 'BILANCIATA':
+        return Colors.amberAccent;
+      default:
+        return Colors.orangeAccent;
     }
-
-    if (score >= 68) {
-      return Colors.amberAccent;
-    }
-
-    return Colors.orangeAccent;
   }
 
   IconData _couponProfileIcon() {
-    final score = result.averageSmartScore;
-
-    if (score >= 78) {
-      return Icons.workspace_premium;
+    switch (result.profileName.toUpperCase()) {
+      case 'PREMIUM':
+        return Icons.workspace_premium;
+      case 'BILANCIATA':
+        return Icons.balance;
+      default:
+        return Icons.trending_up;
     }
+  }
 
-    if (score >= 68) {
-      return Icons.balance;
-    }
+  // ============================================================
+  // SELETTORE STRATEGIA
+  // ============================================================
 
-    return Icons.trending_up;
+  Widget _profileSelector() {
+    return Row(
+      children: [
+        Expanded(
+          child: _profileButton(
+            view: _CouponView.premium,
+            label: 'PREMIUM',
+            icon: Icons.workspace_premium,
+            available: widget.coupons.premium.hasCoupon,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: _profileButton(
+            view: _CouponView.balanced,
+            label: 'BILANCIATA',
+            icon: Icons.balance,
+            available: widget.coupons.balanced.hasCoupon,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: _profileButton(
+            view: _CouponView.value,
+            label: 'VALUE',
+            icon: Icons.trending_up,
+            available: widget.coupons.value.hasCoupon,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _profileButton({
+    required _CouponView view,
+    required String label,
+    required IconData icon,
+    required bool available,
+  }) {
+    final selected = _selectedView == view;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedView = view;
+        });
+      },
+      borderRadius: BorderRadius.circular(13),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF00C853).withValues(alpha: 0.16)
+              : const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: selected ? const Color(0xFF00C853) : Colors.white12,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: available
+                  ? (selected ? const Color(0xFF69F0AE) : Colors.white70)
+                  : Colors.white24,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: available
+                    ? (selected ? Colors.white : Colors.white70)
+                    : Colors.white30,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              available ? 'DISPONIBILE' : 'N/D',
+              style: TextStyle(
+                color: available ? Colors.white38 : Colors.white24,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ============================================================
@@ -566,25 +685,86 @@ class CouponScreen extends StatelessWidget {
   }
 
   // ============================================================
+  // CONDIVIDI SCHEDINA
+  // ============================================================
+
+  Future<void> _shareCoupon() async {
+    if (!result.hasCoupon) {
+      return;
+    }
+
+    final probability = result.estimatedCombinedProbability * 100;
+
+    final text = StringBuffer()
+      ..writeln('SMARTBET AI — SCHEDINA ${result.profileName.toUpperCase()}')
+      ..writeln()
+      ..writeln('${result.selectionCount} selezioni')
+      ..writeln('Quota totale: ${result.totalOdd.toStringAsFixed(2)}')
+      ..writeln(
+        'Qualità media: ${result.averageSmartScore.toStringAsFixed(0)}%',
+      )
+      ..writeln('Probabilità stimata: ${probability.toStringAsFixed(1)}%')
+      ..writeln('Rischio: ${result.riskLevel}')
+      ..writeln(
+        'Stake consigliato: '
+        '${result.recommendedStakePercent.toStringAsFixed(2)}%',
+      )
+      ..writeln();
+
+    for (var i = 0; i < result.selections.length; i++) {
+      final selection = result.selections[i];
+
+      text.writeln(
+        '${i + 1}. ${selection.matchLabel} → '
+        '${selection.outcome} @ ${selection.odd.toStringAsFixed(2)}',
+      );
+
+      if (selection.bookmaker.trim().isNotEmpty) {
+        text.writeln('   Quota rilevata: ${selection.bookmaker}');
+      }
+    }
+
+    text
+      ..writeln()
+      ..writeln(
+        'Analisi statistica a scopo informativo. '
+        'Gioca responsabilmente.',
+      );
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: text.toString(),
+        subject: 'SmartBet AI — Schedina ${result.profileName.toUpperCase()}',
+      ),
+    );
+  }
+
+  Widget _shareCouponButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: result.hasCoupon ? _shareCoupon : null,
+        icon: const Icon(Icons.ios_share_outlined),
+        label: Text('CONDIVIDI SCHEDINA ${result.profileName.toUpperCase()}'),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          backgroundColor: const Color(0xFF00C853),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.white12,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    if (!result.hasCoupon) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF111827),
-        appBar: AppBar(
-          title: const Text(
-            'Schedina SmartBet',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: const Color(0xFF111827),
-        ),
-        body: _emptyCoupon(context),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
@@ -598,74 +778,93 @@ class CouponScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
           children: [
-            _summaryCard(),
+            _profileSelector(),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            const Text(
-              'Selezioni SmartBet',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            if (!result.hasCoupon) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 26),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F2937),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: _emptyCoupon(context),
               ),
-            ),
+            ] else ...[
+              _summaryCard(),
 
-            const SizedBox(height: 5),
+              const SizedBox(height: 24),
 
-            Text(
-              '${result.analyzedMatches} partite analizzate • '
-              '${result.validCandidates} candidate valide • '
-              '${result.rejectedMatches} escluse',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-
-            const SizedBox(height: 15),
-
-            ...List.generate(
-              result.selections.length,
-              (index) => _selectionCard(result.selections[index], index),
-            ),
-
-            const SizedBox(height: 8),
-
-            _stakeCard(),
-
-            const SizedBox(height: 18),
-
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.20),
+              const Text(
+                'Selezioni SmartBet',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, color: Colors.orange, size: 20),
 
-                  SizedBox(width: 10),
+              const SizedBox(height: 5),
 
-                  Expanded(
-                    child: Text(
-                      'La qualità media indica la qualità '
-                      'delle singole selezioni. La probabilità '
-                      'stimata della schedina considera invece '
-                      'che tutti gli eventi debbano risultare '
-                      'corretti.',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                        height: 1.4,
+              Text(
+                '${result.analyzedMatches} partite analizzate • '
+                '${result.validCandidates} candidate valide • '
+                '${result.rejectedMatches} escluse',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+
+              const SizedBox(height: 15),
+
+              ...List.generate(
+                result.selections.length,
+                (index) => _selectionCard(result.selections[index], index),
+              ),
+
+              const SizedBox(height: 8),
+
+              _stakeCard(),
+
+              const SizedBox(height: 14),
+
+              _shareCouponButton(),
+
+              const SizedBox(height: 18),
+
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.20),
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Premium privilegia qualità e prudenza. '
+                        'Bilanciata cerca un compromesso tra affidabilità '
+                        'e quota. Value accetta opportunità più aggressive '
+                        'solo dopo i controlli SmartBet. '
+                        'La probabilità stimata considera che tutti gli '
+                        'eventi debbano risultare corretti.',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
