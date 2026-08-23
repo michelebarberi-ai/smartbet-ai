@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../screens/analysis_screen.dart';
-import '../screens/budget_screen.dart';
+import '../screens/combinations_ai_screen.dart';
+import '../screens/create_ai_coupon_screen.dart';
 import '../screens/prediction_screen.dart';
 import '../screens/saved_screen.dart';
 import '../screens/settings_screen.dart';
-import '../screens/value_screen.dart';
 
 class MenuGrid extends StatelessWidget {
   const MenuGrid({super.key});
@@ -25,19 +25,19 @@ class MenuGrid extends StatelessWidget {
         },
       ),
       _MenuItem(
-        icon: Icons.show_chart,
-        title: 'Quote\nConsigliate',
+        icon: Icons.auto_awesome,
+        title: 'Combinazioni\nAI',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ValueScreen()),
+            MaterialPageRoute(builder: (_) => const CombinationsAiScreen()),
           );
         },
       ),
       _MenuItem(
         icon: Icons.psychology,
-        title: 'Pronostico\nAI',
+        title: 'Risultati del\nGiorno AI',
         color: const Color(0xFF00C853),
         onTap: () {
           Navigator.push(
@@ -47,13 +47,13 @@ class MenuGrid extends StatelessWidget {
         },
       ),
       _MenuItem(
-        icon: Icons.account_balance_wallet,
-        title: 'Budget',
+        icon: Icons.auto_awesome_motion,
+        title: 'Crea Schedina\nAI',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const BudgetScreen()),
+            MaterialPageRoute(builder: (_) => const CreateAiCouponScreen()),
           );
         },
       ),

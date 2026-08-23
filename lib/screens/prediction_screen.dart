@@ -1,7 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-import '../services/prediction_store.dart';
-import '../services/saved_prediction_store.dart';
+import '../ai/smartcore.dart';
+import '../models/analysis_result.dart';
+import '../models/match_model.dart';
+import '../repositories/match_repository.dart';
+import '../services/italy_schedule_filter.dart';
 
 class PredictionScreen extends StatefulWidget {
   const PredictionScreen({super.key});
@@ -11,100 +16,438 @@ class PredictionScreen extends StatefulWidget {
 }
 
 class _PredictionScreenState extends State<PredictionScreen> {
-  final PredictionStore _predictionStore = PredictionStore.instance;
+  bool _loading = false;
 
-  final SavedPredictionStore _savedStore = SavedPredictionStore.instance;
+  String? _error;
+
+  int _processed = 0;
+  int _total = 0;
+
+  final List<_DailyExactResult> _results = [];
+
+  static const int _wantedResults = 3;
+  static const int _maximumMatchesToAnalyze = 36;
+  static const int _batchSize = 6;
 
   @override
   void initState() {
     super.initState();
 
-    _savedStore.initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _generate();
+    });
   }
 
   // ============================================================
-  // COLORI
+  // GENERAZIONE
   // ============================================================
 
-  Color _scoreColor(int score) {
-    if (score >= 80) {
-      return Colors.greenAccent;
-    }
-
-    if (score >= 65) {
-      return Colors.orangeAccent;
-    }
-
-    return Colors.redAccent;
-  }
-
-  Color _riskColor(String risk) {
-    final value = risk.toLowerCase();
-
-    if (value.contains('basso') || value.contains('low')) {
-      return Colors.greenAccent;
-    }
-
-    if (value.contains('alto') || value.contains('high')) {
-      return Colors.redAccent;
-    }
-
-    return Colors.orangeAccent;
-  }
-
-  // ============================================================
-  // DATA
-  // ============================================================
-
-  String _formatDate(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-
-    final month = date.month.toString().padLeft(2, '0');
-
-    final hour = date.hour.toString().padLeft(2, '0');
-
-    final minute = date.minute.toString().padLeft(2, '0');
-
-    return '$day/$month • $hour:$minute';
-  }
-
-  // ============================================================
-  // SALVA / RIMUOVI
-  // ============================================================
-
-  Future<void> _toggleSaved(SavedPrediction item) async {
-    final wasSaved = _savedStore.isSaved(item.fixtureId);
-
-    await _savedStore.toggle(item);
-
-    if (!mounted) {
+  Future<void> _generate() async {
+    if (_loading) {
       return;
     }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() {
+      _loading = true;
+      _error = null;
+      _processed = 0;
+      _total = 0;
+      _results.clear();
+    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          wasSaved ? 'Pronostico rimosso dai salvati.' : 'Pronostico salvato.',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
+    try {
+      final allMatches = await MatchRepository.getTodayMatches();
+
+      final matches = allMatches
+          .where(
+            (match) =>
+                match.hasTeamIds &&
+                _isUpcoming(match) &&
+                ItalyScheduleFilter.allows(match),
+          )
+          .toList();
+
+      matches.sort((a, b) => b.aiWeight.compareTo(a.aiWeight));
+
+      final amount = math.min(matches.length, _maximumMatchesToAnalyze);
+
+      final selectedMatches = matches.take(amount).toList();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _total = selectedMatches.length;
+      });
+
+      if (selectedMatches.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = 'Non ci sono partite disponibili nel Palinsesto Italia.';
+        });
+
+        return;
+      }
+
+      final candidates = <_DailyExactResult>[];
+
+      for (var start = 0; start < selectedMatches.length; start += _batchSize) {
+        final end = math.min(start + _batchSize, selectedMatches.length);
+
+        final batch = selectedMatches.sublist(start, end);
+
+        final analyzed = await Future.wait(
+          batch.map((match) async {
+            try {
+              final analysis = await SmartCore.analyze(match);
+
+              if (analysis.smartScore <= 0) {
+                return null;
+              }
+
+              return _buildExactResult(match, analysis);
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+
+        candidates.addAll(analyzed.whereType<_DailyExactResult>());
+
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _processed = end;
+        });
+      }
+
+      candidates.sort((a, b) => b.rankScore.compareTo(a.rankScore));
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _results
+          ..clear()
+          ..addAll(candidates.take(_wantedResults));
+
+        _loading = false;
+
+        if (_results.isEmpty) {
+          _error =
+              'SmartBet non ha trovato risultati esatti '
+              'con affidabilità sufficiente.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loading = false;
+        _error =
+            'Non è stato possibile generare i risultati del giorno. '
+            'Riprova tra poco.';
+      });
+    }
+  }
+
+  // ============================================================
+  // COSTRUZIONE RISULTATO ESATTO
+  // ============================================================
+
+  _DailyExactResult _buildExactResult(
+    MatchModel match,
+    AnalysisResult analysis,
+  ) {
+    final totalGoals = _estimateTotalGoals(analysis);
+
+    final home = analysis.homeProbability.toDouble();
+    final away = analysis.awayProbability.toDouble();
+    final draw = analysis.drawProbability.toDouble();
+
+    final homeAwayTotal = math.max(1.0, home + away);
+
+    final rawHomeShare = home / homeAwayTotal;
+
+    // Il pareggio riduce la separazione tra le due squadre.
+    final decisiveness = (1.0 - draw / 100.0).clamp(0.45, 0.90).toDouble();
+
+    var homeShare = 0.5 + (rawHomeShare - 0.5) * decisiveness;
+
+    homeShare = homeShare.clamp(0.27, 0.73).toDouble();
+
+    // Goal / No Goal ci aiuta a correggere la distribuzione
+    // senza utilizzare quote bookmaker.
+    if (analysis.goalProbability >= 62) {
+      homeShare = homeShare.clamp(0.32, 0.68).toDouble();
+    }
+
+    if (analysis.noGoalProbability >= 65) {
+      if (homeShare >= 0.5) {
+        homeShare = math.min(0.76, homeShare + 0.04);
+      } else {
+        homeShare = math.max(0.24, homeShare - 0.04);
+      }
+    }
+
+    final homeXg = totalGoals * homeShare;
+    final awayXg = totalGoals - homeXg;
+
+    final scoreOptions = <_ExactScore>[];
+
+    for (var homeGoals = 0; homeGoals <= 5; homeGoals++) {
+      for (var awayGoals = 0; awayGoals <= 5; awayGoals++) {
+        var probability =
+            _poisson(homeGoals, homeXg) * _poisson(awayGoals, awayXg);
+
+        // Coerenza leggera con la distribuzione 1X2.
+        if (homeGoals > awayGoals) {
+          probability *= 0.80 + (analysis.homeProbability / 100.0) * 0.40;
+        } else if (homeGoals == awayGoals) {
+          probability *= 0.80 + (analysis.drawProbability / 100.0) * 0.40;
+        } else {
+          probability *= 0.80 + (analysis.awayProbability / 100.0) * 0.40;
+        }
+
+        scoreOptions.add(
+          _ExactScore(
+            homeGoals: homeGoals,
+            awayGoals: awayGoals,
+            probability: probability,
+          ),
+        );
+      }
+    }
+
+    final probabilityTotal = scoreOptions.fold<double>(
+      0.0,
+      (sum, item) => sum + item.probability,
     );
+
+    final normalized = scoreOptions
+        .map(
+          (item) => _ExactScore(
+            homeGoals: item.homeGoals,
+            awayGoals: item.awayGoals,
+            probability: probabilityTotal > 0
+                ? item.probability / probabilityTotal
+                : 0.0,
+          ),
+        )
+        .toList();
+
+    normalized.sort((a, b) => b.probability.compareTo(a.probability));
+
+    final primary = normalized.first;
+    final alternative = normalized[1];
+
+    final combinedExactProbability =
+        primary.probability + alternative.probability;
+
+    final bestMatchProbability = math.max(
+      analysis.homeProbability,
+      math.max(analysis.drawProbability, analysis.awayProbability),
+    );
+
+    // Ranking utilizzato esclusivamente per scegliere
+    // le tre partite più "leggibili".
+    final rankScore =
+        combinedExactProbability * 100.0 * 0.55 +
+        analysis.smartScore * 0.30 +
+        bestMatchProbability * 0.15;
+
+    return _DailyExactResult(
+      match: match,
+      analysis: analysis,
+      homeExpectedGoals: homeXg,
+      awayExpectedGoals: awayXg,
+      primary: primary,
+      alternative: alternative,
+      rankScore: rankScore,
+    );
+  }
+
+  // ============================================================
+  // GOL ATTESI
+  // ============================================================
+
+  double _estimateTotalGoals(AnalysisResult analysis) {
+    final estimates = <double>[];
+
+    if (analysis.over25Probability > 0) {
+      estimates.add(
+        _lambdaFromOverProbability(
+          analysis.over25Probability / 100.0,
+          minimumGoals: 3,
+        ),
+      );
+    }
+
+    if (analysis.over15Probability > 0) {
+      estimates.add(
+        _lambdaFromOverProbability(
+          analysis.over15Probability / 100.0,
+          minimumGoals: 2,
+        ),
+      );
+    }
+
+    double total;
+
+    if (estimates.isNotEmpty) {
+      total = estimates.reduce((a, b) => a + b) / estimates.length;
+    } else {
+      // Fallback prudente.
+      total = 2.45;
+
+      if (analysis.goalProbability > 50) {
+        total += (analysis.goalProbability - 50) / 100.0;
+      }
+
+      if (analysis.noGoalProbability > 60) {
+        total -= 0.20;
+      }
+    }
+
+    return total.clamp(1.20, 4.50).toDouble();
+  }
+
+  double _lambdaFromOverProbability(
+    double probability, {
+    required int minimumGoals,
+  }) {
+    final target = probability.clamp(0.05, 0.95).toDouble();
+
+    var low = 0.25;
+    var high = 6.0;
+
+    for (var i = 0; i < 45; i++) {
+      final mid = (low + high) / 2.0;
+
+      final over = 1.0 - _poissonCumulative(minimumGoals - 1, mid);
+
+      if (over < target) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    return (low + high) / 2.0;
+  }
+
+  double _poissonCumulative(int maxGoals, double lambda) {
+    var sum = 0.0;
+
+    for (var goals = 0; goals <= maxGoals; goals++) {
+      sum += _poisson(goals, lambda);
+    }
+
+    return sum;
+  }
+
+  double _poisson(int goals, double lambda) {
+    var factorial = 1.0;
+
+    for (var i = 2; i <= goals; i++) {
+      factorial *= i;
+    }
+
+    return math.exp(-lambda) * math.pow(lambda, goals).toDouble() / factorial;
+  }
+
+  // ============================================================
+  // UTILITY
+  // ============================================================
+
+  bool _isUpcoming(MatchModel match) {
+    final parsed = DateTime.tryParse(match.date);
+
+    if (parsed == null) {
+      return true;
+    }
+
+    return parsed.toLocal().isAfter(
+      DateTime.now().subtract(const Duration(minutes: 5)),
+    );
+  }
+
+  String _competitionLabel(MatchModel match) {
+    final country = match.country.trim();
+    final league = match.league.trim();
+
+    if (country.isNotEmpty && league.isNotEmpty) {
+      return '$country • $league';
+    }
+
+    if (league.isNotEmpty) {
+      return league;
+    }
+
+    return country;
+  }
+
+  String _matchTime(MatchModel match) {
+    final date = DateTime.tryParse(match.date);
+
+    if (date == null) {
+      return '';
+    }
+
+    final local = date.toLocal();
+
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
+  }
+
+  Color _scoreColor(int score) {
+    if (score >= 70) {
+      return Colors.greenAccent;
+    }
+
+    if (score >= 55) {
+      return Colors.orangeAccent;
+    }
+
+    return Colors.white70;
+  }
+
+  String _confidenceLabel(_DailyExactResult result) {
+    final combined =
+        result.primary.probability + result.alternative.probability;
+
+    if (result.analysis.smartScore >= 70 && combined >= 0.24) {
+      return 'Alta';
+    }
+
+    if (result.analysis.smartScore >= 55 && combined >= 0.18) {
+      return 'Buona';
+    }
+
+    return 'Prudente';
   }
 
   // ============================================================
   // CARD
   // ============================================================
 
-  Widget _predictionCard(SavedPrediction item) {
-    final scoreColor = _scoreColor(item.smartScore);
+  Widget _resultCard(_DailyExactResult item, int position) {
+    final scoreColor = _scoreColor(item.analysis.smartScore);
 
-    final isSaved = _savedStore.isSaved(item.fixtureId);
+    final competition = _competitionLabel(item.match);
+    final time = _matchTime(item.match);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: const Color(0xFF1F2937),
         borderRadius: BorderRadius.circular(18),
@@ -113,244 +456,159 @@ class _PredictionScreenState extends State<PredictionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ====================================================
-          // HEADER
-          // ====================================================
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  item.matchLabel,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 5),
-
-              // =================================================
-              // STELLA SALVATAGGIO
-              // =================================================
-              IconButton(
-                tooltip: isSaved ? 'Rimuovi dai salvati' : 'Salva pronostico',
-                onPressed: () {
-                  _toggleSaved(item);
-                },
-                icon: Icon(
-                  isSaved ? Icons.star : Icons.star_border,
-                  color: isSaved ? Colors.amber : Colors.white38,
-                ),
-              ),
-
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: scoreColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFF00C853).withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
                 ),
                 child: Text(
-                  'Score ${item.smartScore}',
-                  style: TextStyle(
-                    color: scoreColor,
-                    fontSize: 11,
+                  '$position',
+                  style: const TextStyle(
+                    color: Color(0xFF00C853),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-            ],
-          ),
-
-          const SizedBox(height: 7),
-
-          Text(
-            '${item.league} • '
-            '${_formatDate(item.matchDate)}',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-
-          const SizedBox(height: 15),
-
-          // ====================================================
-          // PRONOSTICO / PROBABILITÀ / RISCHIO
-          // ====================================================
-          Row(
-            children: [
-              Expanded(
-                child: _mainBox(
-                  title: 'PRONOSTICO',
-                  value: item.prediction,
-                  color: const Color(0xFF00C853),
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              Expanded(
-                child: _mainBox(
-                  title: 'PROB. MAX',
-                  value: '${item.bestProbability}%',
-                  color: Colors.amber,
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              Expanded(
-                child: _mainBox(
-                  title: 'RISCHIO',
-                  value: item.risk,
-                  color: _riskColor(item.risk),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // ====================================================
-          // 1 X 2
-          // ====================================================
-          Row(
-            children: [
-              Expanded(child: _probabilityBox('1', item.homeProbability)),
-
-              const SizedBox(width: 7),
-
-              Expanded(child: _probabilityBox('X', item.drawProbability)),
-
-              const SizedBox(width: 7),
-
-              Expanded(child: _probabilityBox('2', item.awayProbability)),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          const Divider(color: Colors.white10),
-
-          const SizedBox(height: 12),
-
-          // ====================================================
-          // VALUE BET
-          // ====================================================
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.show_chart, color: Colors.amber, size: 18),
-
-              const SizedBox(width: 7),
-
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  item.valueBet,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                  competition,
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
+              if (time.isNotEmpty)
+                Text(
+                  time,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
             ],
           ),
 
-          // ====================================================
-          // GIOCATA CONSIGLIATA
-          // ====================================================
-          if (item.shouldBet) ...[
-            const SizedBox(height: 14),
+          const SizedBox(height: 14),
 
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00C853).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF00C853).withValues(alpha: 0.20),
+          Text(
+            '${item.match.homeTeam} - '
+            '${item.match.awayTeam}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Row(
+            children: [
+              Expanded(
+                child: _exactScoreBox(
+                  title: 'RISULTATO PRINCIPALE',
+                  score: item.primary.label,
+                  probability: item.primary.probability,
+                  primary: true,
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle,
-                    color: Color(0xFF00C853),
-                    size: 20,
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Expanded(
-                    child: Text(
-                      '${item.stakeOutcome} '
-                      '@ ${item.stakeOdd.toStringAsFixed(2)} '
-                      '• ${item.stakeBookmaker}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Text(
-                    '${item.recommendedStakePercent.toStringAsFixed(2)}%',
-                    style: const TextStyle(
-                      color: Color(0xFF00C853),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _exactScoreBox(
+                  title: 'ALTERNATIVA',
+                  score: item.alternative.label,
+                  probability: item.alternative.probability,
+                  primary: false,
+                ),
               ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: _infoBox(
+                  'Gol attesi',
+                  '${item.homeExpectedGoals.toStringAsFixed(2)}'
+                      ' - '
+                      '${item.awayExpectedGoals.toStringAsFixed(2)}',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _infoBox(
+                  'Smart Score',
+                  '${item.analysis.smartScore}',
+                  valueColor: scoreColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _infoBox('Affidabilità', _confidenceLabel(item))),
+            ],
+          ),
+
+          const SizedBox(height: 13),
+
+          const Text(
+            'I punteggi sono scenari statistici stimati '
+            'da probabilità SmartBet e mercati gol. '
+            'Le quote bookmaker non vengono utilizzate '
+            'per generarli.',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 10.5,
+              height: 1.35,
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 
-  // ============================================================
-  // MAIN BOX
-  // ============================================================
-
-  Widget _mainBox({
+  Widget _exactScoreBox({
     required String title,
-    required String value,
-    required Color color,
+    required String score,
+    required double probability,
+    required bool primary,
   }) {
+    final accent = primary ? const Color(0xFF00C853) : Colors.orangeAccent;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(11),
+        color: accent.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
       ),
       child: Column(
         children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white38,
+            style: TextStyle(
+              color: accent,
               fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            score,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '${(probability * 100).toStringAsFixed(1)}%',
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -359,76 +617,31 @@ class _PredictionScreenState extends State<PredictionScreen> {
     );
   }
 
-  // ============================================================
-  // PROBABILITY BOX
-  // ============================================================
-
-  Widget _probabilityBox(String label, int probability) {
+  Widget _infoBox(String label, String value, {Color? valueColor}) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white54,
-              fontWeight: FontWeight.bold,
-            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white38, fontSize: 9.5),
           ),
-
           const SizedBox(height: 4),
-
           Text(
-            '$probability%',
-            style: const TextStyle(
-              color: Colors.white,
+            value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: valueColor ?? Colors.white,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // EMPTY
-  // ============================================================
-
-  Widget _emptyState() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.psychology, color: Color(0xFF00C853), size: 65),
-
-            SizedBox(height: 18),
-
-            Text(
-              'Nessun pronostico AI disponibile',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            SizedBox(height: 10),
-
-            Text(
-              'I pronostici generati dalle analisi '
-              'SmartBet compariranno automaticamente qui.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white60, height: 1.4),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -441,130 +654,198 @@ class _PredictionScreenState extends State<PredictionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
-
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Pronostico AI',
+          'Risultati del Giorno AI',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
-            tooltip: 'Rimuovi pronostici scaduti',
-            onPressed: () {
-              _predictionStore.removeExpired();
-            },
-            icon: const Icon(Icons.cleaning_services_outlined),
+            tooltip: 'Rigenera',
+            onPressed: _loading ? null : _generate,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
+      body: _buildBody(),
+    );
+  }
 
-      // Ascoltiamo entrambi gli store:
-      // pronostici + salvati.
-      body: ListenableBuilder(
-        listenable: Listenable.merge([_predictionStore, _savedStore]),
-        builder: (context, child) {
-          if (!_savedStore.initialized) {
-            return const Center(child: CircularProgressIndicator());
-          }
+  Widget _buildBody() {
+    if (_loading && _results.isEmpty) {
+      final progress = _total > 0 ? _processed / _total : null;
 
-          final items = _predictionStore.items;
-
-          if (items.isEmpty) {
-            return _emptyState();
-          }
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // ================================================
-              // RIEPILOGO
-              // ================================================
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF00C853), Color(0xFF009688)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
+              CircularProgressIndicator(value: progress),
+              const SizedBox(height: 20),
+              const Text(
+                'SmartBet sta cercando i 3 risultati '
+                'più interessanti del giorno…',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: Row(
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _total > 0
+                    ? 'Analizzate $_processed / $_total partite'
+                    : 'Caricamento Palinsesto Italia…',
+                style: const TextStyle(color: Colors.white54),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_error != null && _results.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.scoreboard_outlined,
+                color: Color(0xFF00C853),
+                size: 64,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _generate,
+                icon: const Icon(Icons.refresh),
+                label: const Text('RIPROVA'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _generate,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF00C853), Color(0xFF009688)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Expanded(
-                      child: _summaryItem(
-                        title: 'Analizzati',
-                        value: '${_predictionStore.count}',
-                      ),
-                    ),
-
-                    Expanded(
-                      child: _summaryItem(
-                        title: 'Giocabili',
-                        value: '${_predictionStore.playableCount}',
-                      ),
-                    ),
-
-                    Expanded(
-                      child: _summaryItem(
-                        title: 'Salvati',
-                        value: '${_savedStore.count}',
+                    Icon(Icons.scoreboard_outlined, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text(
+                      'TOP 3 DEL GIORNO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
-              ),
-
-              const SizedBox(height: 22),
-
-              const Text(
-                'Migliori pronostici',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                SizedBox(height: 8),
+                Text(
+                  'SmartBet seleziona automaticamente '
+                  '3 partite dal Palinsesto Italia e propone '
+                  'due scenari di risultato esatto per ciascuna.',
+                  style: TextStyle(color: Colors.white, height: 1.35),
                 ),
-              ),
+              ],
+            ),
+          ),
 
-              const SizedBox(height: 5),
+          const SizedBox(height: 22),
 
-              const Text(
-                'Ordinati per Smart Score e probabilità',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
+          ...List.generate(
+            _results.length,
+            (index) => _resultCard(_results[index], index + 1),
+          ),
 
-              const SizedBox(height: 14),
+          if (_loading) ...[
+            const SizedBox(height: 8),
+            const Center(child: CircularProgressIndicator()),
+          ],
 
-              ...items.map(_predictionCard),
-            ],
-          );
-        },
+          const SizedBox(height: 6),
+
+          const Text(
+            'Previsioni statistiche a scopo informativo. '
+            'I risultati esatti hanno naturalmente una '
+            'probabilità inferiore rispetto ai mercati più ampi. '
+            'Gioca responsabilmente.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white30,
+              fontSize: 10.5,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
+}
 
-  // ============================================================
-  // SUMMARY
-  // ============================================================
+// ============================================================
+// MODELLI LOCALI
+// ============================================================
 
-  Widget _summaryItem({required String title, required String value}) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 25,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+class _DailyExactResult {
+  final MatchModel match;
+  final AnalysisResult analysis;
 
-        const SizedBox(height: 4),
+  final double homeExpectedGoals;
+  final double awayExpectedGoals;
 
-        Text(
-          title,
-          style: const TextStyle(color: Colors.white70, fontSize: 11),
-        ),
-      ],
-    );
-  }
+  final _ExactScore primary;
+  final _ExactScore alternative;
+
+  final double rankScore;
+
+  const _DailyExactResult({
+    required this.match,
+    required this.analysis,
+    required this.homeExpectedGoals,
+    required this.awayExpectedGoals,
+    required this.primary,
+    required this.alternative,
+    required this.rankScore,
+  });
+}
+
+class _ExactScore {
+  final int homeGoals;
+  final int awayGoals;
+  final double probability;
+
+  const _ExactScore({
+    required this.homeGoals,
+    required this.awayGoals,
+    required this.probability,
+  });
+
+  String get label => '$homeGoals-$awayGoals';
 }

@@ -499,7 +499,7 @@ class AnalysisDetailScreen extends StatefulWidget {
 class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   final BankrollStore _bankroll = BankrollStore.instance;
 
-  bool _registering = false;
+  final bool _registering = false;
 
   // ============================================================
   // MATCH LABEL

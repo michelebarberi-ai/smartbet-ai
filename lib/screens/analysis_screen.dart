@@ -8,6 +8,7 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import 'analysis_detail_screen.dart';
+import 'smart_score_filtered_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -49,6 +50,65 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     _selectedDate = _dateOnly(DateTime.now());
     _matches = MatchRepository.getTodayMatches();
+  }
+
+  // ============================================================
+  // ERRORI RETE / API
+  // ============================================================
+
+  String _friendlyErrorMessage(Object? error) {
+    final raw = error?.toString().toLowerCase() ?? '';
+
+    if (raw.contains('failed host lookup') ||
+        raw.contains('socketexception') ||
+        raw.contains('network is unreachable') ||
+        raw.contains('connection refused') ||
+        raw.contains('connection reset') ||
+        raw.contains('no route to host')) {
+      return 'Impossibile collegarsi al servizio dati. '
+          'Controlla la connessione internet e riprova.';
+    }
+
+    if (raw.contains('timeout') || raw.contains('timed out')) {
+      return 'Il servizio sta impiegando troppo tempo a rispondere. '
+          'Riprova tra qualche istante.';
+    }
+
+    if (raw.contains('429') ||
+        raw.contains('too many requests') ||
+        raw.contains('rate limit')) {
+      return 'Il servizio dati è temporaneamente occupato. '
+          'Attendi qualche istante e riprova.';
+    }
+
+    if (raw.contains('401') ||
+        raw.contains('403') ||
+        raw.contains('unauthorized') ||
+        raw.contains('forbidden')) {
+      return 'Il servizio dati non è momentaneamente disponibile. '
+          'Riprova più tardi.';
+    }
+
+    return 'Si è verificato un problema durante il recupero dei dati. '
+        'Riprova tra poco.';
+  }
+
+  void _retryMatches() {
+    setState(() {
+      _analysisFutures.clear();
+
+      if (_isTodaySelected) {
+        _matches = MatchRepository.getTodayMatches();
+      } else {
+        _matches = MatchRepository.getMatchesByDate(_selectedDate);
+      }
+    });
+  }
+
+  void _retryPreAnalysis(MatchModel match) {
+    setState(() {
+      _analysisFutures.remove(match.fixtureId);
+    });
   }
 
   // ============================================================
@@ -391,7 +451,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Errore durante la creazione della schedina: $e'),
+          content: Text(_friendlyErrorMessage(e)),
+          action: SnackBarAction(label: 'RIPROVA', onPressed: _createCoupon),
         ),
       );
     } finally {
@@ -524,7 +585,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Errore durante la schedina AI automatica: $e')),
+        SnackBar(
+          content: Text(_friendlyErrorMessage(e)),
+          action: SnackBarAction(
+            label: 'RIPROVA',
+            onPressed: _createAutoCoupon,
+          ),
+        ),
       );
     } finally {
       progress.dispose();
@@ -850,6 +917,104 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   // ============================================================
+  // FILTRO SMART SCORE - APRE PAGINA DEDICATA
+  // ============================================================
+
+  Future<void> _openSmartScoreFilter(int minimum) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SmartScoreFilteredScreen(
+          selectedDate: _selectedDate,
+          minimumSmartScore: minimum,
+        ),
+      ),
+    );
+  }
+
+  Widget _smartScoreFilters() {
+    Widget chip(String label, {required bool selected, VoidCallback? onTap}) {
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) {
+          onTap?.call();
+        },
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+        showCheckmark: false,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.filter_alt_outlined, color: Color(0xFF00C853), size: 18),
+            SizedBox(width: 7),
+            Text(
+              'Affidabilità pre-analisi',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              chip('Tutte', selected: true),
+              const SizedBox(width: 8),
+              chip(
+                '≥55',
+                selected: false,
+                onTap: () => _openSmartScoreFilter(55),
+              ),
+              const SizedBox(width: 8),
+              chip(
+                '≥60',
+                selected: false,
+                onTap: () => _openSmartScoreFilter(60),
+              ),
+              const SizedBox(width: 8),
+              chip(
+                '≥65',
+                selected: false,
+                onTap: () => _openSmartScoreFilter(65),
+              ),
+              const SizedBox(width: 8),
+              chip(
+                '≥75',
+                selected: false,
+                onTap: () => _openSmartScoreFilter(75),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 7),
+        const Text(
+          'Toccando un filtro si apre una pagina dedicata '
+          'con le sole partite che raggiungono la soglia scelta.',
+          style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.35),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
   // COLORE SMART SCORE
   // ============================================================
 
@@ -989,24 +1154,44 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "${match.homeTeam} - ${match.awayTeam}",
+                    '${match.homeTeam} - ${match.awayTeam}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Errore durante l'analisi",
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(height: 10),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.wifi_off_rounded,
+                        color: Colors.orangeAccent,
+                        size: 19,
+                      ),
+                      SizedBox(width: 7),
+                      Text(
+                        'Analisi non disponibile',
+                        style: TextStyle(
+                          color: Colors.orangeAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    _friendlyErrorMessage(snapshot.error),
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    snapshot.error.toString(),
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => _retryPreAnalysis(match),
+                    icon: const Icon(Icons.refresh, size: 17),
+                    label: const Text('RIPROVA'),
                   ),
                 ],
               ),
@@ -1334,33 +1519,44 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       // SMARTBET AI AVANZATA
                       // ========================================================
 
-                      final advancedResult = await SmartBetAiService()
-                          .analyzeMatch(match);
+                      try {
+                        final advancedResult = await SmartBetAiService()
+                            .analyzeMatch(match);
 
-                      if (!context.mounted) {
-                        return;
-                      }
+                        if (!context.mounted) {
+                          return;
+                        }
 
-                      // Chiude il loading.
-                      Navigator.of(context, rootNavigator: true).pop();
+                        Navigator.of(context, rootNavigator: true).pop();
 
-                      if (!context.mounted) {
-                        return;
-                      }
+                        if (!context.mounted) {
+                          return;
+                        }
 
-                      // ========================================================
-                      // DETTAGLIO
-                      // ========================================================
-
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AnalysisDetailScreen(
-                            match: match,
-                            result: advancedResult,
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AnalysisDetailScreen(
+                              match: match,
+                              result: advancedResult,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } catch (e) {
+                        if (!context.mounted) {
+                          return;
+                        }
+
+                        Navigator.of(context, rootNavigator: true).pop();
+
+                        if (!context.mounted) {
+                          return;
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(_friendlyErrorMessage(e))),
+                        );
+                      }
                     },
                     icon: const Icon(Icons.psychology, size: 18),
                     label: const Text(
@@ -1712,6 +1908,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
             ),
           ),
+
+          const SizedBox(height: 14),
+
+          _smartScoreFilters(),
         ],
       ),
     );
@@ -1802,15 +2002,60 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           // ------------------------------------------------------
 
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  snapshot.error.toString(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+            return Column(
+              children: [
+                _header(),
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.cloud_off_rounded,
+                            color: Colors.orangeAccent,
+                            size: 58,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Servizio dati non raggiungibile',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            _friendlyErrorMessage(snapshot.error),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          FilledButton.icon(
+                            onPressed: _retryMatches,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('RIPROVA'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF00C853),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           }
 

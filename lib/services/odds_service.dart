@@ -182,14 +182,12 @@ class OddsService {
       final response = await _client.get(uri, headers: _headers);
 
       if (response.statusCode != 200) {
-        _marketCache[fixtureId] = null;
         return null;
       }
 
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        _marketCache[fixtureId] = null;
         return null;
       }
 
@@ -197,7 +195,6 @@ class OddsService {
 
       if (errors is Map && errors.isNotEmpty) {
         print('ODDS API ERROR: $errors');
-        _marketCache[fixtureId] = null;
         return null;
       }
 
@@ -205,7 +202,6 @@ class OddsService {
 
       if (responseData is! List || responseData.isEmpty) {
         print('QUOTE PRE-MATCH NON DISPONIBILI');
-        _marketCache[fixtureId] = null;
         return null;
       }
 
@@ -258,6 +254,7 @@ class OddsService {
             }
 
             final betName = betItem['name']?.toString().trim() ?? '';
+            final betId = _toInt(betItem['id']);
             final values = betItem['values'];
 
             if (values is! List) {
@@ -267,7 +264,7 @@ class OddsService {
             // ------------------------------------------------------
             // MATCH WINNER 1X2
             // ------------------------------------------------------
-            if (_isMatchWinnerBet(betName)) {
+            if (_isMatchWinnerBet(betId, betName)) {
               double homeOdd = 0;
               double drawOdd = 0;
               double awayOdd = 0;
@@ -335,7 +332,7 @@ class OddsService {
             // ------------------------------------------------------
             // DOUBLE CHANCE
             // ------------------------------------------------------
-            if (_isDoubleChanceBet(betName)) {
+            if (_isDoubleChanceBet(betId, betName)) {
               for (final valueItem in values) {
                 if (valueItem is! Map<String, dynamic>) {
                   continue;
@@ -369,7 +366,7 @@ class OddsService {
             // ------------------------------------------------------
             // OVER / UNDER GOALS
             // ------------------------------------------------------
-            if (_isGoalsOverUnderBet(betName)) {
+            if (_isGoalsOverUnderBet(betId, betName)) {
               for (final valueItem in values) {
                 if (valueItem is! Map<String, dynamic>) {
                   continue;
@@ -408,7 +405,7 @@ class OddsService {
             // ------------------------------------------------------
             // BOTH TEAMS TO SCORE
             // ------------------------------------------------------
-            if (_isBothTeamsScoreBet(betName)) {
+            if (_isBothTeamsScoreBet(betId, betName)) {
               for (final valueItem in values) {
                 if (valueItem is! Map<String, dynamic>) {
                   continue;
@@ -522,7 +519,6 @@ class OddsService {
       return result;
     } catch (e) {
       print('SMARTBET ODDS EXCEPTION: $e');
-      _marketCache[fixtureId] = null;
       return null;
     }
   }
@@ -551,33 +547,48 @@ class OddsService {
     }
   }
 
-  bool _isMatchWinnerBet(String betName) {
-    final normalized = _normalizeText(betName);
+  bool _isMatchWinnerBet(int betId, String betName) {
+    // API-Football pre-match: Bet ID 1 = Match Winner.
+    // Il fallback sul nome serve solo per compatibilita se l'id non arriva.
+    if (betId > 0) {
+      return betId == 1;
+    }
 
-    return normalized == 'match winner' ||
-        normalized == 'winner' ||
-        normalized == '1x2' ||
-        normalized.contains('match winner');
+    final normalized = _normalizeText(betName);
+    return normalized == 'match winner';
   }
 
-  bool _isDoubleChanceBet(String betName) {
-    final normalized = _normalizeText(betName);
-    return normalized.contains('double chance');
+  bool _isDoubleChanceBet(int betId, String betName) {
+    // API-Football pre-match: Bet ID 12 = Double Chance.
+    if (betId > 0) {
+      return betId == 12;
+    }
+
+    return _normalizeText(betName) == 'double chance';
   }
 
-  bool _isGoalsOverUnderBet(String betName) {
-    final normalized = _normalizeText(betName);
+  bool _isGoalsOverUnderBet(int betId, String betName) {
+    // API-Football pre-match:
+    // 5  = Goals Over/Under FULL TIME
+    // 6  = Goals Over/Under First Half
+    // 26 = Goals Over/Under Second Half
+    // Usiamo quindi l'ID 5 per evitare qualunque sotto-mercato.
+    if (betId > 0) {
+      return betId == 5;
+    }
 
-    return normalized.contains('over under') ||
-        normalized.contains('goals over under') ||
-        normalized.contains('total goals');
+    return _normalizeText(betName) == 'goals over under';
   }
 
-  bool _isBothTeamsScoreBet(String betName) {
-    final normalized = _normalizeText(betName);
+  bool _isBothTeamsScoreBet(int betId, String betName) {
+    // API-Football pre-match: Bet ID 8 = Both Teams Score.
+    if (betId > 0) {
+      return betId == 8;
+    }
 
-    return normalized.contains('both teams') &&
-        (normalized.contains('score') || normalized.contains('scor'));
+    final normalized = _normalizeText(betName);
+    return normalized == 'both teams score' ||
+        normalized == 'both teams to score';
   }
 
   String? _doubleChanceOutcome(String raw) {
@@ -610,7 +621,10 @@ class OddsService {
   }
 
   String? _goalsOutcome(String raw, String betName) {
-    final value = '${_normalizeText(betName)} ${_normalizeText(raw)}';
+    // La linea deve provenire dal VALUE del mercato, non dal nome del bet.
+    // Questo riduce il rischio di confondere mercati secondari con il
+    // totale gol full-time principale.
+    final value = _normalizeText(raw);
 
     final isOver = value.contains('over');
     final isUnder = value.contains('under');

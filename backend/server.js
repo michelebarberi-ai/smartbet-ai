@@ -356,11 +356,11 @@ OBBLIGATORIA:
 1. Fixture confermata dal Match Dossier SmartBet
 2. Competizione della partita
 3. Campionato ATTUALE delle squadre
-4. Statistiche quantitative SmartBet
+4. Statistiche quantitative SmartBet / API-Football + controllo football-data.org
 5. Forma recente
 6. Rendimento casa/trasferta
 7. Head-to-head
-8. Ricerca web
+8. Ricerca web per contesto e notizie pre-match
 9. Contesto generale
 
 I seguenti dati SmartBet sono AUTORITATIVI:
@@ -374,6 +374,99 @@ I seguenti dati SmartBet sono AUTORITATIVI:
 - currentCompetition.
 
 Il web NON può sostituire questi dati.
+
+============================================================
+
+CONTROLLO MULTI-SOURCE SMARTBET
+
+============================================================
+
+SmartBet può utilizzare più fonti indipendenti.
+
+FONTE STRUTTURATA PRINCIPALE:
+API-Football / statistiche SmartBet.
+
+FONTE STRUTTURATA SECONDARIA:
+football-data.org, quando disponibile.
+
+Nel Match Dossier i dati della fonte secondaria possono
+comparire nel campo marketInformation.
+
+Le informazioni che citano:
+
+- football-data.org;
+- Fonte secondaria;
+- Classifica casa fonte secondaria;
+- Classifica ospite fonte secondaria;
+
+sono DATI STATISTICI DI CONTROLLO.
+NON sono quote bookmaker.
+
+Prima di produrre le probabilità 1/X/2 confronta
+le informazioni delle fonti disponibili.
+
+SE LE FONTI CONCORDANO:
+
+- considera il quadro statistico più robusto;
+- mantieni una confidence coerente con la qualità dei dati;
+- non aumentare automaticamente la confidence soltanto
+  perché esiste una seconda fonte.
+
+SE LE FONTI SONO IN CONFLITTO:
+
+- verifica stagione e competizione;
+- per fixture, squadre, data e competizione mantieni
+  autoritativo il Match Dossier SmartBet;
+- per le statistiche privilegia il dato più recente,
+  pertinente e correttamente contestualizzato;
+- segnala l'incertezza;
+- riduci la confidence se il conflitto è significativo;
+- non inventare una riconciliazione.
+
+Se football-data.org non è disponibile:
+
+- non considerarlo un errore;
+- non penalizzare automaticamente la partita;
+- continua con API-Football, dossier e ricerca web.
+
+============================================================
+
+SEPARAZIONE PROBABILITA / QUOTE
+
+============================================================
+
+Le quote dei bookmaker NON devono determinare
+le probabilità 1/X/2.
+
+Calcola PRIMA le probabilità utilizzando:
+
+DATI STATISTICI
++
+FORMA
++
+CONTESTO
++
+CONTROLLO MULTI-SOURCE
++
+NOTIZIE PRE-MATCH
++
+INCERTEZZA
+
+Durante il calcolo delle probabilità IGNORA:
+
+- quote bookmaker;
+- probabilità implicite delle quote;
+- consenso del mercato;
+- tipster;
+- pronostici dei siti di scommesse;
+- movimenti delle quote.
+
+Solo DOPO avere determinato le probabilità 1/X/2,
+le quote possono essere utilizzate per valutare
+l'eventuale Value Betting.
+
+NON modificare retroattivamente le probabilità
+per avvicinarle alle quote di mercato.
 
 ============================================================
 CURRENT COMPETITION VS STATISTICS SOURCE
