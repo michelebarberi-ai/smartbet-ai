@@ -126,6 +126,293 @@ app.get("/health", (req, res) => {
 });
 
 // ============================================================
+// API-FOOTBALL PROXY + CACHE CENTRALIZZATA
+// ============================================================
+
+const footballApiKey = process.env.FOOTBALL_API_KEY;
+const footballApiBaseUrl = "https://v3.football.api-sports.io";
+
+// Cache condivisa da tutti gli utenti che raggiungono
+// questa istanza del backend.
+const footballCache = new Map();
+
+// Evita che 20 richieste simultanee per la stessa risorsa
+// provochino 20 chiamate ad API-Football.
+const footballInFlight = new Map();
+
+const FIXTURES_TTL_MS = 15 * 60 * 1000;
+const ODDS_TTL_MS = 5 * 60 * 1000;
+
+function getFootballCache(key) {
+  const cached = footballCache.get(key);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() >= cached.expiresAt) {
+    footballCache.delete(key);
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setFootballCache(key, data, ttlMs) {
+  footballCache.set(key, {
+    data,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+async function requestApiFootball({
+  path,
+  query,
+  ttlMs,
+}) {
+  if (!footballApiKey) {
+    const error = new Error(
+      "FOOTBALL_API_KEY non configurata sul backend.",
+    );
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() !== ""
+    ) {
+      params.set(key, String(value));
+    }
+  }
+
+  const cacheKey = `${path}?${params.toString()}`;
+
+  const cached = getFootballCache(cacheKey);
+
+  if (cached !== null) {
+    console.log(
+      `[API-FOOTBALL CACHE HIT] ${cacheKey}`,
+    );
+
+    return {
+      data: cached,
+      cache: "HIT",
+    };
+  }
+
+  const existingRequest =
+    footballInFlight.get(cacheKey);
+
+  if (existingRequest) {
+    console.log(
+      `[API-FOOTBALL SINGLE-FLIGHT] ${cacheKey}`,
+    );
+
+    const data = await existingRequest;
+
+    return {
+      data,
+      cache: "SHARED",
+    };
+  }
+
+  const requestPromise = (async () => {
+    const url =
+      `${footballApiBaseUrl}${path}` +
+      `?${params.toString()}`;
+
+    console.log(
+      `[API-FOOTBALL REQUEST] ${cacheKey}`,
+    );
+
+    const response = await fetch(url, {
+      headers: {
+        "x-apisports-key": footballApiKey,
+      },
+    });
+
+    const text = await response.text();
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      const error = new Error(
+        `Risposta API-Football non valida (${response.status}).`,
+      );
+      error.statusCode = 502;
+      throw error;
+    }
+
+    if (!response.ok) {
+      const error = new Error(
+        `API-Football HTTP ${response.status}`,
+      );
+      error.statusCode = 502;
+      error.apiResponse = data;
+      throw error;
+    }
+
+    if (
+      data &&
+      data.errors &&
+      typeof data.errors === "object" &&
+      Object.keys(data.errors).length > 0
+    ) {
+      const error = new Error(
+        "API-Football ha restituito un errore.",
+      );
+      error.statusCode = 502;
+      error.apiResponse = data;
+      throw error;
+    }
+
+    setFootballCache(
+      cacheKey,
+      data,
+      ttlMs,
+    );
+
+    return data;
+  })();
+
+  footballInFlight.set(
+    cacheKey,
+    requestPromise,
+  );
+
+  try {
+    const data = await requestPromise;
+
+    return {
+      data,
+      cache: "MISS",
+    };
+  } finally {
+    footballInFlight.delete(cacheKey);
+  }
+}
+
+// ------------------------------------------------------------
+// FIXTURES
+// ------------------------------------------------------------
+
+app.get("/football/fixtures", async (req, res) => {
+  try {
+    const date =
+      String(req.query.date || "").trim();
+
+    const timezone =
+      String(
+        req.query.timezone || "Europe/Rome",
+      ).trim();
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Parametro date obbligatorio nel formato YYYY-MM-DD.",
+      });
+    }
+
+    const result =
+      await requestApiFootball({
+        path: "/fixtures",
+        query: {
+          date,
+          timezone,
+        },
+        ttlMs: FIXTURES_TTL_MS,
+      });
+
+    res.set(
+      "X-SmartBet-Cache",
+      result.cache,
+    );
+
+    return res.json(result.data);
+  } catch (error) {
+    console.error(
+      "SMARTBET FOOTBALL FIXTURES ERROR:",
+      error,
+    );
+
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        success: false,
+        error:
+          error.message ||
+          "Errore caricamento fixtures.",
+        apiResponse:
+          error.apiResponse || undefined,
+      });
+  }
+});
+
+// ------------------------------------------------------------
+// ODDS
+// ------------------------------------------------------------
+
+app.get("/football/odds", async (req, res) => {
+  try {
+    const fixture =
+      Number(req.query.fixture);
+
+    if (
+      !Number.isInteger(fixture) ||
+      fixture <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Parametro fixture non valido.",
+      });
+    }
+
+    const result =
+      await requestApiFootball({
+        path: "/odds",
+        query: {
+          fixture,
+        },
+        ttlMs: ODDS_TTL_MS,
+      });
+
+    res.set(
+      "X-SmartBet-Cache",
+      result.cache,
+    );
+
+    return res.json(result.data);
+  } catch (error) {
+    console.error(
+      "SMARTBET FOOTBALL ODDS ERROR:",
+      error,
+    );
+
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        success: false,
+        error:
+          error.message ||
+          "Errore caricamento quote.",
+        apiResponse:
+          error.apiResponse || undefined,
+      });
+  }
+});
+
+// ============================================================
 // ANALISI AI
 // ============================================================
 
