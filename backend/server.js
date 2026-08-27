@@ -413,6 +413,106 @@ app.get("/football/odds", async (req, res) => {
 });
 
 // ============================================================
+// SMARTBET GENERIC API-FOOTBALL PROXY
+// ============================================================
+
+const allowedFootballPaths = new Set([
+  "fixtures",
+  "fixtures/headtohead",
+  "fixtures/lineups",
+  "injuries",
+  "teams",
+  "teams/statistics",
+  "players/squads",
+  "leagues",
+]);
+
+function footballTtlForPath(path) {
+  switch (path) {
+    case "fixtures":
+      return 15 * 60 * 1000;
+
+    case "fixtures/lineups":
+      return 5 * 60 * 1000;
+
+    case "injuries":
+      return 30 * 60 * 1000;
+
+    case "fixtures/headtohead":
+      return 60 * 60 * 1000;
+
+    case "teams/statistics":
+      return 60 * 60 * 1000;
+
+    case "players/squads":
+      return 6 * 60 * 60 * 1000;
+
+    case "teams":
+      return 24 * 60 * 60 * 1000;
+
+    case "leagues":
+      return 24 * 60 * 60 * 1000;
+
+    default:
+      return 15 * 60 * 1000;
+  }
+}
+
+app.get(/^\/football\/api\/(.+)$/, async (req, res) => {
+  try {
+    const apiPath = String(req.params[0] || "").trim();
+
+    if (!allowedFootballPaths.has(apiPath)) {
+      return res.status(404).json({
+        success: false,
+        error: "Endpoint API-Football non autorizzato.",
+      });
+    }
+
+    const query = {};
+
+    for (const [key, value] of Object.entries(req.query)) {
+      if (
+        value !== undefined &&
+        value !== null &&
+        String(value).trim() !== ""
+      ) {
+        query[key] = String(value);
+      }
+    }
+
+    const result = await requestApiFootball({
+      path: `/${apiPath}`,
+      query,
+      ttlMs: footballTtlForPath(apiPath),
+    });
+
+    res.set(
+      "X-SmartBet-Cache",
+      result.cache,
+    );
+
+    return res.json(result.data);
+  } catch (error) {
+    console.error(
+      "SMARTBET GENERIC FOOTBALL ERROR:",
+      error,
+    );
+
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        success: false,
+        error:
+          error.message ||
+          "Errore API-Football.",
+        apiResponse:
+          error.apiResponse || undefined,
+      });
+  }
+});
+
+// ============================================================
 // ANALISI AI
 // ============================================================
 
