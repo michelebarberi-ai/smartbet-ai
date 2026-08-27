@@ -4,6 +4,7 @@ import '../screens/analysis_screen.dart';
 import '../screens/combinations_ai_screen.dart';
 import '../screens/create_ai_coupon_screen.dart';
 import '../screens/prediction_screen.dart';
+import '../screens/review_coupon_screen.dart';
 import '../screens/saved_screen.dart';
 import '../screens/settings_screen.dart';
 
@@ -54,6 +55,17 @@ class MenuGrid extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CreateAiCouponScreen()),
+          );
+        },
+      ),
+      _MenuItem(
+        icon: Icons.fact_check_outlined,
+        title: 'Revisione\nSchedina AI',
+        color: const Color(0xFF00C853),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ReviewCouponScreen()),
           );
         },
       ),

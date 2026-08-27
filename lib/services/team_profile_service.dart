@@ -126,7 +126,7 @@ class TeamProfileService {
     ).replace(queryParameters: {'id': teamId.toString()});
 
     try {
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'SMARTBET PROFILE /teams '
@@ -191,7 +191,7 @@ class TeamProfileService {
     );
 
     try {
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'SMARTBET PROFILE /teams/statistics '
@@ -232,7 +232,7 @@ class TeamProfileService {
     ).replace(queryParameters: {'team': teamId.toString()});
 
     try {
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'SMARTBET PROFILE /players/squads '
@@ -288,7 +288,7 @@ class TeamProfileService {
     );
 
     try {
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'SMARTBET PROFILE /injuries '
@@ -550,10 +550,6 @@ class TeamProfileService {
   // ============================================================
   // HEADERS
   // ============================================================
-
-  Map<String, String> get _headers {
-    return {'x-apisports-key': ApiConfig.apiKey, 'Accept': 'application/json'};
-  }
 
   // ============================================================
   // CONVERSIONE INT

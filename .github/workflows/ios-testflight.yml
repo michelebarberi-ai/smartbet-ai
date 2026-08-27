@@ -22,20 +22,15 @@ jobs:
 
       - name: Create environment file
         env:
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
         run: |
-          test -n "$FOOTBALL_API_KEY" || {
-            echo "ERRORE: FOOTBALL_API_KEY mancante"
-            exit 1
-          }
 
           test -n "$FOOTBALL_DATA_API_KEY" || {
             echo "ERRORE: FOOTBALL_DATA_API_KEY mancante"
             exit 1
           }
 
-          printf 'FOOTBALL_API_KEY=%s\nFOOTBALL_DATA_API_KEY=%s\n' "$FOOTBALL_API_KEY" "$FOOTBALL_DATA_API_KEY" > .env
+          printf 'FOOTBALL_DATA_API_KEY=%s\n' "$FOOTBALL_DATA_API_KEY" > .env
 
           echo "OK: .env creato con entrambe le API key"
 

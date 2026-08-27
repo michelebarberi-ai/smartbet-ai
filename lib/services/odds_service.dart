@@ -2,9 +2,6 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../config/api_config.dart';
-import 'api_rate_limiter.dart';
-
 // ============================================================
 // SINGOLA QUOTA MIGLIORE
 // ============================================================
@@ -173,13 +170,11 @@ class OddsService {
     }
 
     final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/odds',
+      'https://smartbet-ai-y6gw.onrender.com/football/odds',
     ).replace(queryParameters: {'fixture': fixtureId.toString()});
 
     try {
-      await ApiRateLimiter.wait();
-
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       if (response.statusCode != 200) {
         return null;
@@ -687,10 +682,6 @@ class OddsService {
     if (value is double) return value;
     if (value is int) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  Map<String, String> get _headers {
-    return {'x-apisports-key': ApiConfig.apiKey, 'Accept': 'application/json'};
   }
 
   static void clearCache() {

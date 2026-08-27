@@ -43,7 +43,9 @@
 					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-				</dict>
+					<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
 			</array>
 		</dict>
 	</dict>

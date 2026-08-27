@@ -64,10 +64,6 @@ class ContextResearcher {
 
   ContextResearcher({http.Client? client}) : _client = client ?? http.Client();
 
-  Map<String, String> get _headers {
-    return {'x-apisports-key': ApiConfig.apiKey, 'Accept': 'application/json'};
-  }
-
   // ============================================================
   // RICERCA COMPLETA
   // ============================================================
@@ -243,7 +239,7 @@ class ContextResearcher {
 
         await ApiRateLimiter.wait();
 
-        final response = await _client.get(uri, headers: _headers);
+        final response = await _client.get(uri);
 
         print(
           'FORMA STATUS [$season]: '
@@ -412,7 +408,7 @@ class ContextResearcher {
 
       await ApiRateLimiter.wait();
 
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'H2H STATUS: '
@@ -552,7 +548,7 @@ class ContextResearcher {
 
       await ApiRateLimiter.wait();
 
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'ASSENZE FIXTURE STATUS: '
@@ -679,7 +675,7 @@ class ContextResearcher {
 
       await ApiRateLimiter.wait();
 
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'LINEUP FIXTURE STATUS: '

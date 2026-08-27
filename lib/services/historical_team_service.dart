@@ -207,7 +207,7 @@ class HistoricalTeamService {
 
       await ApiRateLimiter.wait();
 
-      final response = await _client.get(uri, headers: _headers);
+      final response = await _client.get(uri);
 
       print(
         'SMARTBET HISTORICAL STATUS: '
@@ -544,10 +544,6 @@ class HistoricalTeamService {
   // ============================================================
   // HEADERS
   // ============================================================
-
-  Map<String, String> get _headers {
-    return {'x-apisports-key': ApiConfig.apiKey, 'Accept': 'application/json'};
-  }
 
   // ============================================================
   // CONVERSIONE INT

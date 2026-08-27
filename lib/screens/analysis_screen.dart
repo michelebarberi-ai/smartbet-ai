@@ -1,6 +1,6 @@
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_coupon_service.dart';
-import '../services/smartbet_auto_coupon_service.dart';
+import '../services/review_coupon_store.dart';
 import 'coupon_screen.dart';
 import 'package:flutter/material.dart';
 import '../ai/smartcore.dart';
@@ -37,8 +37,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   static const int _maximumCouponMatches = 12;
 
   bool _creatingCoupon = false;
-
-  bool _creatingAutoCoupon = false;
 
   String _searchText = "";
 
@@ -459,146 +457,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (mounted) {
         setState(() {
           _creatingCoupon = false;
-        });
-      }
-    }
-  }
-
-  // ============================================================
-  // CREA SCHEDINA AI AUTOMATICA
-  // ============================================================
-
-  Future<void> _createAutoCoupon() async {
-    if (_creatingAutoCoupon || _creatingCoupon) {
-      return;
-    }
-
-    setState(() {
-      _creatingAutoCoupon = true;
-    });
-
-    final progress = ValueNotifier<SmartBetAutoCouponProgress>(
-      const SmartBetAutoCouponProgress(
-        phase: 'start',
-        current: 0,
-        total: 1,
-        message: 'Preparazione SmartBet AI...',
-      ),
-    );
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1F2937),
-          content: ValueListenableBuilder<SmartBetAutoCouponProgress>(
-            valueListenable: progress,
-            builder: (context, value, child) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    color: Color(0xFF00C853),
-                    size: 38,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  const Text(
-                    'SCHEDINA AI DEL GIORNO',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  LinearProgressIndicator(
-                    value: value.progress,
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  Text(
-                    value.message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, height: 1.4),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  const Text(
-                    'SmartBet seleziona le candidate migliori '
-                    'prima dell’analisi AI avanzata.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
-
-    try {
-      final service = SmartBetAutoCouponService();
-
-      final autoResult = await service.build(
-        onProgress: (value) {
-          progress.value = value;
-        },
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context, rootNavigator: true).pop();
-
-      if (!mounted) {
-        return;
-      }
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CouponScreen(coupons: autoResult.coupons),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context, rootNavigator: true).pop();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_friendlyErrorMessage(e)),
-          action: SnackBarAction(
-            label: 'RIPROVA',
-            onPressed: _createAutoCoupon,
-          ),
-        ),
-      );
-    } finally {
-      progress.dispose();
-
-      if (mounted) {
-        setState(() {
-          _creatingAutoCoupon = false;
         });
       }
     }
@@ -1458,6 +1316,87 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   ),
                 ),
 
+                const SizedBox(height: 8),
+
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () async {
+                    final result = await ReviewCouponStore.addMatch(match);
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    switch (result) {
+                      case 'added':
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Partita aggiunta alla Revisione Schedina AI.',
+                            ),
+                          ),
+                        );
+                        break;
+
+                      case 'duplicate':
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Questa partita è già presente nella Revisione Schedina AI.',
+                            ),
+                          ),
+                        );
+                        break;
+
+                      case 'full':
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Hai già raggiunto il limite di 12 partite nella Revisione Schedina AI.',
+                            ),
+                          ),
+                        );
+                        break;
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.orangeAccent.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.fact_check_outlined,
+                          color: Colors.orangeAccent,
+                          size: 21,
+                        ),
+                        SizedBox(width: 9),
+                        Expanded(
+                          child: Text(
+                            'AGGIUNGI A REVISIONE SCHEDINA',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 const SizedBox(height: 10),
 
                 // ANALIZZA
@@ -2068,47 +2007,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               children: [
                 _header(),
 
-                // ====================================================
-                // PULSANTE SCHEDINA AI DEL GIORNO
-                // ====================================================
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: (_creatingAutoCoupon || _creatingCoupon)
-                          ? null
-                          : _createAutoCoupon,
-                      icon: _creatingAutoCoupon
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.auto_awesome),
-                      label: Text(
-                        _creatingAutoCoupon
-                            ? 'CREAZIONE SCHEDINA...'
-                            : (_isTodaySelected
-                                  ? 'SCHEDINA AI DEL GIORNO'
-                                  : 'SCHEDINA AI DI OGGI'),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
                 const Expanded(
                   child: Center(
                     child: Text(
@@ -2165,47 +2063,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           return Column(
             children: [
               _header(),
-
-              // ====================================================
-              // SCHEDINA AI DEL GIORNO - PULSANTE PRINCIPALE
-              // ====================================================
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: (_creatingAutoCoupon || _creatingCoupon)
-                        ? null
-                        : _createAutoCoupon,
-                    icon: _creatingAutoCoupon
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.auto_awesome),
-                    label: Text(
-                      _creatingAutoCoupon
-                          ? 'CREAZIONE SCHEDINA...'
-                          : (_isTodaySelected
-                                ? 'SCHEDINA AI DEL GIORNO'
-                                : 'SCHEDINA AI DI OGGI'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF00C853),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
 
               Expanded(
                 child: ListView.builder(

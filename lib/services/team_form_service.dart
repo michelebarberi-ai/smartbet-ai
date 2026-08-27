@@ -189,10 +189,7 @@ class TeamFormService {
     );
 
     try {
-      final response = await _client.get(
-        uri,
-        headers: {'x-apisports-key': ApiConfig.apiKey},
-      );
+      final response = await _client.get(uri);
 
       if (response.statusCode != 200) {
         return null;

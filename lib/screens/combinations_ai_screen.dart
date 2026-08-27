@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../ai/smartcore.dart';
@@ -14,6 +16,13 @@ class CombinationsAiScreen extends StatefulWidget {
 
   @override
   State<CombinationsAiScreen> createState() => _CombinationsAiScreenState();
+}
+
+class _ComboChance {
+  final String label;
+  final int probability;
+
+  const _ComboChance({required this.label, required this.probability});
 }
 
 class _CombinationCandidate {
@@ -49,6 +58,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String? _errorMessage;
 
   final List<_CombinationCandidate> _results = [];
+
+  final Set<int> _expandedComboFixtures = {};
 
   static const int _batchSize = 3;
   static const double _minimumOdd = 1.15;
@@ -116,6 +127,279 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   }
 
   // ============================================================
+  // COMBO CHANCE
+  // ============================================================
+
+  double _poissonProbability(double lambda, int goals) {
+    if (lambda <= 0 || goals < 0) {
+      return 0.0;
+    }
+
+    var factorial = 1;
+
+    for (var i = 2; i <= goals; i++) {
+      factorial *= i;
+    }
+
+    return math.pow(lambda, goals).toDouble() * math.exp(-lambda) / factorial;
+  }
+
+  List<_ComboChance> _comboChances(AnalysisResult result) {
+    final homeLambda = result.expectedHomeGoals;
+    final awayLambda = result.expectedAwayGoals;
+
+    if (homeLambda <= 0 || awayLambda <= 0) {
+      return const [];
+    }
+
+    const maxGoals = 8;
+
+    final scores = <({int home, int away, double probability})>[];
+
+    var totalMass = 0.0;
+
+    for (var home = 0; home <= maxGoals; home++) {
+      final homeProbability = _poissonProbability(homeLambda, home);
+
+      for (var away = 0; away <= maxGoals; away++) {
+        final awayProbability = _poissonProbability(awayLambda, away);
+
+        final probability = homeProbability * awayProbability;
+
+        totalMass += probability;
+
+        scores.add((home: home, away: away, probability: probability));
+      }
+    }
+
+    if (totalMass <= 0) {
+      return const [];
+    }
+
+    int probabilityWhere(bool Function(int home, int away) condition) {
+      var probability = 0.0;
+
+      for (final score in scores) {
+        if (condition(score.home, score.away)) {
+          probability += score.probability;
+        }
+      }
+
+      return ((probability / totalMass) * 100).round().clamp(0, 100);
+    }
+
+    final combos = <_ComboChance>[
+      _ComboChance(
+        label: '1X + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home > away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away > home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1X + U3.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + U3.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: '2 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: 'GOAL + O2.5',
+        probability: probabilityWhere(
+          (home, away) => home > 0 && away > 0 && home + away >= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'NO GOAL + U2.5',
+        probability: probabilityWhere(
+          (home, away) => (home == 0 || away == 0) && home + away <= 2,
+        ),
+      ),
+    ];
+
+    // Non mostriamo combinazioni statisticamente troppo deboli.
+    final reliable = combos.where((combo) => combo.probability >= 30).toList();
+
+    reliable.sort((a, b) => b.probability.compareTo(a.probability));
+
+    return reliable;
+  }
+
+  Widget _comboChanceSection(AnalysisResult result, int fixtureId) {
+    final combos = _comboChances(result);
+
+    if (combos.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final expanded = _expandedComboFixtures.contains(fixtureId);
+
+    final visible = expanded ? combos : combos.take(6).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 14),
+        const Row(
+          children: [
+            Icon(Icons.hub_outlined, size: 16, color: Color(0xFF00C853)),
+            SizedBox(width: 6),
+            Text(
+              'COMBO CHANCE',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.7,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: visible.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 7,
+            mainAxisSpacing: 7,
+            childAspectRatio: 1.75,
+          ),
+          itemBuilder: (context, index) {
+            final combo = visible[index];
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF00C853).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    combo.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${combo.probability}%',
+                    style: const TextStyle(
+                      color: Color(0xFF00C853),
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        if (combos.length > 6) ...[
+          const SizedBox(height: 5),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {
+                setState(() {
+                  if (expanded) {
+                    _expandedComboFixtures.remove(fixtureId);
+                  } else {
+                    _expandedComboFixtures.add(fixtureId);
+                  }
+                });
+              },
+              child: Text(
+                expanded ? 'MOSTRA MENO' : 'MOSTRA TUTTE',
+                style: const TextStyle(
+                  color: Color(0xFF00C853),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 2),
+        const Text(
+          'Probabilità congiunte stimate dal modello '
+          'sulla distribuzione dei possibili punteggi.',
+          style: TextStyle(color: Colors.white30, fontSize: 9, height: 1.3),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // PARTITA NON INIZIATA
+  // ============================================================
+
+  bool _isUpcoming(MatchModel match) {
+    try {
+      return DateTime.parse(match.date).toLocal().isAfter(DateTime.now());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ============================================================
   // SCANSIONE
   // ============================================================
 
@@ -137,9 +421,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     try {
       final allMatches = await MatchRepository.getTodayMatches();
 
-      final matches = _italyScheduleOnly
-          ? allMatches.where(ItalyScheduleFilter.allows).toList()
-          : allMatches;
+      final matches = allMatches
+          .where(
+            (match) =>
+                match.hasTeamIds &&
+                _isUpcoming(match) &&
+                (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)),
+          )
+          .toList();
 
       if (!mounted) {
         return;
@@ -664,6 +953,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ],
           ),
+
+          _comboChanceSection(result, match.fixtureId),
 
           const SizedBox(height: 10),
 

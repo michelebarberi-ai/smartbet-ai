@@ -123,10 +123,7 @@ class TeamStatisticsService {
     print('========================================');
 
     try {
-      final response = await _client.get(
-        uri,
-        headers: {'x-apisports-key': ApiConfig.apiKey},
-      );
+      final response = await _client.get(uri);
 
       print('STATUS CODE: ${response.statusCode}');
       print('RESPONSE:');

@@ -23,6 +23,13 @@ class AnalysisResult {
   final int noGoalProbability;
 
   // ============================================================
+  // EXPECTED GOALS
+  // ============================================================
+
+  final double expectedHomeGoals;
+  final double expectedAwayGoals;
+
+  // ============================================================
   // PRONOSTICO / VALUE / RISCHIO
   // ============================================================
 
@@ -77,6 +84,9 @@ class AnalysisResult {
 
     this.goalProbability = 0,
     this.noGoalProbability = 0,
+
+    this.expectedHomeGoals = 0.0,
+    this.expectedAwayGoals = 0.0,
 
     required this.prediction,
     required this.valueBet,

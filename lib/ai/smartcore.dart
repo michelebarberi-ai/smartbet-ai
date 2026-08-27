@@ -238,6 +238,9 @@ class SmartCore {
       goalProbability: goalProbability,
       noGoalProbability: noGoalProbability,
 
+      expectedHomeGoals: expectedHomeGoals,
+      expectedAwayGoals: expectedAwayGoals,
+
       prediction: prediction,
 
       valueBet: valueBet,
