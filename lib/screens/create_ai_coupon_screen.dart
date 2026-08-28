@@ -19,6 +19,13 @@ class CreateAiCouponScreen extends StatefulWidget {
 
 enum _CouponProfile { premium, balanced, value }
 
+class _ComboChance {
+  final String label;
+  final int probability;
+
+  const _ComboChance({required this.label, required this.probability});
+}
+
 class _PreCandidate {
   final MatchModel match;
   final AnalysisResult analysis;
@@ -36,7 +43,7 @@ class _CouponPick {
   final AnalysisResult analysis;
   final String market;
   final int probability;
-  final double odd;
+  final double? odd;
   final String bookmaker;
   final double edge;
   final double expectedValue;
@@ -171,7 +178,194 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
     }
 
+    final combos = _comboChances(analysis);
+
+    if (combos.isNotEmpty && combos.first.probability > best) {
+      best = combos.first.probability;
+    }
+
     return best;
+  }
+
+  double _poissonProbability(double lambda, int goals) {
+    if (lambda <= 0 || goals < 0) {
+      return 0.0;
+    }
+
+    var factorial = 1;
+    for (var i = 2; i <= goals; i++) {
+      factorial *= i;
+    }
+
+    return math.pow(lambda, goals).toDouble() * math.exp(-lambda) / factorial;
+  }
+
+  List<_ComboChance> _comboChances(AnalysisResult result) {
+    final homeLambda = result.expectedHomeGoals;
+    final awayLambda = result.expectedAwayGoals;
+
+    if (homeLambda <= 0 || awayLambda <= 0) {
+      return const [];
+    }
+
+    const maxGoals = 8;
+    final scores = <({int home, int away, double probability})>[];
+    var totalMass = 0.0;
+
+    for (var home = 0; home <= maxGoals; home++) {
+      final homeProbability = _poissonProbability(homeLambda, home);
+
+      for (var away = 0; away <= maxGoals; away++) {
+        final awayProbability = _poissonProbability(awayLambda, away);
+        final probability = homeProbability * awayProbability;
+
+        totalMass += probability;
+
+        scores.add((home: home, away: away, probability: probability));
+      }
+    }
+
+    if (totalMass <= 0) {
+      return const [];
+    }
+
+    int probabilityWhere(bool Function(int home, int away) condition) {
+      var probability = 0.0;
+
+      for (final score in scores) {
+        if (condition(score.home, score.away)) {
+          probability += score.probability;
+        }
+      }
+
+      return ((probability / totalMass) * 100).round().clamp(0, 100);
+    }
+
+    final combos = <_ComboChance>[
+      _ComboChance(
+        label: '1X + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home > away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away > home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1X + U3.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + U3.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: '2 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: 'GOAL + O2.5',
+        probability: probabilityWhere(
+          (home, away) => home > 0 && away > 0 && home + away >= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'NO GOAL + U2.5',
+        probability: probabilityWhere(
+          (home, away) => (home == 0 || away == 0) && home + away <= 2,
+        ),
+      ),
+    ];
+
+    final reliable = combos.where((combo) => combo.probability >= 30).toList();
+
+    reliable.sort((a, b) => b.probability.compareTo(a.probability));
+
+    return reliable;
+  }
+
+  double _comboRankScore({required int probability, required int smartScore}) {
+    switch (_profile) {
+      case _CouponProfile.premium:
+        return probability * 0.78 + smartScore * 0.22;
+
+      case _CouponProfile.balanced:
+        return probability * 0.65 + smartScore * 0.35;
+
+      case _CouponProfile.value:
+        return probability * 0.60 + smartScore * 0.40;
+    }
+  }
+
+  bool _comboPassesPrimary({
+    required int probability,
+    required int smartScore,
+  }) {
+    switch (_profile) {
+      case _CouponProfile.premium:
+        return probability >= 65 && smartScore >= 50;
+
+      case _CouponProfile.balanced:
+        return probability >= 55 && smartScore >= 45;
+
+      case _CouponProfile.value:
+        return probability >= 45 && smartScore >= 40;
+    }
+  }
+
+  bool _comboPassesAdaptive({
+    required int probability,
+    required int smartScore,
+  }) {
+    switch (_profile) {
+      case _CouponProfile.premium:
+        return probability >= 55 && smartScore >= 40;
+
+      case _CouponProfile.balanced:
+        return probability >= 45 && smartScore >= 35;
+
+      case _CouponProfile.value:
+        return probability >= 35 && smartScore >= 30;
+    }
   }
 
   // ============================================================
@@ -271,7 +465,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   _CouponPick? _bestPickForMatch({
     required _PreCandidate preliminary,
-    required FixtureMarketOdds odds,
+    required FixtureMarketOdds? odds,
   }) {
     final probabilities = _markets(preliminary.analysis);
 
@@ -281,7 +475,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     for (final market in _marketOrder) {
       final probability = probabilities[market] ?? 0;
-      final bestOdd = odds.oddFor(market);
+      final bestOdd = odds?.oddFor(market);
 
       if (probability <= 0 || bestOdd == null || bestOdd.odd < _minimumOdd) {
         continue;
@@ -366,6 +560,55 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       );
     }
 
+    final combos = _comboChances(preliminary.analysis);
+
+    if (combos.isNotEmpty) {
+      final bestCombo = combos.first;
+      final probability = bestCombo.probability;
+      final smartScore = preliminary.analysis.smartScore;
+
+      final comboPick = _CouponPick(
+        match: preliminary.match,
+        analysis: preliminary.analysis,
+        market: bestCombo.label,
+        probability: probability,
+        odd: null,
+        bookmaker: '',
+        edge: 0,
+        expectedValue: 0,
+        rankScore: _comboRankScore(
+          probability: probability,
+          smartScore: smartScore,
+        ),
+        adaptive: false,
+      );
+
+      if (_comboPassesPrimary(
+        probability: probability,
+        smartScore: smartScore,
+      )) {
+        primary.add(comboPick);
+      } else if (_comboPassesAdaptive(
+        probability: probability,
+        smartScore: smartScore,
+      )) {
+        adaptive.add(
+          _CouponPick(
+            match: comboPick.match,
+            analysis: comboPick.analysis,
+            market: comboPick.market,
+            probability: comboPick.probability,
+            odd: null,
+            bookmaker: '',
+            edge: 0,
+            expectedValue: 0,
+            rankScore: comboPick.rankScore,
+            adaptive: true,
+          ),
+        );
+      }
+    }
+
     int compare(_CouponPick a, _CouponPick b) {
       final score = b.rankScore.compareTo(a.rankScore);
       if (score != 0) return score;
@@ -376,7 +619,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return probability;
       }
 
-      return b.odd.compareTo(a.odd);
+      return (b.odd ?? 0).compareTo(a.odd ?? 0);
     }
 
     primary.sort(compare);
@@ -496,7 +739,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // 3 richieste  -> pool 8
       // 5 richieste  -> pool 10
       // 7+ richieste -> massimo 12
-      final targetCandidatePool = math.min(12, _count + 5);
+      final targetCandidatePool = math.min(20, _count + 5);
 
       setState(() {
         _total = maximumToScan;
@@ -574,10 +817,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             final odds = await _oddsService.getFixtureMarketOdds(
               fixtureId: candidate.match.fixtureId,
             );
-
-            if (odds == null) {
-              continue;
-            }
 
             final pick = _bestPickForMatch(preliminary: candidate, odds: odds);
 
@@ -729,13 +968,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return value;
   }
 
-  double get _totalOdd {
-    if (_results.isEmpty) return 0;
+  double? get _totalOdd {
+    if (_results.isEmpty) return null;
 
     var value = 1.0;
 
     for (final item in _results) {
-      value *= item.odd;
+      final odd = item.odd;
+
+      if (odd == null) {
+        return null;
+      }
+
+      value *= odd;
     }
 
     return value;
@@ -743,7 +988,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   String get _riskLabel {
     final combined = _combinedProbability;
-    final totalOdd = _totalOdd;
+    final totalOdd = _totalOdd ?? 0;
 
     // VALUE: profilo più aggressivo.
     if (_profileName == 'VALUE') {
@@ -806,7 +1051,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       ..writeln('SMARTBET AI — SCHEDINA $_profileName')
       ..writeln()
       ..writeln('${_results.length} partite')
-      ..writeln('Quota totale: ${_totalOdd.toStringAsFixed(2)}')
+      ..writeln(
+        _totalOdd == null
+            ? 'Quota totale: non disponibile (Combo Chance senza quota reale)'
+            : 'Quota totale: ${_totalOdd!.toStringAsFixed(2)}',
+      )
       ..writeln('Probabilità media: ${_averageProbability.toStringAsFixed(1)}%')
       ..writeln('Smart Score medio: ${_averageSmartScore.toStringAsFixed(1)}')
       ..writeln(
@@ -822,8 +1071,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       text
         ..writeln('${i + 1}. ${item.match.homeTeam} - ${item.match.awayTeam}')
         ..writeln(
-          '   ${item.market} @ ${item.odd.toStringAsFixed(2)} '
-          '— ${item.probability}%',
+          item.odd == null
+              ? '   ${item.market} — ${item.probability}% '
+                    '(quota combo non disponibile)'
+              : '   ${item.market} @ ${item.odd!.toStringAsFixed(2)} '
+                    '— ${item.probability}%',
         );
 
       if (item.bookmaker.trim().isNotEmpty) {
@@ -1088,7 +1340,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           Slider(
             value: _count.toDouble(),
             min: 3,
-            max: 10,
+            max: 15,
             divisions: 7,
             label: '$_count',
             onChanged: _loading
@@ -1208,7 +1460,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       child: Column(
         children: [
           _summaryRow('Partite', '${_results.length}'),
-          _summaryRow('Quota totale', _totalOdd.toStringAsFixed(2)),
+          _summaryRow(
+            'Quota totale',
+            _totalOdd == null ? 'N/D' : _totalOdd!.toStringAsFixed(2),
+          ),
           _summaryRow(
             'Probabilità media',
             '${_averageProbability.toStringAsFixed(1)}%',
@@ -1368,7 +1623,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
                 const SizedBox(width: 7),
                 Text(
-                  '@ ${item.odd.toStringAsFixed(2)}',
+                  item.odd == null
+                      ? 'Quota combo N/D'
+                      : '@ ${item.odd!.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 17,

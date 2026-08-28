@@ -77,6 +77,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     'UNDER 2.5',
     'GOAL',
     'NO GOAL',
+    'COMBO CHANCE',
   ];
 
   // ============================================================
@@ -454,6 +455,23 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             try {
               final analysis = await SmartCore.analyze(match);
 
+              if (_selectedMarket == 'COMBO CHANCE') {
+                final combos = _comboChances(analysis);
+
+                if (combos.isEmpty) {
+                  return null;
+                }
+
+                final bestCombo = combos.first;
+
+                return _CombinationCandidate(
+                  match: match,
+                  analysis: analysis,
+                  market: bestCombo.label,
+                  probability: bestCombo.probability,
+                );
+              }
+
               final probability = _probabilityFor(analysis, _selectedMarket);
 
               return _CombinationCandidate(
@@ -532,6 +550,22 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         for (final item in allCandidates) {
           if (!mounted || validCandidates.length >= _topCount) {
             break;
+          }
+
+          if (_selectedMarket == 'COMBO CHANCE') {
+            validCandidates.add(item);
+
+            if (!mounted) {
+              return;
+            }
+
+            setState(() {
+              _results
+                ..clear()
+                ..addAll(validCandidates);
+            });
+
+            continue;
           }
 
           final marketOdds = await oddsService.getFixtureMarketOdds(
@@ -969,6 +1003,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ),
             const SizedBox(height: 6),
+          ] else if (_selectedMarket == 'COMBO CHANCE') ...[
+            const Text(
+              'Quota combo bookmaker non disponibile',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 6),
           ],
 
           Text(
@@ -1041,8 +1085,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 8),
 
-          const Text(
-            'Filtro automatico: solo selezioni con quota reale almeno 1.15.',
+          Text(
+            _selectedMarket == 'COMBO CHANCE'
+                ? 'Filtro automatico: migliori Combo Chance per probabilità stimata.'
+                : 'Filtro automatico: solo selezioni con quota reale almeno 1.15.',
             style: TextStyle(
               color: Colors.orangeAccent,
               fontSize: 11,
@@ -1164,8 +1210,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Slider(
             value: _topCount.toDouble(),
             min: 3,
-            max: 10,
-            divisions: 7,
+            max: 15,
+            divisions: 12,
             label: '$_topCount',
             onChanged: _loading
                 ? null
