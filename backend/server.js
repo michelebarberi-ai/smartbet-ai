@@ -26,6 +26,245 @@ const client = new OpenAI({
 
 const PORT = process.env.PORT || 3000;
 
+const SUPPORT_EMAIL =
+  process.env.SUPPORT_EMAIL || "support@example.com";
+
+function smartBetPublicPage(title, body) {
+  return `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} - SmartBet AI</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #111827;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 48px 22px 70px;
+    }
+
+    .brand {
+      color: #00d26a;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 36px;
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+
+    h2 {
+      margin-top: 34px;
+      font-size: 22px;
+    }
+
+    p, li {
+      color: #cbd5e1;
+    }
+
+    a {
+      color: #36e58a;
+    }
+
+    .card {
+      margin-top: 28px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 18px;
+      padding: 24px;
+    }
+
+    .note {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">SMARTBET AI</div>
+    ${body}
+  </main>
+</body>
+</html>`;
+}
+
+// ============================================================
+// SUPPORTO PUBBLICO
+// ============================================================
+
+app.get("/support", (req, res) => {
+  res
+    .status(200)
+    .type("html")
+    .send(
+      smartBetPublicPage(
+        "Assistenza",
+        `
+        <h1>Assistenza SmartBet AI</h1>
+
+        <p>
+          Hai bisogno di assistenza, vuoi segnalare un problema
+          o inviare un suggerimento?
+        </p>
+
+        <div class="card">
+          <h2>Contatta l'assistenza</h2>
+
+          <p>
+            Scrivi a:
+            <a href="mailto:${SUPPORT_EMAIL}">
+              ${SUPPORT_EMAIL}
+            </a>
+          </p>
+
+          <p>
+            Nella richiesta indica, se possibile, il modello
+            di iPhone, la versione di iOS e una breve
+            descrizione del problema.
+          </p>
+        </div>
+
+        <h2>Informazioni su SmartBet AI</h2>
+
+        <p>
+          SmartBet AI è uno strumento di analisi statistica
+          delle partite di calcio. L'app non consente di
+          effettuare scommesse, depositare o prelevare denaro.
+        </p>
+
+        <p class="note">
+          Le analisi e le probabilità fornite hanno finalità
+          informative e statistiche e non garantiscono
+          risultati futuri.
+        </p>
+        `,
+      ),
+    );
+});
+
+// ============================================================
+// PRIVACY POLICY PUBBLICA
+// ============================================================
+
+app.get("/privacy", (req, res) => {
+  res
+    .status(200)
+    .type("html")
+    .send(
+      smartBetPublicPage(
+        "Privacy Policy",
+        `
+        <h1>Privacy Policy</h1>
+
+        <p class="note">
+          Ultimo aggiornamento: 29 agosto 2026
+        </p>
+
+        <p>
+          Questa informativa descrive il trattamento dei dati
+          nell'utilizzo di SmartBet AI.
+        </p>
+
+        <h2>Account</h2>
+
+        <p>
+          SmartBet AI non richiede la creazione di un account
+          utente per utilizzare le funzionalità attualmente
+          disponibili.
+        </p>
+
+        <h2>Dati salvati sul dispositivo</h2>
+
+        <p>
+          Alcune preferenze, pronostici, giocate registrate
+          e relative statistiche possono essere conservati
+          localmente sul dispositivo dell'utente per
+          consentire il funzionamento delle relative
+          funzionalità.
+        </p>
+
+        <h2>Analisi e servizi online</h2>
+
+        <p>
+          Per fornire dati calcistici, statistiche e funzioni
+          di analisi, SmartBet AI comunica con il proprio
+          backend e con fornitori di servizi necessari al
+          funzionamento dell'app.
+        </p>
+
+        <p>
+          Le richieste possono includere dati relativi a
+          partite, squadre, competizioni e parametri necessari
+          a produrre l'analisi richiesta dall'utente.
+        </p>
+
+        <h2>Dati tecnici</h2>
+
+        <p>
+          I servizi utilizzati per l'erogazione dell'app
+          possono generare log tecnici standard necessari
+          alla sicurezza, alla diagnostica e al corretto
+          funzionamento del servizio.
+        </p>
+
+        <h2>Vendita dei dati</h2>
+
+        <p>
+          SmartBet AI non vende i dati personali degli utenti.
+        </p>
+
+        <h2>Scommesse e pagamenti</h2>
+
+        <p>
+          SmartBet AI non è un bookmaker e non consente di
+          effettuare scommesse, depositare denaro, prelevare
+          denaro o eseguire transazioni di gioco con denaro
+          reale.
+        </p>
+
+        <h2>Modifiche alla presente informativa</h2>
+
+        <p>
+          Questa informativa potrà essere aggiornata in caso
+          di modifiche alle funzionalità dell'app o ai servizi
+          utilizzati.
+        </p>
+
+        <h2>Contatti</h2>
+
+        <p>
+          Per domande relative alla privacy:
+          <a href="mailto:${SUPPORT_EMAIL}">
+            ${SUPPORT_EMAIL}
+          </a>
+        </p>
+        `,
+      ),
+    );
+});
+
+
 // ============================================================
 // PRE-MATCH FILTER
 // ============================================================
