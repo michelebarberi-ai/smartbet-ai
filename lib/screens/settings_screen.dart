@@ -183,7 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     subtitle: const Text(
-                      'Mostra soltanto i pronostici che superano anche Stake Engine e Value Bet.',
+                      'Mostra soltanto i pronostici che superano anche i controlli di affidabilità e Value Bet.',
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                     value: _store.onlyPlayablePredictions,

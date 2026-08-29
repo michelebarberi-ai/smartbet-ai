@@ -492,6 +492,9 @@ Dossier AI testuale e analisi notizie avanzata temporaneamente non disponibili.
       under25Probability: baseResult.under25Probability,
       goalProbability: baseResult.goalProbability,
       noGoalProbability: baseResult.noGoalProbability,
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+      expectedAwayGoals: baseResult.expectedAwayGoals,
+
       prediction: decision.outcome,
       valueBet: valueBet,
       risk: baseResult.risk,
@@ -653,6 +656,8 @@ Dossier AI testuale e analisi notizie avanzata temporaneamente non disponibili.
       under25Probability: baseResult.under25Probability,
       goalProbability: baseResult.goalProbability,
       noGoalProbability: baseResult.noGoalProbability,
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+      expectedAwayGoals: baseResult.expectedAwayGoals,
 
       prediction: prediction,
       valueBet: valueBet,
@@ -923,6 +928,10 @@ $finalVerdict
       goalProbability: baseResult.goalProbability,
 
       noGoalProbability: baseResult.noGoalProbability,
+
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+
+      expectedAwayGoals: baseResult.expectedAwayGoals,
 
       prediction: prediction,
 

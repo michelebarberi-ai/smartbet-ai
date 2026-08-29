@@ -7,17 +7,13 @@ import '../services/bankroll_store.dart';
 class BankrollHistoryScreen extends StatelessWidget {
   const BankrollHistoryScreen({super.key});
 
-  String _money(double value, {bool signed = false}) {
-    final sign = signed && value > 0 ? '+' : '';
-    return '$sign€${value.toStringAsFixed(2)}';
-  }
-
   String _date(DateTime date) {
     final local = date.toLocal();
     final day = local.day.toString().padLeft(2, '0');
     final month = local.month.toString().padLeft(2, '0');
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
+
     return '$day/$month • $hour:$minute';
   }
 
@@ -61,7 +57,7 @@ class BankrollHistoryScreen extends StatelessWidget {
         content: Text(
           '${bet.matchLabel}\n\n'
           'Esito giocato: ${bet.outcome} @ ${bet.odd.toStringAsFixed(2)}\n'
-          'Importo: ${_money(bet.stakeAmount)}\n\n'
+          'Bookmaker: ${bet.bookmaker}\n\n'
           'Confermi il nuovo stato?',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
@@ -101,6 +97,8 @@ class BankrollHistoryScreen extends StatelessWidget {
 
   Widget _summary(BankrollStore store) {
     final snapshot = store.snapshot;
+    final settled = snapshot.wins + snapshot.losses;
+    final successRate = settled > 0 ? (snapshot.wins / settled) * 100.0 : 0.0;
 
     return Container(
       width: double.infinity,
@@ -116,39 +114,49 @@ class BankrollHistoryScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: _summaryValue(
-                  'CAPITALE',
-                  _money(snapshot.currentBankroll),
+                  'GIOCATE',
+                  '${snapshot.bets}',
                   Colors.white,
                 ),
               ),
               Expanded(
                 child: _summaryValue(
-                  'DISPONIBILE',
-                  _money(snapshot.availableBankroll),
+                  'VINTE',
+                  '${snapshot.wins}',
                   Colors.greenAccent,
+                ),
+              ),
+              Expanded(
+                child: _summaryValue(
+                  'PERSE',
+                  '${snapshot.losses}',
+                  Colors.redAccent,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: _summaryValue(
-                  'IMPEGNATO',
-                  _money(snapshot.lockedBankroll),
-                  Colors.orangeAccent,
+                  'SUCCESSO',
+                  '${successRate.toStringAsFixed(1)}%',
+                  settled > 0 ? Colors.greenAccent : Colors.white54,
                 ),
               ),
               Expanded(
                 child: _summaryValue(
-                  'PROFITTO/PERDITA',
-                  _money(snapshot.totalProfitLoss, signed: true),
-                  snapshot.totalProfitLoss > 0
-                      ? Colors.greenAccent
-                      : snapshot.totalProfitLoss < 0
-                      ? Colors.redAccent
-                      : Colors.white70,
+                  'IN ATTESA',
+                  '${snapshot.pending}',
+                  snapshot.pending > 0 ? Colors.orangeAccent : Colors.white54,
+                ),
+              ),
+              Expanded(
+                child: _summaryValue(
+                  'ANNULLATE',
+                  '${snapshot.voids}',
+                  Colors.blueGrey,
                 ),
               ),
             ],
@@ -201,7 +209,6 @@ class BankrollHistoryScreen extends StatelessWidget {
         ..writeln('${i + 1}. ${bet.matchLabel}')
         ..writeln(
           '   ${bet.outcome} @ ${bet.odd.toStringAsFixed(2)}'
-          ' • ${_money(bet.stakeAmount)}'
           ' • ${_statusLabel(bet)}',
         );
 
@@ -209,15 +216,12 @@ class BankrollHistoryScreen extends StatelessWidget {
         text.writeln('   Bookmaker: ${bet.bookmaker}');
       }
 
-      if (!bet.isPending) {
-        text.writeln('   P/L: ${_money(bet.profitLoss, signed: true)}');
-      }
-
       text.writeln();
     }
 
     text.writeln(
-      'Analisi statistica a scopo informativo. Gioca responsabilmente.',
+      'Analisi statistica a scopo informativo. '
+      'Gioca responsabilmente.',
     );
 
     await SharePlus.instance.share(
@@ -229,8 +233,6 @@ class BankrollHistoryScreen extends StatelessWidget {
   }
 
   Future<void> _shareBet(BankrollBet bet) async {
-    final status = _statusLabel(bet);
-
     final text = StringBuffer()
       ..writeln('SMARTBET AI — GIOCATA REGISTRATA')
       ..writeln()
@@ -238,19 +240,11 @@ class BankrollHistoryScreen extends StatelessWidget {
       ..writeln('Mercato: ${bet.outcome}')
       ..writeln('Quota: ${bet.odd.toStringAsFixed(2)}')
       ..writeln('Bookmaker: ${bet.bookmaker}')
-      ..writeln('Importo: ${_money(bet.stakeAmount)}')
-      ..writeln('Stato: $status');
-
-    if (!bet.isPending) {
-      text.writeln(
-        'Risultato economico: ${_money(bet.profitLoss, signed: true)}',
-      );
-    }
-
-    text
+      ..writeln('Stato: ${_statusLabel(bet)}')
       ..writeln()
       ..writeln(
-        'Analisi statistica a scopo informativo. Gioca responsabilmente.',
+        'Analisi statistica a scopo informativo. '
+        'Gioca responsabilmente.',
       );
 
     await SharePlus.instance.share(
@@ -276,10 +270,8 @@ class BankrollHistoryScreen extends StatelessWidget {
         ),
         content: Text(
           '${bet.matchLabel}\n\n'
-          '${bet.outcome} @ ${bet.odd.toStringAsFixed(2)} • '
-          '${_money(bet.stakeAmount)}\n\n'
-          'La giocata verrà rimossa definitivamente dallo storico. '
-          'Se era già stata chiusa, SmartBet correggerà anche il bankroll.',
+          '${bet.outcome} @ ${bet.odd.toStringAsFixed(2)}\n\n'
+          'La giocata verrà rimossa definitivamente dallo storico.',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
         actions: [
@@ -368,7 +360,6 @@ class BankrollHistoryScreen extends StatelessWidget {
             children: [
               Expanded(child: _detail('ESITO', bet.outcome)),
               Expanded(child: _detail('QUOTA', bet.odd.toStringAsFixed(2))),
-              Expanded(child: _detail('IMPORTO', _money(bet.stakeAmount))),
             ],
           ),
           if (bet.bookmaker.trim().isNotEmpty) ...[
@@ -376,20 +367,6 @@ class BankrollHistoryScreen extends StatelessWidget {
             Text(
               'Bookmaker: ${bet.bookmaker}',
               style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ],
-          if (!bet.isPending) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Risultato economico: ${_money(bet.profitLoss, signed: true)}',
-              style: TextStyle(
-                color: bet.profitLoss > 0
-                    ? Colors.greenAccent
-                    : bet.profitLoss < 0
-                    ? Colors.redAccent
-                    : Colors.white54,
-                fontWeight: FontWeight.bold,
-              ),
             ),
           ],
           const SizedBox(height: 14),
@@ -558,16 +535,15 @@ class BankrollHistoryScreen extends StatelessWidget {
                     label: const Text('CONDIVIDI TUTTE LE GIOCATE'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: const Color(0xFF00C853),
-                      foregroundColor: Colors.white,
                     ),
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              if (history.isEmpty)
+                const SizedBox(height: 16),
+                ...history.map((bet) => _betCard(context, store, bet)),
+              ] else ...[
+                const SizedBox(height: 24),
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1F2937),
                     borderRadius: BorderRadius.circular(18),
@@ -577,28 +553,27 @@ class BankrollHistoryScreen extends StatelessWidget {
                       Icon(
                         Icons.receipt_long_outlined,
                         color: Colors.white38,
-                        size: 45,
+                        size: 42,
                       ),
                       SizedBox(height: 12),
                       Text(
                         'Nessuna giocata registrata',
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 6),
+                      SizedBox(height: 8),
                       Text(
-                        'Quando registri una giocata consigliata da SmartBet '
-                        'comparirà qui.',
+                        'Quando registrerai una giocata '
+                        'potrai verificarne qui il risultato.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white38),
+                        style: TextStyle(color: Colors.white54),
                       ),
                     ],
                   ),
-                )
-              else
-                ...history.map((bet) => _betCard(context, store, bet)),
+                ),
+              ],
             ],
           );
         },

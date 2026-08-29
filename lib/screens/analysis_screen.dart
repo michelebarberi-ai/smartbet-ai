@@ -1441,7 +1441,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 SizedBox(height: 6),
 
                                 Text(
-                                  'Dossier • Quote • AI • Value Bet • Stake',
+                                  'Dossier • Quote • AI • Value Bet',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white54,

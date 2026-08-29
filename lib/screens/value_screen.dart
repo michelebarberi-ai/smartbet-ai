@@ -105,7 +105,7 @@ class ValueScreen extends StatelessWidget {
           const SizedBox(height: 15),
 
           // ======================================================
-          // PRONOSTICO / QUOTA / STAKE
+          // PRONOSTICO / QUOTA
           // ======================================================
           Row(
             children: [
@@ -124,18 +124,6 @@ class ValueScreen extends StatelessWidget {
                   title: 'QUOTA',
                   value: item.odd.toStringAsFixed(2),
                   color: Colors.amber,
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              Expanded(
-                child: _mainBox(
-                  title: 'STAKE',
-                  value: item.shouldBet
-                      ? '${item.stakePercent.toStringAsFixed(2)}%'
-                      : 'NO BET',
-                  color: item.shouldBet ? Colors.orangeAccent : Colors.white38,
                 ),
               ),
             ],

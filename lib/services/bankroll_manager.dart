@@ -247,7 +247,7 @@ class BankrollManager {
     double total = 0.0;
 
     for (final bet in _history) {
-      if (bet.isPending) {
+      if (bet.isPending && bet.stakePercent > 0.0) {
         total += bet.stakeAmount;
       }
     }
@@ -507,6 +507,52 @@ class BankrollManager {
   }
 
   // ============================================================
+  // RECORD BET
+  //
+  // Registrazione storica indipendente dal bankroll.
+  // Serve per monitorare l'efficacia dei pronostici anche
+  // quando l'utente non vuole gestire un capitale virtuale.
+  // ============================================================
+
+  Future<BankrollBet?> recordBetAndSave({
+    required String matchLabel,
+    required String outcome,
+    required double odd,
+    required String bookmaker,
+    required double stakeAmount,
+  }) async {
+    if (hasBet(matchLabel: matchLabel, outcome: outcome, odd: odd)) {
+      return null;
+    }
+
+    if (odd <= 1.0 || stakeAmount < 0.0) {
+      return null;
+    }
+
+    final now = DateTime.now();
+
+    final bet = BankrollBet(
+      id: now.microsecondsSinceEpoch.toString(),
+      createdAt: now,
+      matchLabel: matchLabel,
+      outcome: outcome,
+      odd: odd,
+      bookmaker: bookmaker,
+      stakePercent: 0.0,
+      stakeAmount: stakeAmount,
+      bankrollBefore: 0.0,
+      status: 'PENDING',
+      profitLoss: 0.0,
+    );
+
+    _history.add(bet);
+
+    await save();
+
+    return bet;
+  }
+
+  // ============================================================
   // WIN
   // ============================================================
 
@@ -521,7 +567,9 @@ class BankrollManager {
 
     final profit = bet.stakeAmount * (bet.odd - 1.0);
 
-    _currentBankroll += profit;
+    if (bet.stakePercent > 0.0) {
+      _currentBankroll += profit;
+    }
 
     _history[index] = bet.copyWith(status: 'WIN', profitLoss: profit);
 
@@ -553,7 +601,9 @@ class BankrollManager {
 
     final loss = -bet.stakeAmount;
 
-    _currentBankroll += loss;
+    if (bet.stakePercent > 0.0) {
+      _currentBankroll += loss;
+    }
 
     _history[index] = bet.copyWith(status: 'LOSS', profitLoss: loss);
 

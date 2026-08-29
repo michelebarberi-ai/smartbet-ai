@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -12,6 +14,13 @@ class _RegisterMarketOption {
   final num probability;
 
   const _RegisterMarketOption(this.label, this.probability);
+}
+
+class _ComboChance {
+  final String label;
+  final int probability;
+
+  const _ComboChance({required this.label, required this.probability});
 }
 
 class _RegisterBetSheet extends StatefulWidget {
@@ -39,7 +48,6 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
   late String _selectedOutcome;
   late final TextEditingController _oddController;
   late final TextEditingController _bookmakerController;
-  late final TextEditingController _amountController;
 
   final OddsService _oddsService = OddsService();
 
@@ -68,12 +76,6 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
 
     _bookmakerController = TextEditingController(
       text: widget.preview.bookmaker,
-    );
-
-    _amountController = TextEditingController(
-      text: widget.preview.stakeAmount > 0.0
-          ? widget.preview.stakeAmount.toStringAsFixed(2)
-          : '',
     );
 
     _loadAutomaticOdds();
@@ -128,7 +130,6 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
   void dispose() {
     _oddController.dispose();
     _bookmakerController.dispose();
-    _amountController.dispose();
     _oddsService.dispose();
     super.dispose();
   }
@@ -152,27 +153,9 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
       _oddController.text.trim().replaceAll(',', '.'),
     );
 
-    final amount = double.tryParse(
-      _amountController.text.trim().replaceAll(',', '.'),
-    );
-
     if (odd == null || odd <= 1.0) {
       setState(() {
         _errorMessage = 'Inserisci una quota valida superiore a 1.00.';
-      });
-      return;
-    }
-
-    if (amount == null || amount <= 0.0) {
-      setState(() {
-        _errorMessage = 'Inserisci un importo valido.';
-      });
-      return;
-    }
-
-    if (amount > widget.bankroll.availableBankroll) {
-      setState(() {
-        _errorMessage = 'L’importo supera il capitale disponibile.';
       });
       return;
     }
@@ -188,22 +171,13 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
       return;
     }
 
-    final stakePercent = widget.bankroll.currentBankroll > 0.0
-        ? amount / widget.bankroll.currentBankroll * 100.0
-        : 0.0;
-
-    setState(() {
-      _saving = true;
-    });
-
-    final bet = await widget.bankroll.placeBet(
+    final bet = await widget.bankroll.recordBet(
       matchLabel: widget.matchLabel,
       outcome: _selectedOutcome,
       odd: odd,
       bookmaker: _bookmakerController.text.trim().isEmpty
           ? 'Non indicato'
           : _bookmakerController.text.trim(),
-      stakePercent: stakePercent,
     );
 
     if (!mounted) {
@@ -224,8 +198,6 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bankroll = widget.bankroll.snapshot;
-
     return Padding(
       padding: EdgeInsets.fromLTRB(
         18,
@@ -387,32 +359,6 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Importo effettivamente giocato',
-                labelStyle: const TextStyle(color: Colors.white54),
-                prefixText: '€ ',
-                prefixStyle: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-                helperText:
-                    'Disponibile: €${bankroll.availableBankroll.toStringAsFixed(2)}',
-                helperStyle: const TextStyle(color: Colors.white38),
-                enabledBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white12),
-                ),
-                focusedBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.greenAccent),
-                ),
-              ),
-            ),
             const SizedBox(height: 18),
             Container(
               width: double.infinity,
@@ -548,7 +494,224 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       _RegisterMarketOption('UNDER 2.5', result.under25Probability),
       _RegisterMarketOption('GOAL', result.goalProbability),
       _RegisterMarketOption('NO GOAL', result.noGoalProbability),
+      ..._comboChances(
+        result,
+      ).map((combo) => _RegisterMarketOption(combo.label, combo.probability)),
     ];
+  }
+
+  // ============================================================
+  // COMBO CHANCE
+  // ============================================================
+
+  double _poissonProbability(double lambda, int goals) {
+    if (lambda <= 0 || goals < 0) {
+      return 0.0;
+    }
+
+    var factorial = 1;
+
+    for (var i = 2; i <= goals; i++) {
+      factorial *= i;
+    }
+
+    return math.pow(lambda, goals).toDouble() * math.exp(-lambda) / factorial;
+  }
+
+  List<_ComboChance> _comboChances(AnalysisResult result) {
+    final homeLambda = result.expectedHomeGoals;
+    final awayLambda = result.expectedAwayGoals;
+
+    if (homeLambda <= 0 || awayLambda <= 0) {
+      return const [];
+    }
+
+    const maxGoals = 8;
+
+    final scores = <({int home, int away, double probability})>[];
+
+    var totalMass = 0.0;
+
+    for (var home = 0; home <= maxGoals; home++) {
+      final homeProbability = _poissonProbability(homeLambda, home);
+
+      for (var away = 0; away <= maxGoals; away++) {
+        final awayProbability = _poissonProbability(awayLambda, away);
+
+        final probability = homeProbability * awayProbability;
+
+        totalMass += probability;
+
+        scores.add((home: home, away: away, probability: probability));
+      }
+    }
+
+    if (totalMass <= 0) {
+      return const [];
+    }
+
+    int probabilityWhere(bool Function(int home, int away) condition) {
+      var probability = 0.0;
+
+      for (final score in scores) {
+        if (condition(score.home, score.away)) {
+          probability += score.probability;
+        }
+      }
+
+      return ((probability / totalMass) * 100).round().clamp(0, 100);
+    }
+
+    final combos = <_ComboChance>[
+      _ComboChance(
+        label: '1X + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => home > away && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + O1.5',
+        probability: probabilityWhere(
+          (home, away) => away > home && home + away >= 2,
+        ),
+      ),
+      _ComboChance(
+        label: '1X + U3.5',
+        probability: probabilityWhere(
+          (home, away) => home >= away && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'X2 + U3.5',
+        probability: probabilityWhere(
+          (home, away) => away >= home && home + away <= 3,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '2 + GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && home > 0 && away > 0,
+        ),
+      ),
+      _ComboChance(
+        label: '1 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => home > away && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: '2 + NO GOAL',
+        probability: probabilityWhere(
+          (home, away) => away > home && (home == 0 || away == 0),
+        ),
+      ),
+      _ComboChance(
+        label: 'GOAL + O2.5',
+        probability: probabilityWhere(
+          (home, away) => home > 0 && away > 0 && home + away >= 3,
+        ),
+      ),
+      _ComboChance(
+        label: 'NO GOAL + U2.5',
+        probability: probabilityWhere(
+          (home, away) => (home == 0 || away == 0) && home + away <= 2,
+        ),
+      ),
+    ];
+
+    final reliable = combos.where((combo) => combo.probability >= 30).toList();
+
+    reliable.sort((a, b) => b.probability.compareTo(a.probability));
+
+    return reliable;
+  }
+
+  Widget _comboChanceSection(AnalysisResult result) {
+    final combos = _comboChances(result);
+
+    if (combos.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return _sectionCard(
+      title: 'COMBO CHANCE',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Combinazioni ordinate per probabilità stimata.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: combos.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 1.65,
+            ),
+            itemBuilder: (context, index) {
+              final combo = combos[index];
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: const Color(0xFF00C853).withValues(alpha: 0.28),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      combo.label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${combo.probability}%',
+                      style: const TextStyle(
+                        color: Color(0xFF00C853),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openRegisterBetDialog(BetExecutionPreview preview) async {
@@ -611,13 +774,6 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
     }
 
     text
-      ..writeln(
-        'Stake consigliato: ${preview.stakePercent.toStringAsFixed(2)}%',
-      )
-      ..writeln(
-        'Importo sul bankroll attuale: '
-        '€${preview.stakeAmount.toStringAsFixed(2)}',
-      )
       ..writeln('Smart Score: ${result.smartScore}')
       ..writeln('Rischio: ${result.risk}')
       ..writeln()
@@ -869,6 +1025,10 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              _comboChanceSection(result),
 
               const SizedBox(height: 16),
 
@@ -1403,8 +1563,6 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   // ============================================================
 
   Widget _betExecutionCard(BetExecutionPreview preview) {
-    final snapshot = _bankroll.snapshot;
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1422,14 +1580,12 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
           Row(
             children: [
               Icon(
-                Icons.account_balance_wallet,
+                Icons.insights_outlined,
                 color: preview.canPlaceBet
                     ? Colors.greenAccent
                     : Colors.white54,
               ),
-
               const SizedBox(width: 10),
-
               const Text(
                 'GIOCATA CONSIGLIATA',
                 style: TextStyle(
@@ -1440,9 +1596,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 20),
-
           if (!preview.canPlaceBet) ...[
             Container(
               width: double.infinity,
@@ -1455,32 +1609,11 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                 'SmartBet non rileva al momento una quota '
                 'sufficientemente interessante da consigliare. '
                 'Puoi comunque registrare manualmente la giocata '
-                'che hai effettivamente effettuato.',
+                'che hai effettuato.',
                 style: TextStyle(color: Colors.white70, height: 1.4),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            _betRow(
-              'Bankroll',
-              '€${snapshot.currentBankroll.toStringAsFixed(2)}',
-            ),
-
-            _betRow(
-              'Già impegnato',
-              '€${snapshot.lockedBankroll.toStringAsFixed(2)}',
-              valueColor: Colors.orange,
-            ),
-
-            _betRow(
-              'Disponibile',
-              '€${snapshot.availableBankroll.toStringAsFixed(2)}',
-              valueColor: Colors.greenAccent,
-            ),
-
-            const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -1493,7 +1626,6 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.green.withValues(alpha: 0.35),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -1502,76 +1634,33 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
             ),
           ] else ...[
             _betRow('Esito', preview.outcome),
-
             _betRow('Quota', preview.odd.toStringAsFixed(2)),
-
-            _betRow('Bookmaker', preview.bookmaker),
-
-            const Divider(color: Colors.white12, height: 28),
-
             _betRow(
-              'Percentuale consigliata',
-              '${preview.stakePercent.toStringAsFixed(2)}%',
+              'Bookmaker',
+              preview.bookmaker.trim().isEmpty
+                  ? 'Non indicato'
+                  : preview.bookmaker,
             ),
-
-            _betRow(
-              'Importo da registrare',
-              '€${preview.stakeAmount.toStringAsFixed(2)}',
-              valueColor: Colors.greenAccent,
-              bold: true,
-            ),
-
-            const Divider(color: Colors.white12, height: 28),
-
-            _betRow(
-              'Bankroll',
-              '€${snapshot.currentBankroll.toStringAsFixed(2)}',
-            ),
-
-            _betRow(
-              'Già impegnato',
-              '€${snapshot.lockedBankroll.toStringAsFixed(2)}',
-              valueColor: Colors.orange,
-            ),
-
-            _betRow(
-              'Disponibile',
-              '€${snapshot.availableBankroll.toStringAsFixed(2)}',
-              valueColor: Colors.greenAccent,
-            ),
-
             const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _registering
                     ? null
                     : () => _openRegisterBetDialog(preview),
-                icon: _registering
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.edit_note_outlined),
-                label: Text(
-                  _registering ? 'REGISTRAZIONE...' : 'REGISTRA GIOCATA',
-                ),
+                icon: const Icon(Icons.edit_note_outlined),
+                label: const Text('REGISTRA GIOCATA'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.green.withValues(alpha: 0.35),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

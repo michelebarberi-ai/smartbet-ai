@@ -309,9 +309,7 @@ class _SavedScreenState extends State<SavedScreen> {
                   const SizedBox(height: 4),
 
                   Text(
-                    '${item.stakeBookmaker} • '
-                    'Stake '
-                    '${item.recommendedStakePercent.toStringAsFixed(2)}%',
+                    '${item.stakeBookmaker}',
                     style: const TextStyle(color: Colors.white60, fontSize: 11),
                   ),
                 ],

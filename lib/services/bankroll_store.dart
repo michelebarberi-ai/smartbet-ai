@@ -93,6 +93,27 @@ class BankrollStore extends ChangeNotifier {
     return bet;
   }
 
+  Future<BankrollBet?> recordBet({
+    required String matchLabel,
+    required String outcome,
+    required double odd,
+    required String bookmaker,
+  }) async {
+    final bet = await manager.recordBetAndSave(
+      matchLabel: matchLabel,
+      outcome: outcome,
+      odd: odd,
+      bookmaker: bookmaker,
+      stakeAmount: 0.0,
+    );
+
+    if (bet != null) {
+      notifyListeners();
+    }
+
+    return bet;
+  }
+
   Future<bool> settleWin(String betId) async {
     return settleAs(betId, 'WIN');
   }

@@ -581,62 +581,6 @@ class _CouponScreenState extends State<CouponScreen> {
   }
 
   // ============================================================
-  // STAKE
-  // ============================================================
-
-  Widget _stakeCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF00C853).withValues(alpha: 0.30),
-        ),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            backgroundColor: Color(0x2200C853),
-            child: Icon(Icons.account_balance_wallet, color: Color(0xFF00C853)),
-          ),
-
-          const SizedBox(width: 13),
-
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Stake consigliato',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-
-                SizedBox(height: 3),
-
-                Text(
-                  'Percentuale del bankroll',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-
-          Text(
-            '${result.recommendedStakePercent.toStringAsFixed(2)}%',
-            style: const TextStyle(
-              color: Color(0xFF00C853),
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
   // NESSUNA SCHEDINA
   // ============================================================
 
@@ -705,10 +649,6 @@ class _CouponScreenState extends State<CouponScreen> {
       )
       ..writeln('Probabilità stimata: ${probability.toStringAsFixed(1)}%')
       ..writeln('Rischio: ${result.riskLevel}')
-      ..writeln(
-        'Stake consigliato: '
-        '${result.recommendedStakePercent.toStringAsFixed(2)}%',
-      )
       ..writeln();
 
     for (var i = 0; i < result.selections.length; i++) {
@@ -823,9 +763,6 @@ class _CouponScreenState extends State<CouponScreen> {
               ),
 
               const SizedBox(height: 8),
-
-              _stakeCard(),
-
               const SizedBox(height: 14),
 
               _shareCouponButton(),
