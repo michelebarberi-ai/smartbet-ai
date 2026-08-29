@@ -7,11 +7,11 @@ class HomeHeader extends StatelessWidget {
     final hour = DateTime.now().hour;
 
     if (hour < 12) {
-      return "Buongiorno Michele 👋";
+      return "Buongiorno 👋";
     } else if (hour < 18) {
-      return "Buon pomeriggio Michele 👋";
+      return "Buon pomeriggio 👋";
     } else {
-      return "Buonasera Michele 🌙";
+      return "Buonasera 🌙";
     }
   }
 
@@ -74,28 +74,6 @@ class HomeHeader extends StatelessWidget {
                   style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ],
-            ),
-          ),
-
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F2937),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF00C853), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.person_outline_rounded,
-              color: Colors.white,
-              size: 28,
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/settings_store.dart';
 import '../services/smartbet_ai_service.dart';
@@ -18,6 +19,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
 
     _store.initialize();
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossibile aprire il collegamento.')),
+      );
+    }
   }
 
   Future<void> _reset() async {
@@ -313,6 +326,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontSize: 12,
                       ),
                     ),
+                  ),
+                  const Divider(color: Colors.white10),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.privacy_tip_outlined,
+                      color: Color(0xFF00C853),
+                    ),
+                    title: const Text(
+                      'Privacy Policy',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Consulta l’informativa sulla privacy.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.open_in_new,
+                      color: Colors.white54,
+                    ),
+                    onTap: () async {
+                      await _openExternalUrl(
+                        'https://smartbet-ai-y6gw.onrender.com/privacy',
+                      );
+                    },
+                  ),
+                  const Divider(color: Colors.white10),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.support_agent,
+                      color: Color(0xFF00C853),
+                    ),
+                    title: const Text(
+                      'Assistenza',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Contatta il supporto SmartBet.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.open_in_new,
+                      color: Colors.white54,
+                    ),
+                    onTap: () async {
+                      await _openExternalUrl(
+                        'https://smartbet-ai-y6gw.onrender.com/support',
+                      );
+                    },
                   ),
                 ],
               ),
