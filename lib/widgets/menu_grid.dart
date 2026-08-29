@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/analysis_screen.dart';
 import '../screens/combinations_ai_screen.dart';
 import '../screens/create_ai_coupon_screen.dart';
+import '../screens/live_analysis_screen.dart';
 import '../screens/prediction_screen.dart';
 import '../screens/review_coupon_screen.dart';
 import '../screens/saved_screen.dart';
@@ -33,6 +34,17 @@ class MenuGrid extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CombinationsAiScreen()),
+          );
+        },
+      ),
+      _MenuItem(
+        icon: Icons.live_tv,
+        title: 'Analisi Live\nAI',
+        color: Colors.redAccent,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LiveAnalysisScreen()),
           );
         },
       ),

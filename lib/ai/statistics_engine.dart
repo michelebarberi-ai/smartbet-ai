@@ -37,59 +37,121 @@ class StatisticsEngine {
     required TeamAnalysis awayTeam,
     double competitionWeight = 0.70,
   }) {
-    // ----------------------------------------------------------
-    // FORMA
-    // ----------------------------------------------------------
+    // ============================================================
+    // SMART SCORE
+    // ============================================================
+    //
+    // Lo Smart Score misura l'AFFIDABILITÀ del quadro statistico,
+    // non quale squadra è favorita.
+    //
+    // Consideriamo:
+    // - intensità delle differenze tra le squadre;
+    // - concordanza dei diversi indicatori;
+    // - peso/affidabilità della competizione.
+    //
+    // Un vantaggio forte dell'ospite può quindi produrre uno
+    // Smart Score alto esattamente come un vantaggio forte della casa.
+    // ============================================================
 
     final formScore = _compare(homeTeam.form, awayTeam.form);
-
-    // ----------------------------------------------------------
-    // ATTACCO
-    // ----------------------------------------------------------
-
     final attackScore = _compare(homeTeam.attack, awayTeam.attack);
-
-    // ----------------------------------------------------------
-    // DIFESA
-    // ----------------------------------------------------------
-
     final defenseScore = _compare(homeTeam.defense, awayTeam.defense);
-
-    // ----------------------------------------------------------
-    // CASA / TRASFERTA
-    // ----------------------------------------------------------
-
     final venueScore = _compare(
       homeTeam.homePerformance,
       awayTeam.awayPerformance,
     );
-
-    // ----------------------------------------------------------
-    // MOTIVAZIONE
-    // ----------------------------------------------------------
-
     final motivationScore = _compare(homeTeam.motivation, awayTeam.motivation);
 
-    // ----------------------------------------------------------
-    // PESI
-    // ----------------------------------------------------------
+    final factors = <({double score, double weight})>[
+      (score: formScore, weight: 0.25),
+      (score: attackScore, weight: 0.20),
+      (score: defenseScore, weight: 0.20),
+      (score: venueScore, weight: 0.20),
+      (score: motivationScore, weight: 0.15),
+    ];
 
-    final rawScore =
+    // Direzione complessiva del confronto.
+    final directionalScore =
         (formScore * 0.25) +
         (attackScore * 0.20) +
         (defenseScore * 0.20) +
         (venueScore * 0.20) +
         (motivationScore * 0.15);
 
-    // ----------------------------------------------------------
+    final homeFavored = directionalScore >= 50;
+
+    // ------------------------------------------------------------
+    // FORZA DEL SEGNALE
+    // ------------------------------------------------------------
+    //
+    // 50 = equilibrio.
+    // Più un fattore si allontana da 50, più è informativo.
+    // Usiamo il valore assoluto perché non importa se favorisca
+    // casa o trasferta.
+    // ------------------------------------------------------------
+
+    var signalStrength = 0.0;
+
+    for (final factor in factors) {
+      final distance = (factor.score - 50).abs() * 2;
+      signalStrength += distance.clamp(0.0, 100.0) * factor.weight;
+    }
+
+    // ------------------------------------------------------------
+    // CONCORDANZA DEI SEGNALI
+    // ------------------------------------------------------------
+    //
+    // Un pronostico è più affidabile quando forma, attacco,
+    // difesa, venue e motivazione puntano nella stessa direzione.
+    //
+    // I fattori quasi neutrali non vengono considerati come
+    // conferme forti.
+    // ------------------------------------------------------------
+
+    var activeWeight = 0.0;
+    var agreeingWeight = 0.0;
+
+    for (final factor in factors) {
+      final distance = (factor.score - 50).abs();
+
+      if (distance < 4) {
+        continue;
+      }
+
+      activeWeight += factor.weight;
+
+      final favorsHome = factor.score > 50;
+
+      if (favorsHome == homeFavored) {
+        agreeingWeight += factor.weight;
+      }
+    }
+
+    final agreement = activeWeight <= 0 ? 0.5 : agreeingWeight / activeWeight;
+
+    // ------------------------------------------------------------
+    // SCORE BASE
+    // ------------------------------------------------------------
+
+    var confidence = 45.0 + (signalStrength * 0.35) + (agreement * 20.0);
+
+    // Se gli indicatori sono molto discordanti, limitiamo
+    // l'eccessiva sicurezza.
+    if (agreement < 0.55) {
+      confidence -= 8;
+    } else if (agreement < 0.70) {
+      confidence -= 4;
+    }
+
+    // ------------------------------------------------------------
     // PESO DELLA COMPETIZIONE
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
 
     final weight = competitionWeight.clamp(0.50, 1.00);
 
-    final weightedScore = 50 + ((rawScore - 50) * weight);
+    confidence = 45 + ((confidence - 45) * weight);
 
-    return weightedScore.round().clamp(1, 99);
+    return confidence.round().clamp(1, 99);
   }
 
   // ============================================================

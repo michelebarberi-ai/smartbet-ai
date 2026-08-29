@@ -420,6 +420,8 @@ const allowedFootballPaths = new Set([
   "fixtures",
   "fixtures/headtohead",
   "fixtures/lineups",
+  "fixtures/statistics",
+  "fixtures/events",
   "injuries",
   "teams",
   "teams/statistics",
@@ -427,10 +429,22 @@ const allowedFootballPaths = new Set([
   "leagues",
 ]);
 
-function footballTtlForPath(path) {
+function footballTtlForPath(path, query = {}) {
+  if (
+    path === "fixtures" &&
+    query.live !== undefined &&
+    String(query.live).trim() !== ""
+  ) {
+    return 30 * 1000;
+  }
+
   switch (path) {
     case "fixtures":
       return 15 * 60 * 1000;
+
+    case "fixtures/statistics":
+    case "fixtures/events":
+      return 30 * 1000;
 
     case "fixtures/lineups":
       return 5 * 60 * 1000;
@@ -484,7 +498,7 @@ app.get(/^\/football\/api\/(.+)$/, async (req, res) => {
     const result = await requestApiFootball({
       path: `/${apiPath}`,
       query,
-      ttlMs: footballTtlForPath(apiPath),
+      ttlMs: footballTtlForPath(apiPath, query),
     });
 
     res.set(

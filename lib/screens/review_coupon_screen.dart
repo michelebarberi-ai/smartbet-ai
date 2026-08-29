@@ -1183,7 +1183,9 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
                                         .toDouble(),
                                 min: 2,
                                 max: _selections.length.toDouble(),
-                                divisions: _selections.length - 2,
+                                divisions: _selections.length > 2
+                                    ? _selections.length - 2
+                                    : null,
                                 label:
                                     '${(_targetKeepCount <= 0 ? _selections.length : _targetKeepCount).clamp(2, _selections.length)}',
                                 onChanged: _analyzing

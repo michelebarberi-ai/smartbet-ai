@@ -19,6 +19,8 @@ class CreateAiCouponScreen extends StatefulWidget {
 
 enum _CouponProfile { premium, balanced, value }
 
+enum _CouponPeriod { today, weekend, next3Days, custom }
+
 class _ComboChance {
   final String label;
   final int probability;
@@ -68,6 +70,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   final OddsService _oddsService = OddsService();
 
   _CouponProfile _profile = _CouponProfile.premium;
+
+  _CouponPeriod _period = _CouponPeriod.today;
+  DateTimeRange? _customPeriod;
   int _count = 5;
 
   bool _loading = false;
@@ -641,6 +646,149 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return null;
   }
 
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _shortDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month';
+  }
+
+  String get _periodLabel {
+    switch (_period) {
+      case _CouponPeriod.today:
+        return 'Oggi';
+
+      case _CouponPeriod.weekend:
+        return '2 giorni';
+
+      case _CouponPeriod.next3Days:
+        return 'Prossimi 3 giorni';
+
+      case _CouponPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return 'Personalizzato';
+        }
+
+        return '${_shortDate(range.start)} - ${_shortDate(range.end)}';
+    }
+  }
+
+  List<DateTime> _selectedDates() {
+    final today = _dateOnly(DateTime.now());
+
+    switch (_period) {
+      case _CouponPeriod.today:
+        return [today];
+
+      case _CouponPeriod.weekend:
+        return [today, today.add(const Duration(days: 1))];
+
+      case _CouponPeriod.next3Days:
+        return List<DateTime>.generate(
+          3,
+          (index) => today.add(Duration(days: index)),
+        );
+
+      case _CouponPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return [today];
+        }
+
+        final start = _dateOnly(range.start);
+        final end = _dateOnly(range.end);
+        final days = end.difference(start).inDays + 1;
+
+        return List<DateTime>.generate(
+          days,
+          (index) => start.add(Duration(days: index)),
+        );
+    }
+  }
+
+  Future<List<MatchModel>> _loadMatchesForSelectedPeriod() async {
+    final dates = _selectedDates();
+    final today = _dateOnly(DateTime.now());
+
+    final batches = await Future.wait(
+      dates.map((date) {
+        if (_dateOnly(date) == today) {
+          return MatchRepository.getTodayMatches();
+        }
+
+        return MatchRepository.getMatchesByDate(date);
+      }),
+    );
+
+    final unique = <int, MatchModel>{};
+
+    for (final batch in batches) {
+      for (final match in batch) {
+        unique[match.fixtureId] = match;
+      }
+    }
+
+    final matches = unique.values.toList();
+
+    matches.sort((a, b) {
+      try {
+        return DateTime.parse(a.date).compareTo(DateTime.parse(b.date));
+      } catch (_) {
+        return 0;
+      }
+    });
+
+    return matches;
+  }
+
+  Future<void> _selectCustomPeriod() async {
+    final today = _dateOnly(DateTime.now());
+
+    final initialRange =
+        _customPeriod ??
+        DateTimeRange(start: today, end: today.add(const Duration(days: 2)));
+
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 60)),
+      initialDateRange: initialRange,
+      helpText: 'Periodo schedina AI',
+      saveText: 'CONFERMA',
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    final length =
+        _dateOnly(selected.end).difference(_dateOnly(selected.start)).inDays +
+        1;
+
+    if (length > 7) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Per ora puoi selezionare un massimo di 7 giorni.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _period = _CouponPeriod.custom;
+      _customPeriod = selected;
+      _results.clear();
+      _error = null;
+      _notice = null;
+    });
+  }
+
   // ============================================================
   // PARTITA NON INIZIATA
   // ============================================================
@@ -683,7 +831,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // PARTITE DEL GIORNO
       // ========================================================
 
-      final all = await MatchRepository.getTodayMatches();
+      final all = await _loadMatchesForSelectedPeriod();
 
       final matches = all
           .where(
@@ -1161,6 +1309,77 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     );
   }
 
+  Widget _periodSelector() {
+    Widget chip(_CouponPeriod period, String label) {
+      final selected = _period == period;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        onSelected: _loading
+            ? null
+            : (_) async {
+                if (period == _CouponPeriod.custom) {
+                  await _selectCustomPeriod();
+                  return;
+                }
+
+                setState(() {
+                  _period = period;
+                  _results.clear();
+                  _error = null;
+                  _notice = null;
+                });
+              },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Periodo partite',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(_CouponPeriod.today, 'OGGI'),
+            chip(_CouponPeriod.weekend, '2 GIORNI'),
+            chip(_CouponPeriod.next3Days, '3 GIORNI'),
+            chip(_CouponPeriod.custom, 'PERSONALIZZATO'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Periodo selezionato: $_periodLabel',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _progress() {
     if (!_loading) return const SizedBox.shrink();
 
@@ -1282,7 +1501,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
+
+          _periodSelector(),
+
+          const SizedBox(height: 18),
 
           Container(
             decoration: BoxDecoration(
