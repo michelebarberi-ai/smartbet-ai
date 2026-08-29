@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 
 class AiCard extends StatelessWidget {
+  // Vecchi parametri mantenuti per compatibilità.
   final double? reliability;
   final int? matches;
   final int? valueBets;
   final int? premium;
+
+  final int? liveMatches;
+  final int? todayMatches;
+  final int? analysesPerformed;
+
   final bool online;
+  final bool loading;
+
+  final DateTime? lastUpdate;
 
   const AiCard({
     super.key,
@@ -13,54 +22,46 @@ class AiCard extends StatelessWidget {
     this.matches,
     this.valueBets,
     this.premium,
+    this.liveMatches,
+    this.todayMatches,
+    this.analysesPerformed,
     this.online = true,
+    this.loading = false,
+    this.lastUpdate,
   });
 
-  // ============================================================
-  // ORARIO AGGIORNAMENTO
-  // ============================================================
-
-  String _currentTime() {
-    final now = DateTime.now();
-
-    final hour = now.hour.toString().padLeft(2, '0');
-
-    final minute = now.minute.toString().padLeft(2, '0');
-
-    return '$hour:$minute';
-  }
-
-  // ============================================================
-  // AFFIDABILITÀ
-  // ============================================================
-
-  double get _progressValue {
-    if (reliability == null) {
-      return 0.0;
+  String get _updateLabel {
+    if (loading) {
+      return 'Aggiornamento dati...';
     }
 
-    return (reliability! / 100.0).clamp(0.0, 1.0);
-  }
+    final date = lastUpdate;
 
-  String get _reliabilityLabel {
-    if (reliability == null) {
-      return 'In calcolo';
+    if (date == null) {
+      return 'Sincronizzazione SmartBet';
     }
 
-    return '${reliability!.toStringAsFixed(0)}%';
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return 'Aggiornato alle $hour:$minute';
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
+  String _value(int? value) {
+    if (value != null) {
+      return value.toString();
+    }
+
+    return loading ? '...' : '—';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 18),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
           colors: [Color(0xFF00C853), Color(0xFF009688)],
           begin: Alignment.topLeft,
@@ -68,54 +69,45 @@ class AiCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ======================================================
-          // HEADER
-          // ======================================================
           Row(
             children: [
               const CircleAvatar(
-                radius: 22,
+                radius: 21,
                 backgroundColor: Colors.white24,
-                child: Icon(Icons.psychology, color: Colors.white, size: 24),
+                child: Icon(Icons.psychology, color: Colors.white, size: 23),
               ),
-
-              const SizedBox(width: 14),
-
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      online ? 'AI PRONTA' : 'AI NON DISPONIBILE',
+                      online ? 'SMARTBET AI' : 'SMARTBET NON DISPONIBILE',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 3),
-
                     Text(
-                      'Aggiornato alle ${_currentTime()}',
+                      _updateLabel,
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -126,83 +118,45 @@ class AiCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  online ? 'ONLINE' : 'OFFLINE',
+                  loading
+                      ? 'SYNC'
+                      : online
+                      ? 'ONLINE'
+                      : 'OFFLINE',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 10,
                   ),
                 ),
               ),
             ],
           ),
-
-          const SizedBox(height: 22),
-
-          // ======================================================
-          // AFFIDABILITÀ
-          // ======================================================
-          const Text(
-            'Indice di affidabilità',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-
-          const SizedBox(height: 10),
-
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: _progressValue,
-              minHeight: 10,
-              backgroundColor: Colors.white24,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                reliability == null ? Colors.white38 : const Color(0xFFFF9800),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              _reliabilityLabel,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 22),
-
-          const Divider(color: Colors.white24, height: 1),
-
           const SizedBox(height: 18),
-
-          // ======================================================
-          // DATI
-          // ======================================================
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _Info(
-                icon: Icons.sports_soccer,
-                value: matches?.toString() ?? '—',
-                label: 'Partite',
+              Expanded(
+                child: _Info(
+                  icon: Icons.live_tv,
+                  value: _value(liveMatches),
+                  label: 'Live',
+                ),
               ),
-
-              _Info(
-                icon: Icons.trending_up,
-                value: valueBets?.toString() ?? '—',
-                label: 'Value Bet',
+              Expanded(
+                child: _Info(
+                  icon: Icons.calendar_today,
+                  value: _value(todayMatches),
+                  label: 'Analizzabili',
+                ),
               ),
-
-              _Info(
-                icon: Icons.workspace_premium,
-                value: premium?.toString() ?? '—',
-                label: 'Premium',
+              Expanded(
+                child: _Info(
+                  icon: Icons.analytics_outlined,
+                  value: '${analysesPerformed ?? 0}',
+                  label: 'Analisi',
+                ),
               ),
             ],
           ),
@@ -211,10 +165,6 @@ class AiCard extends StatelessWidget {
     );
   }
 }
-
-// ============================================================
-// INFO
-// ============================================================
 
 class _Info extends StatelessWidget {
   final IconData icon;
@@ -228,25 +178,23 @@ class _Info extends StatelessWidget {
     return Column(
       children: [
         CircleAvatar(
-          radius: 20,
+          radius: 18,
           backgroundColor: Colors.white24,
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon, color: Colors.white, size: 18),
         ),
-
-        const SizedBox(height: 8),
-
+        const SizedBox(height: 7),
         Text(
           value,
           style: const TextStyle(
             color: Colors.white,
+            fontSize: 19,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
           ),
         ),
-
+        const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: const TextStyle(color: Colors.white70, fontSize: 11),
         ),
       ],
     );

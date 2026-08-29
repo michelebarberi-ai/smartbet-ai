@@ -16,28 +16,6 @@ class MenuGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = <_MenuItem>[
       _MenuItem(
-        icon: Icons.sports_soccer,
-        title: 'Analisi\nPartite',
-        color: const Color(0xFF00C853),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AnalysisScreen()),
-          );
-        },
-      ),
-      _MenuItem(
-        icon: Icons.auto_awesome,
-        title: 'Combinazioni\nAI',
-        color: Colors.orange,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CombinationsAiScreen()),
-          );
-        },
-      ),
-      _MenuItem(
         icon: Icons.live_tv,
         title: 'Analisi Live\nAI',
         color: Colors.redAccent,
@@ -49,13 +27,13 @@ class MenuGrid extends StatelessWidget {
         },
       ),
       _MenuItem(
-        icon: Icons.psychology,
-        title: 'Risultati del\nGiorno AI',
+        icon: Icons.sports_soccer,
+        title: 'Analisi\nPartite',
         color: const Color(0xFF00C853),
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const PredictionScreen()),
+            MaterialPageRoute(builder: (_) => const AnalysisScreen()),
           );
         },
       ),
@@ -71,6 +49,17 @@ class MenuGrid extends StatelessWidget {
         },
       ),
       _MenuItem(
+        icon: Icons.auto_awesome,
+        title: 'Combinazioni\nAI',
+        color: Colors.orange,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CombinationsAiScreen()),
+          );
+        },
+      ),
+      _MenuItem(
         icon: Icons.fact_check_outlined,
         title: 'Revisione\nSchedina AI',
         color: const Color(0xFF00C853),
@@ -78,6 +67,17 @@ class MenuGrid extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ReviewCouponScreen()),
+          );
+        },
+      ),
+      _MenuItem(
+        icon: Icons.psychology,
+        title: 'Risultati del\nGiorno AI',
+        color: const Color(0xFF00C853),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PredictionScreen()),
           );
         },
       ),

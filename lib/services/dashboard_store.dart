@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_result.dart';
 import '../repositories/match_repository.dart';
+import 'live_match_service.dart';
+import 'italy_schedule_filter.dart';
 import 'smartbet_ai_service.dart';
 
 class DashboardStore extends ChangeNotifier {
@@ -33,6 +35,7 @@ class DashboardStore extends ChangeNotifier {
   bool _aiOnline = false;
 
   int? _todayMatches;
+  int? _liveMatches;
 
   int _analysesPerformed = 0;
   int _valueBetsFound = 0;
@@ -52,6 +55,8 @@ class DashboardStore extends ChangeNotifier {
   bool get aiOnline => _aiOnline;
 
   int? get todayMatches => _todayMatches;
+
+  int? get liveMatches => _liveMatches;
 
   int get analysesPerformed => _analysesPerformed;
 
@@ -150,7 +155,11 @@ class DashboardStore extends ChangeNotifier {
 
     notifyListeners();
 
-    await Future.wait([_loadTodayMatches(), _checkBackend()]);
+    await Future.wait([
+      _loadTodayMatches(),
+      _loadLiveMatches(),
+      _checkBackend(),
+    ]);
 
     _lastUpdate = DateTime.now();
 
@@ -159,19 +168,59 @@ class DashboardStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _loadLiveMatches() async {
+    try {
+      final matches = await LiveMatchService().getLiveMatches();
+      _liveMatches = matches.length;
+    } catch (e) {
+      debugPrint('Dashboard live matches error: $e');
+      _liveMatches = null;
+    }
+  }
+
   // ============================================================
   // PARTITE OGGI
   // ============================================================
 
   Future<void> _loadTodayMatches() async {
     try {
-      final matches = await MatchRepository.getTodayMatches();
+      final matches = await MatchRepository.getTodayMatches().timeout(
+        const Duration(seconds: 8),
+      );
 
-      _todayMatches = matches.length;
+      final now = DateTime.now();
+
+      final analyzable = matches.where((match) {
+        if (!match.hasTeamIds) {
+          return false;
+        }
+
+        DateTime matchDate;
+
+        try {
+          matchDate = DateTime.parse(match.date).toLocal();
+        } catch (_) {
+          return false;
+        }
+
+        if (!matchDate.isAfter(now)) {
+          return false;
+        }
+
+        if (!ItalyScheduleFilter.allows(match)) {
+          return false;
+        }
+
+        return true;
+      }).length;
+
+      _todayMatches = analyzable;
+      _aiOnline = true;
+      notifyListeners();
     } catch (e) {
       debugPrint('Dashboard matches error: $e');
-
       _todayMatches = null;
+      notifyListeners();
     }
   }
 
