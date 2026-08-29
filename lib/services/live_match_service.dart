@@ -234,11 +234,14 @@ class LiveMatchSnapshot {
 
   final List<LiveMatchEvent> events;
 
+  final bool statisticsAvailable;
+
   const LiveMatchSnapshot({
     required this.match,
     required this.homeStats,
     required this.awayStats,
     required this.events,
+    required this.statisticsAvailable,
   });
 }
 
@@ -319,6 +322,7 @@ class LiveMatchService {
       homeStats: homeStats,
       awayStats: awayStats,
       events: events,
+      statisticsAvailable: rawStatistics.whereType<Map>().length >= 2,
     );
   }
 

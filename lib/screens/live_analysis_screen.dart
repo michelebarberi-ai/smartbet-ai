@@ -14,9 +14,12 @@ class LiveAnalysisScreen extends StatefulWidget {
 
 class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
   final LiveMatchService _service = LiveMatchService();
+  final TextEditingController _searchController = TextEditingController();
 
   Future<List<LiveMatchSummary>>? _future;
   Timer? _timer;
+
+  bool _mainCompetitionsOnly = false;
 
   @override
   void initState() {
@@ -30,6 +33,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -49,6 +53,230 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
     });
 
     await future;
+  }
+
+  bool _isMainCompetition(LiveMatchSummary match) {
+    final league = match.leagueName.toLowerCase().trim();
+    final country = match.country.toLowerCase().trim();
+
+    const internationalPatterns = [
+      'champions league',
+      'europa league',
+      'conference league',
+      'super cup',
+      'world cup',
+      'club world cup',
+      'euro championship',
+      'nations league',
+      'copa america',
+      'libertadores',
+      'sudamericana',
+    ];
+
+    if (internationalPatterns.any(league.contains)) {
+      return true;
+    }
+
+    bool containsAny(List<String> patterns) {
+      return patterns.any(league.contains);
+    }
+
+    switch (country) {
+      case 'italy':
+        return containsAny(['serie a', 'serie b', 'coppa italia']);
+
+      case 'england':
+        return containsAny([
+          'premier league',
+          'championship',
+          'fa cup',
+          'league cup',
+          'efl cup',
+        ]);
+
+      case 'spain':
+        return containsAny(['la liga', 'laliga', 'segunda', 'copa del rey']);
+
+      case 'germany':
+        return containsAny(['bundesliga', 'dfb pokal']);
+
+      case 'france':
+        return containsAny(['ligue 1', 'ligue 2', 'coupe de france']);
+
+      case 'netherlands':
+        return containsAny(['eredivisie']);
+
+      case 'portugal':
+        return containsAny(['primeira liga', 'liga portugal']);
+
+      case 'belgium':
+        return containsAny(['jupiler', 'pro league']);
+
+      case 'turkey':
+      case 'türkiye':
+        return containsAny(['süper lig', 'super lig']);
+
+      case 'poland':
+        return containsAny(['ekstraklasa', 'i liga']);
+
+      case 'scotland':
+        return containsAny(['premiership', 'championship']);
+
+      case 'austria':
+        return containsAny(['bundesliga', '2. liga']);
+
+      case 'switzerland':
+        return containsAny(['super league', 'challenge league']);
+
+      case 'greece':
+        return containsAny(['super league']);
+
+      case 'denmark':
+        return containsAny(['superliga']);
+
+      case 'norway':
+        return containsAny(['eliteserien']);
+
+      case 'sweden':
+        return containsAny(['allsvenskan']);
+
+      case 'croatia':
+        return containsAny(['hnl']);
+
+      case 'serbia':
+        return containsAny(['super liga']);
+
+      case 'ukraine':
+        return containsAny(['premier league']);
+
+      case 'czech-republic':
+      case 'czech republic':
+        return containsAny(['czech liga', 'first league', 'chance liga']);
+
+      case 'brazil':
+        return containsAny(['serie a', 'copa do brasil']);
+
+      case 'argentina':
+        return containsAny([
+          'liga profesional',
+          'primera división',
+          'primera division',
+        ]);
+
+      case 'usa':
+      case 'united states':
+        return containsAny(['major league soccer', 'mls']);
+
+      default:
+        return false;
+    }
+  }
+
+  List<LiveMatchSummary> _filteredMatches(List<LiveMatchSummary> matches) {
+    final query = _searchController.text.trim().toLowerCase();
+
+    return matches.where((match) {
+      if (_mainCompetitionsOnly && !_isMainCompetition(match)) {
+        return false;
+      }
+
+      if (query.isEmpty) {
+        return true;
+      }
+
+      return match.homeTeam.toLowerCase().contains(query) ||
+          match.awayTeam.toLowerCase().contains(query) ||
+          match.leagueName.toLowerCase().contains(query) ||
+          match.country.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Widget _filters(int totalMatches, int visibleMatches) {
+    return Column(
+      children: [
+        TextField(
+          controller: _searchController,
+          onChanged: (_) => setState(() {}),
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Cerca squadra o campionato',
+            hintStyle: const TextStyle(color: Colors.white38),
+            prefixIcon: const Icon(Icons.search, color: Colors.white54),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.close, color: Colors.white54),
+                  ),
+            filled: true,
+            fillColor: const Color(0xFF1F2937),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: const SizedBox(
+                  width: double.infinity,
+                  child: Text('TUTTE', textAlign: TextAlign.center),
+                ),
+                selected: !_mainCompetitionsOnly,
+                showCheckmark: false,
+                selectedColor: const Color(0xFF00C853),
+                backgroundColor: const Color(0xFF1F2937),
+                labelStyle: TextStyle(
+                  color: !_mainCompetitionsOnly ? Colors.white : Colors.white60,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: (_) {
+                  setState(() {
+                    _mainCompetitionsOnly = false;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const SizedBox(
+                  width: double.infinity,
+                  child: Text('PRINCIPALI', textAlign: TextAlign.center),
+                ),
+                selected: _mainCompetitionsOnly,
+                showCheckmark: false,
+                selectedColor: const Color(0xFF00C853),
+                backgroundColor: const Color(0xFF1F2937),
+                labelStyle: TextStyle(
+                  color: _mainCompetitionsOnly ? Colors.white : Colors.white60,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: (_) {
+                  setState(() {
+                    _mainCompetitionsOnly = true;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '$visibleMatches di $totalMatches partite Live',
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
+          ),
+        ),
+      ],
+    );
   }
 
   String _minuteLabel(LiveMatchSummary match) {
@@ -100,6 +328,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
           }
 
           final matches = snapshot.data ?? const <LiveMatchSummary>[];
+          final visibleMatches = _filteredMatches(matches);
 
           if (matches.isEmpty) {
             return RefreshIndicator(
@@ -164,7 +393,32 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                ...matches.map(
+                _filters(matches.length, visibleMatches.length),
+                const SizedBox(height: 16),
+                if (visibleMatches.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F2937),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(Icons.search_off, color: Colors.white30, size: 36),
+                        SizedBox(height: 10),
+                        Text(
+                          'Nessuna partita corrisponde ai filtri',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ...visibleMatches.map(
                   (match) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: InkWell(
@@ -531,9 +785,11 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'SMARTBET LIVE',
-            style: TextStyle(
+          Text(
+            analysis.dataQuality == 'Limitati' || analysis.confidence < 55
+                ? 'STIMA PRELIMINARE LIVE'
+                : 'SMARTBET LIVE',
+            style: const TextStyle(
               color: Color(0xFF00C853),
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -628,6 +884,43 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
   Widget _liveStats(LiveMatchSnapshot snapshot) {
     final home = snapshot.homeStats;
     final away = snapshot.awayStats;
+
+    if (!snapshot.statisticsAvailable) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.query_stats, color: Colors.white30, size: 34),
+            SizedBox(height: 10),
+            Text(
+              'Statistiche Live non disponibili',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 7),
+            Text(
+              'Per questa partita il provider fornisce risultato ed eventi, '
+              'ma non tiri, possesso, corner e altre statistiche Live.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
