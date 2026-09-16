@@ -143,7 +143,9 @@ class OddsService {
 
   OddsService({http.Client? client}) : _client = client ?? http.Client();
 
-  static final Map<int, FixtureMarketOdds?> _marketCache = {};
+  static final Map<String, FixtureMarketOdds?> _marketCache = {};
+
+  // PATCH 02B FIX — cache distinta per fixture + bookmaker
 
   // ============================================================
   // COMPATIBILITÀ: 1X2
@@ -160,13 +162,21 @@ class OddsService {
 
   Future<FixtureMarketOdds?> getFixtureMarketOdds({
     required int fixtureId,
+    String? bookmakerName,
   }) async {
     if (fixtureId <= 0) {
       return null;
     }
 
-    if (_marketCache.containsKey(fixtureId)) {
-      return _marketCache[fixtureId];
+    final requestedBookmaker = bookmakerName?.trim();
+    final normalizedBookmaker =
+        requestedBookmaker == null || requestedBookmaker.isEmpty
+        ? null
+        : _normalizeBookmaker(requestedBookmaker);
+    final cacheKey = '$fixtureId|${normalizedBookmaker ?? '*'}';
+
+    if (_marketCache.containsKey(cacheKey)) {
+      return _marketCache[cacheKey];
     }
 
     final uri = Uri.parse(
@@ -203,6 +213,7 @@ class OddsService {
       final matchWinnerMarkets = <BookmakerOdds>[];
       final bestByOutcome = <String, BestOdd>{};
       final bookmakerIds = <int>{};
+      var requestedBookmakerSeen = false;
 
       for (final responseItem in responseData) {
         if (responseItem is! Map<String, dynamic>) {
@@ -232,6 +243,13 @@ class OddsService {
               bookmakerItem['name']?.toString().trim().isNotEmpty == true
               ? bookmakerItem['name'].toString().trim()
               : 'Bookmaker $bookmakerId';
+
+          if (normalizedBookmaker != null) {
+            if (!_bookmakerMatches(bookmakerName, requestedBookmaker!)) {
+              continue;
+            }
+            requestedBookmakerSeen = true;
+          }
 
           if (bookmakerId > 0) {
             bookmakerIds.add(bookmakerId);
@@ -432,6 +450,14 @@ class OddsService {
         }
       }
 
+      if (normalizedBookmaker != null && !requestedBookmakerSeen) {
+        print(
+          'BOOKMAKER NON DISPONIBILE PER FIXTURE $fixtureId: $requestedBookmaker',
+        );
+        _marketCache[cacheKey] = null;
+        return null;
+      }
+
       MatchOdds? matchWinner;
 
       if (matchWinnerMarkets.isNotEmpty) {
@@ -510,7 +536,7 @@ class OddsService {
 
       print('========================================');
 
-      _marketCache[fixtureId] = result;
+      _marketCache[cacheKey] = result;
       return result;
     } catch (e) {
       print('SMARTBET ODDS EXCEPTION: $e');
@@ -658,6 +684,18 @@ class OddsService {
     }
 
     return null;
+  }
+
+  String _normalizeBookmaker(String value) {
+    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  }
+
+  bool _bookmakerMatches(String actual, String wanted) {
+    final a = _normalizeBookmaker(actual);
+    final w = _normalizeBookmaker(wanted);
+
+    if (a.isEmpty || w.isEmpty) return false;
+    return a == w || a.contains(w) || w.contains(a);
   }
 
   String _normalizeText(String value) {

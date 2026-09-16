@@ -8,7 +8,9 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/sisal_odds_service.dart';
 import '../services/italy_schedule_filter.dart';
+import '../services/smartbet_ai_service.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
   const CreateAiCouponScreen({super.key});
@@ -17,16 +19,9 @@ class CreateAiCouponScreen extends StatefulWidget {
   State<CreateAiCouponScreen> createState() => _CreateAiCouponScreenState();
 }
 
-enum _CouponProfile { premium, balanced, value }
+enum _CouponProfile { premium, balanced, rapid }
 
 enum _CouponPeriod { today, weekend, next3Days, custom }
-
-class _ComboChance {
-  final String label;
-  final int probability;
-
-  const _ComboChance({required this.label, required this.probability});
-}
 
 class _PreCandidate {
   final MatchModel match;
@@ -67,7 +62,10 @@ class _CouponPick {
 }
 
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
-  final OddsService _oddsService = OddsService();
+  final SisalOddsService _sisalOddsService = SisalOddsService();
+  final SmartBetAiService _aiService = SmartBetAiService();
+
+  // PATCH 02 — AUDITED SCHEDINA
 
   _CouponProfile _profile = _CouponProfile.premium;
 
@@ -90,7 +88,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   final List<_CouponPick> _results = [];
 
-  static const double _minimumOdd = 1.15;
+  static const double _minimumOdd = 1.20;
+  // PATCH 02C — SISAL ODDS BOUNDARY + RAPIDA
 
   static const List<String> _marketOrder = [
     '1',
@@ -109,47 +108,44 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   @override
   void dispose() {
-    _oddsService.dispose();
+    _sisalOddsService.dispose();
+    _aiService.dispose();
     super.dispose();
   }
 
   // ============================================================
   // PROFILI
   // ============================================================
-
   String get _profileName {
     switch (_profile) {
       case _CouponProfile.premium:
         return 'PREMIUM';
       case _CouponProfile.balanced:
         return 'BILANCIATA';
-      case _CouponProfile.value:
-        return 'VALUE';
+      case _CouponProfile.rapid:
+        return 'RAPIDA ⚡';
     }
   }
 
   String get _profileSubtitle {
     switch (_profile) {
       case _CouponProfile.premium:
-        return 'Più affidabile';
+        return 'Più selettiva';
       case _CouponProfile.balanced:
-        return 'Equilibrio quota / probabilità';
-      case _CouponProfile.value:
-        return 'Miglior valore statistico';
+        return 'Equilibrio qualità / quota';
+      case _CouponProfile.rapid:
+        return 'Meno attesa, shortlist ridotta';
     }
   }
 
   String get _profileDescription {
     switch (_profile) {
       case _CouponProfile.premium:
-        return 'Privilegia probabilità elevate e Smart Score solidi, '
-            'scartando le quote troppo basse. Obiettivo: alta affidabilità; se necessario SmartBet usa criteri adattivi.';
+        return 'Privilegia probabilità elevate e Smart Score solidi. Analizza una shortlist più ampia con AI avanzata + Auditor.';
       case _CouponProfile.balanced:
-        return 'Cerca un compromesso tra affidabilità e quota, evitando sia '
-            'selezioni troppo conservative sia mercati eccessivamente rischiosi.';
-      case _CouponProfile.value:
-        return 'Cerca quote che offrano valore rispetto alla probabilità '
-            'stimata da SmartBet. È il profilo con maggiore variabilità.';
+        return 'Cerca un compromesso tra affidabilità, quota e tempo di elaborazione.';
+      case _CouponProfile.rapid:
+        return 'Riduce la shortlist avanzata per velocizzare la schedina. Mantiene comunque AI, Auditor, quota minima 1.20 e controllo Sisal.';
     }
   }
 
@@ -183,200 +179,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
     }
 
-    final combos = _comboChances(analysis);
-
-    if (combos.isNotEmpty && combos.first.probability > best) {
-      best = combos.first.probability;
-    }
-
     return best;
-  }
-
-  double _poissonProbability(double lambda, int goals) {
-    if (lambda <= 0 || goals < 0) {
-      return 0.0;
-    }
-
-    var factorial = 1;
-    for (var i = 2; i <= goals; i++) {
-      factorial *= i;
-    }
-
-    return math.pow(lambda, goals).toDouble() * math.exp(-lambda) / factorial;
-  }
-
-  List<_ComboChance> _comboChances(AnalysisResult result) {
-    final homeLambda = result.expectedHomeGoals;
-    final awayLambda = result.expectedAwayGoals;
-
-    if (homeLambda <= 0 || awayLambda <= 0) {
-      return const [];
-    }
-
-    const maxGoals = 8;
-    final scores = <({int home, int away, double probability})>[];
-    var totalMass = 0.0;
-
-    for (var home = 0; home <= maxGoals; home++) {
-      final homeProbability = _poissonProbability(homeLambda, home);
-
-      for (var away = 0; away <= maxGoals; away++) {
-        final awayProbability = _poissonProbability(awayLambda, away);
-        final probability = homeProbability * awayProbability;
-
-        totalMass += probability;
-
-        scores.add((home: home, away: away, probability: probability));
-      }
-    }
-
-    if (totalMass <= 0) {
-      return const [];
-    }
-
-    int probabilityWhere(bool Function(int home, int away) condition) {
-      var probability = 0.0;
-
-      for (final score in scores) {
-        if (condition(score.home, score.away)) {
-          probability += score.probability;
-        }
-      }
-
-      return ((probability / totalMass) * 100).round().clamp(0, 100);
-    }
-
-    final combos = <_ComboChance>[
-      _ComboChance(
-        label: '1X + O1.5',
-        probability: probabilityWhere(
-          (home, away) => home >= away && home + away >= 2,
-        ),
-      ),
-      _ComboChance(
-        label: 'X2 + O1.5',
-        probability: probabilityWhere(
-          (home, away) => away >= home && home + away >= 2,
-        ),
-      ),
-      _ComboChance(
-        label: '1 + O1.5',
-        probability: probabilityWhere(
-          (home, away) => home > away && home + away >= 2,
-        ),
-      ),
-      _ComboChance(
-        label: '2 + O1.5',
-        probability: probabilityWhere(
-          (home, away) => away > home && home + away >= 2,
-        ),
-      ),
-      _ComboChance(
-        label: '1X + U3.5',
-        probability: probabilityWhere(
-          (home, away) => home >= away && home + away <= 3,
-        ),
-      ),
-      _ComboChance(
-        label: 'X2 + U3.5',
-        probability: probabilityWhere(
-          (home, away) => away >= home && home + away <= 3,
-        ),
-      ),
-      _ComboChance(
-        label: '1 + GOAL',
-        probability: probabilityWhere(
-          (home, away) => home > away && home > 0 && away > 0,
-        ),
-      ),
-      _ComboChance(
-        label: '2 + GOAL',
-        probability: probabilityWhere(
-          (home, away) => away > home && home > 0 && away > 0,
-        ),
-      ),
-      _ComboChance(
-        label: '1 + NO GOAL',
-        probability: probabilityWhere(
-          (home, away) => home > away && (home == 0 || away == 0),
-        ),
-      ),
-      _ComboChance(
-        label: '2 + NO GOAL',
-        probability: probabilityWhere(
-          (home, away) => away > home && (home == 0 || away == 0),
-        ),
-      ),
-      _ComboChance(
-        label: 'GOAL + O2.5',
-        probability: probabilityWhere(
-          (home, away) => home > 0 && away > 0 && home + away >= 3,
-        ),
-      ),
-      _ComboChance(
-        label: 'NO GOAL + U2.5',
-        probability: probabilityWhere(
-          (home, away) => (home == 0 || away == 0) && home + away <= 2,
-        ),
-      ),
-    ];
-
-    final reliable = combos.where((combo) => combo.probability >= 30).toList();
-
-    reliable.sort((a, b) => b.probability.compareTo(a.probability));
-
-    return reliable;
-  }
-
-  double _comboRankScore({required int probability, required int smartScore}) {
-    switch (_profile) {
-      case _CouponProfile.premium:
-        return probability * 0.78 + smartScore * 0.22;
-
-      case _CouponProfile.balanced:
-        return probability * 0.65 + smartScore * 0.35;
-
-      case _CouponProfile.value:
-        return probability * 0.60 + smartScore * 0.40;
-    }
-  }
-
-  bool _comboPassesPrimary({
-    required int probability,
-    required int smartScore,
-  }) {
-    switch (_profile) {
-      case _CouponProfile.premium:
-        return probability >= 65 && smartScore >= 50;
-
-      case _CouponProfile.balanced:
-        return probability >= 55 && smartScore >= 45;
-
-      case _CouponProfile.value:
-        return probability >= 45 && smartScore >= 40;
-    }
-  }
-
-  bool _comboPassesAdaptive({
-    required int probability,
-    required int smartScore,
-  }) {
-    switch (_profile) {
-      case _CouponProfile.premium:
-        return probability >= 55 && smartScore >= 40;
-
-      case _CouponProfile.balanced:
-        return probability >= 45 && smartScore >= 35;
-
-      case _CouponProfile.value:
-        return probability >= 35 && smartScore >= 30;
-    }
   }
 
   // ============================================================
   // FILTRI PROFILO
   // ============================================================
-
   bool _passesPrimary({
     required int probability,
     required int smartScore,
@@ -389,21 +197,18 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     switch (_profile) {
       case _CouponProfile.premium:
         return p >= 0.65 && smartScore >= 50 && odd >= 1.20 && odd <= 2.40;
-
       case _CouponProfile.balanced:
         return p >= 0.55 &&
             smartScore >= 45 &&
             odd >= 1.25 &&
             odd <= 3.50 &&
             expectedValue >= -0.08;
-
-      case _CouponProfile.value:
-        return p >= 0.45 &&
-            smartScore >= 40 &&
-            odd >= 1.35 &&
-            odd <= 6.00 &&
-            edge >= 0 &&
-            expectedValue >= 0;
+      case _CouponProfile.rapid:
+        return p >= 0.55 &&
+            smartScore >= 45 &&
+            odd >= 1.20 &&
+            odd <= 3.50 &&
+            expectedValue >= -0.08;
     }
   }
 
@@ -418,21 +223,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     switch (_profile) {
       case _CouponProfile.premium:
-        return p >= 0.55 && smartScore >= 40 && odd >= 1.15 && odd <= 3.00;
-
+        return p >= 0.55 && smartScore >= 40 && odd >= 1.20 && odd <= 3.00;
       case _CouponProfile.balanced:
         return p >= 0.45 &&
             smartScore >= 35 &&
-            odd >= 1.15 &&
+            odd >= 1.20 &&
             odd <= 4.00 &&
             expectedValue >= -0.15;
-
-      case _CouponProfile.value:
-        return p >= 0.35 &&
-            smartScore >= 30 &&
-            odd >= 1.15 &&
-            odd <= 8.00 &&
-            expectedValue >= -0.10;
+      case _CouponProfile.rapid:
+        return p >= 0.45 &&
+            smartScore >= 35 &&
+            odd >= 1.20 &&
+            odd <= 4.00 &&
+            expectedValue >= -0.15;
     }
   }
 
@@ -453,18 +256,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return probabilityScore * 0.68 +
             smartScoreValue * 0.22 +
             evPoints.clamp(-10.0, 15.0).toDouble() * 0.10;
-
       case _CouponProfile.balanced:
+      case _CouponProfile.rapid:
         return probabilityScore * 0.50 +
             smartScoreValue * 0.18 +
             edgePoints.clamp(-10.0, 20.0).toDouble() * 0.12 +
             evPoints.clamp(-15.0, 30.0).toDouble() * 0.20;
-
-      case _CouponProfile.value:
-        return probabilityScore * 0.22 +
-            smartScoreValue * 0.08 +
-            edgePoints.clamp(-10.0, 30.0).toDouble() * 0.25 +
-            evPoints.clamp(-20.0, 60.0).toDouble() * 0.45;
     }
   }
 
@@ -472,13 +269,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required _PreCandidate preliminary,
     required FixtureMarketOdds? odds,
   }) {
-    final probabilities = _markets(preliminary.analysis);
+    if (_auditStrongContradiction(preliminary.analysis)) {
+      return null;
+    }
 
+    final probabilities = _markets(preliminary.analysis);
     final primary = <_CouponPick>[];
     final adaptive = <_CouponPick>[];
-    final completion = <_CouponPick>[];
+    final doubtPenalty = _auditDoubt(preliminary.analysis) ? 6.0 : 0.0;
 
     for (final market in _marketOrder) {
+      if (_auditorBlocksMarket(preliminary.analysis, market)) {
+        continue;
+      }
+
       final probability = probabilities[market] ?? 0;
       final bestOdd = odds?.oddFor(market);
 
@@ -490,14 +294,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       final impliedProbability = 1.0 / bestOdd.odd;
       final edge = p - impliedProbability;
       final expectedValue = (p * bestOdd.odd) - 1.0;
-
-      final score = _rankScore(
-        probability: probability,
-        smartScore: preliminary.analysis.smartScore,
-        odd: bestOdd.odd,
-        edge: edge,
-        expectedValue: expectedValue,
-      );
+      final score =
+          _rankScore(
+            probability: probability,
+            smartScore: preliminary.analysis.smartScore,
+            odd: bestOdd.odd,
+            edge: edge,
+            expectedValue: expectedValue,
+          ) -
+          doubtPenalty;
 
       final pick = _CouponPick(
         match: preliminary.match,
@@ -544,73 +349,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             adaptive: true,
           ),
         );
-        continue;
-      }
-
-      // Ultima possibilità:
-      // il mercato è comunque valido perché ha quota >= 1.15.
-      completion.add(
-        _CouponPick(
-          match: preliminary.match,
-          analysis: preliminary.analysis,
-          market: market,
-          probability: probability,
-          odd: bestOdd.odd,
-          bookmaker: bestOdd.bookmakerName,
-          edge: edge,
-          expectedValue: expectedValue,
-          rankScore: score,
-          adaptive: true,
-        ),
-      );
-    }
-
-    final combos = _comboChances(preliminary.analysis);
-
-    if (combos.isNotEmpty) {
-      final bestCombo = combos.first;
-      final probability = bestCombo.probability;
-      final smartScore = preliminary.analysis.smartScore;
-
-      final comboPick = _CouponPick(
-        match: preliminary.match,
-        analysis: preliminary.analysis,
-        market: bestCombo.label,
-        probability: probability,
-        odd: null,
-        bookmaker: '',
-        edge: 0,
-        expectedValue: 0,
-        rankScore: _comboRankScore(
-          probability: probability,
-          smartScore: smartScore,
-        ),
-        adaptive: false,
-      );
-
-      if (_comboPassesPrimary(
-        probability: probability,
-        smartScore: smartScore,
-      )) {
-        primary.add(comboPick);
-      } else if (_comboPassesAdaptive(
-        probability: probability,
-        smartScore: smartScore,
-      )) {
-        adaptive.add(
-          _CouponPick(
-            match: comboPick.match,
-            analysis: comboPick.analysis,
-            market: comboPick.market,
-            probability: comboPick.probability,
-            odd: null,
-            bookmaker: '',
-            edge: 0,
-            expectedValue: 0,
-            rankScore: comboPick.rankScore,
-            adaptive: true,
-          ),
-        );
       }
     }
 
@@ -619,31 +357,116 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       if (score != 0) return score;
 
       final probability = b.probability.compareTo(a.probability);
-
-      if (probability != 0) {
-        return probability;
-      }
+      if (probability != 0) return probability;
 
       return (b.odd ?? 0).compareTo(a.odd ?? 0);
     }
 
     primary.sort(compare);
     adaptive.sort(compare);
-    completion.sort(compare);
 
-    if (primary.isNotEmpty) {
-      return primary.first;
-    }
-
-    if (adaptive.isNotEmpty) {
-      return adaptive.first;
-    }
-
-    if (completion.isNotEmpty) {
-      return completion.first;
-    }
+    if (primary.isNotEmpty) return primary.first;
+    if (adaptive.isNotEmpty) return adaptive.first;
 
     return null;
+  }
+
+  String _auditStatus(AnalysisResult analysis) {
+    final explanation = analysis.explanation.toUpperCase();
+    final risk = analysis.risk.toUpperCase();
+
+    if (explanation.contains('STATO: STRONG_CONTRADICTION') ||
+        risk.contains('FORTE DISCORDANZA')) {
+      return 'STRONG_CONTRADICTION';
+    }
+
+    if (explanation.contains('STATO: DOUBT') ||
+        risk.contains('AUDITOR: CON RISERVA')) {
+      return 'DOUBT';
+    }
+
+    return 'CONFIRM';
+  }
+
+  bool _auditStrongContradiction(AnalysisResult analysis) {
+    return _auditStatus(analysis) == 'STRONG_CONTRADICTION';
+  }
+
+  bool _auditDoubt(AnalysisResult analysis) {
+    return _auditStatus(analysis) == 'DOUBT';
+  }
+
+  String _normalizeAuditMarket(String value) {
+    return value
+        .toUpperCase()
+        .replaceAll('OVER', 'O')
+        .replaceAll('UNDER', 'U')
+        .replaceAll('NO GOAL', 'NOGOAL')
+        .replaceAll('BTTS YES', 'GOAL')
+        .replaceAll('BTTS NO', 'NOGOAL')
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  bool _auditorBlocksMarket(AnalysisResult analysis, String market) {
+    final line = analysis.explanation
+        .split(String.fromCharCode(10))
+        .where(
+          (item) => item.trim().toLowerCase().startsWith('mercati bloccati:'),
+        )
+        .cast<String?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+
+    if (line == null) return false;
+
+    final raw = line.split(':').skip(1).join(':').trim();
+    if (raw.isEmpty || raw.toLowerCase() == 'nessuno') return false;
+
+    final wanted = _normalizeAuditMarket(market);
+    final blocked = raw
+        .split(',')
+        .map((item) => _normalizeAuditMarket(item))
+        .where((item) => item.isNotEmpty)
+        .toSet();
+
+    return blocked.contains(wanted);
+  }
+
+  int _advancedShortlistSize(int available) {
+    int desired;
+
+    switch (_profile) {
+      case _CouponProfile.premium:
+        desired = math.min(30, math.max(12, _count * 2));
+        break;
+      case _CouponProfile.balanced:
+        desired = math.min(24, math.max(10, _count + 5));
+        break;
+      case _CouponProfile.rapid:
+        desired = math.min(18, math.max(_count + 2, (_count * 1.4).ceil()));
+        break;
+    }
+
+    return math.min(available, desired);
+  }
+
+  int _presentationCompare(_CouponPick a, _CouponPick b) {
+    final countryA = a.match.country.trim().toLowerCase();
+    final countryB = b.match.country.trim().toLowerCase();
+    final country = countryA.compareTo(countryB);
+    if (country != 0) return country;
+
+    final league = a.match.league.trim().toLowerCase().compareTo(
+      b.match.league.trim().toLowerCase(),
+    );
+    if (league != 0) return league;
+
+    final dateA = DateTime.tryParse(a.match.date);
+    final dateB = DateTime.tryParse(b.match.date);
+    if (dateA != null && dateB != null) return dateA.compareTo(dateB);
+
+    return '${a.match.homeTeam}-${a.match.awayTeam}'.compareTo(
+      '${b.match.homeTeam}-${b.match.awayTeam}',
+    );
   }
 
   DateTime _dateOnly(DateTime date) {
@@ -804,35 +627,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
   // CREA SCHEDINA
   // ============================================================
-
   Future<void> _createCoupon() async {
     if (_loading) return;
 
     setState(() {
       _loading = true;
-      _phase = 'odds';
-
+      _phase = 'preliminary';
       _processed = 0;
       _total = 0;
-
       _oddsProcessed = 0;
       _oddsTotal = 0;
-
       _errors = 0;
-
       _error = null;
       _notice = null;
-
       _results.clear();
     });
 
     try {
-      // ========================================================
-      // PARTITE DEL GIORNO
-      // ========================================================
-
       final all = await _loadMatchesForSelectedPeriod();
-
       final matches = all
           .where(
             (m) =>
@@ -842,7 +654,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           )
           .toList();
 
-      // Prima le competizioni / partite con peso AI maggiore.
       matches.sort((a, b) => b.aiWeight.compareTo(a.aiWeight));
 
       if (!mounted) return;
@@ -851,149 +662,180 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         setState(() {
           _loading = false;
           _phase = '';
-
-          _error = 'Non ci sono partite ancora da giocare disponibili oggi.';
+          _error =
+              'Non ci sono partite ancora da giocare disponibili nel periodo selezionato.';
         });
-
         return;
       }
 
-      // ========================================================
-      // SCANSIONE ADATTIVA
-      // ========================================================
-      //
-      // Non analizziamo centinaia di partite tutte insieme.
-      //
-      // 1. Analizziamo un blocco.
-      // 2. Controlliamo subito le quote.
-      // 3. Conserviamo le selezioni valide.
-      // 4. Se non siamo arrivati al target, passiamo
-      //    al blocco successivo.
-      //
-      // ========================================================
-
-      const blockSize = 18;
-
-      // 120 è un limite di sicurezza molto ampio:
-      // normalmente dovremmo fermarci molto prima.
+      // Fase 1: pre-analisi locale economica. Nessuna AI avanzata qui.
       final maximumToScan = math.min(matches.length, 120);
-
-      final qualified = <_CouponPick>[];
-
-      // Raccogliamo più selezioni di quelle richieste,
-      // poi scegliamo le migliori in base al profilo.
-      //
-      // Esempi:
-      // 3 richieste  -> pool 8
-      // 5 richieste  -> pool 10
-      // 7+ richieste -> massimo 12
-      final targetCandidatePool = math.min(20, _count + 5);
+      const preliminaryBatchSize = 6;
+      final preliminary = <_PreCandidate>[];
 
       setState(() {
         _total = maximumToScan;
-        _oddsTotal = maximumToScan;
       });
 
       for (
         var start = 0;
-        start < maximumToScan && qualified.length < targetCandidatePool;
-        start += blockSize
+        start < maximumToScan;
+        start += preliminaryBatchSize
       ) {
-        final end = math.min(start + blockSize, maximumToScan);
-
+        final end = math.min(start + preliminaryBatchSize, maximumToScan);
         final batch = matches.sublist(start, end);
-
-        // ======================================================
-        // PRE-ANALISI DEL BLOCCO
-        // ======================================================
 
         final analyzed = await Future.wait(
           batch.map((match) async {
             try {
               final result = await SmartCore.analyze(match);
-
               final probability = _bestStatisticalProbability(result);
-
-              if (probability <= 0) {
-                return null;
-              }
+              if (probability <= 0) return null;
 
               return _PreCandidate(
                 match: match,
                 analysis: result,
                 bestProbability: probability,
               );
-            } catch (e) {
+            } catch (_) {
               return null;
             }
           }),
         );
 
-        final candidates = analyzed.whereType<_PreCandidate>().toList();
-
-        candidates.sort((a, b) {
-          final probability = b.bestProbability.compareTo(a.bestProbability);
-
-          if (probability != 0) {
-            return probability;
-          }
-
-          final smart = b.analysis.smartScore.compareTo(a.analysis.smartScore);
-
-          if (smart != 0) {
-            return smart;
-          }
-
-          return b.match.aiWeight.compareTo(a.match.aiWeight);
-        });
+        final valid = analyzed.whereType<_PreCandidate>();
+        preliminary.addAll(valid);
+        _errors += analyzed.length - valid.length;
 
         if (!mounted) return;
-
         setState(() {
           _processed = end;
-          _oddsProcessed = end;
         });
-
-        // ======================================================
-        // QUOTE SUBITO DOPO LA PRE-ANALISI
-        // ======================================================
-
-        for (final candidate in candidates) {
-          if (!mounted) return;
-
-          try {
-            final odds = await _oddsService.getFixtureMarketOdds(
-              fixtureId: candidate.match.fixtureId,
-            );
-
-            final pick = _bestPickForMatch(preliminary: candidate, odds: odds);
-
-            if (pick == null) {
-              continue;
-            }
-
-            qualified.add(pick);
-
-            if (!mounted) return;
-
-            setState(() {
-              _results
-                ..clear()
-                ..addAll(qualified.take(_count));
-            });
-
-            if (qualified.length >= targetCandidatePool) {
-              break;
-            }
-          } catch (e) {
-            _errors++;
-          }
-        }
       }
 
-      // ========================================================
-      // ORDINAMENTO FINALE
-      // ========================================================
+      preliminary.sort((a, b) {
+        final probability = b.bestProbability.compareTo(a.bestProbability);
+        if (probability != 0) return probability;
+
+        final smart = b.analysis.smartScore.compareTo(a.analysis.smartScore);
+        if (smart != 0) return smart;
+
+        return b.match.aiWeight.compareTo(a.match.aiWeight);
+      });
+
+      if (preliminary.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _phase = '';
+          _error =
+              'SmartBet non ha trovato partite con dati statistici sufficienti.';
+        });
+        return;
+      }
+
+      // Fase 2: soltanto le migliori candidate passano ad AI avanzata + Auditor.
+      final advancedCount = _advancedShortlistSize(preliminary.length);
+      final advancedShortlist = preliminary.take(advancedCount).toList();
+      final audited = <_PreCandidate>[];
+      var auditRejected = 0;
+      const auditBatchSize = 2;
+
+      if (!mounted) return;
+      setState(() {
+        _phase = 'audit';
+        _oddsProcessed = 0;
+        _oddsTotal = advancedShortlist.length;
+      });
+
+      for (
+        var start = 0;
+        start < advancedShortlist.length;
+        start += auditBatchSize
+      ) {
+        final end = math.min(start + auditBatchSize, advancedShortlist.length);
+        final batch = advancedShortlist.sublist(start, end);
+
+        final advanced = await Future.wait(
+          batch.map((candidate) async {
+            try {
+              final result = await _aiService.analyzeMatch(candidate.match);
+
+              if (result.smartScore <= 0 || _auditStrongContradiction(result)) {
+                return null;
+              }
+
+              return _PreCandidate(
+                match: candidate.match,
+                analysis: result,
+                bestProbability: _bestStatisticalProbability(result),
+              );
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+
+        for (final item in advanced) {
+          if (item == null) {
+            auditRejected++;
+          } else {
+            audited.add(item);
+          }
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _oddsProcessed = end;
+        });
+      }
+
+      if (audited.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _phase = '';
+          _error =
+              'L’Auditor non ha confermato candidate sufficientemente solide per la schedina.';
+        });
+        return;
+      }
+
+      audited.sort((a, b) {
+        final probability = b.bestProbability.compareTo(a.bestProbability);
+        if (probability != 0) return probability;
+        return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+      });
+
+      // Fase 3: soltanto dopo l'analisi sportiva controlliamo le quote reali.
+      final qualified = <_CouponPick>[];
+
+      if (!mounted) return;
+      setState(() {
+        _phase = 'odds';
+        _oddsProcessed = 0;
+        _oddsTotal = audited.length;
+      });
+
+      for (final candidate in audited) {
+        try {
+          final odds = await _sisalOddsService.getFixtureMarketOdds(
+            fixtureId: candidate.match.fixtureId,
+          );
+
+          final pick = _bestPickForMatch(preliminary: candidate, odds: odds);
+          if (pick != null) {
+            qualified.add(pick);
+          }
+        } catch (_) {
+          _errors++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _oddsProcessed++;
+        });
+      }
 
       qualified.sort((a, b) {
         if (a.adaptive != b.adaptive) {
@@ -1001,56 +843,51 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
 
         final score = b.rankScore.compareTo(a.rankScore);
-
-        if (score != 0) {
-          return score;
-        }
+        if (score != 0) return score;
 
         final probability = b.probability.compareTo(a.probability);
-
-        if (probability != 0) {
-          return probability;
-        }
+        if (probability != 0) return probability;
 
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
       final selected = qualified.take(_count).toList();
-
       final adaptiveCount = selected.where((e) => e.adaptive).length;
 
-      if (!mounted) return;
+      // La qualità decide CHI entra. Paese/competizione/orario decidono solo
+      // l'ordine di visualizzazione, per rendere più facile riportare la schedina.
+      selected.sort(_presentationCompare);
 
+      if (!mounted) return;
       setState(() {
         _results
           ..clear()
           ..addAll(selected);
-
         _loading = false;
         _phase = '';
 
         if (_results.isEmpty) {
           _error =
-              'SmartBet non ha trovato mercati con '
-              'quote valide di almeno 1.15 nelle '
-              'partite controllate.';
+              'SmartBet non ha trovato selezioni auditate disponibili su Sisal con quota di almeno 1.20.';
         } else if (_results.length < _count) {
           _notice =
-              'Sono state trovate '
-              '${_results.length} selezioni su '
-              '$_count richieste. SmartBet ha '
-              'controllato fino a '
-              '$maximumToScan partite.';
-        } else if (adaptiveCount > 0) {
+              'Hai richiesto $_count partite. SmartBet ne consiglia ${_results.length} '
+              'disponibili su Sisal per mantenere qualità e quota minima 1.20: non forza eventi deboli.'
+              '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
+        } else if (adaptiveCount > 0 || auditRejected > 0) {
+          final parts = <String>[];
+          if (adaptiveCount > 0) {
+            parts.add('$adaptiveCount selezioni usano criteri adattivi');
+          }
+          if (auditRejected > 0) {
+            parts.add('l’Auditor ha escluso $auditRejected candidate');
+          }
           _notice =
-              '$adaptiveCount selezioni sono state '
-              'completate con criteri adattivi, '
-              'mantenendo sempre quota minima 1.15.';
+              '${parts.join(' • ')}. Bookmaker finale: Sisal • quota minima: 1.20.';
         }
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         _loading = false;
         _phase = '';
@@ -1304,7 +1141,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       children: [
         chip(_CouponProfile.premium, 'PREMIUM'),
         chip(_CouponProfile.balanced, 'BILANCIATA'),
-        chip(_CouponProfile.value, 'VALUE'),
+        chip(_CouponProfile.rapid, 'RAPIDA ⚡'),
       ],
     );
   }
@@ -1383,13 +1220,28 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   Widget _progress() {
     if (!_loading) return const SizedBox.shrink();
 
-    final oddsPhase = _phase == 'odds';
-    final current = oddsPhase ? _oddsProcessed : _processed;
-    final total = oddsPhase ? _oddsTotal : _total;
-
+    final advancedPhase = _phase == 'audit' || _phase == 'odds';
+    final current = advancedPhase ? _oddsProcessed : _processed;
+    final total = advancedPhase ? _oddsTotal : _total;
     final value = total > 0
         ? (current / total).clamp(0.0, 1.0).toDouble()
         : null;
+
+    String title;
+    String subtitle;
+
+    if (_phase == 'audit') {
+      title = 'AI avanzata + Auditor: $current / $total';
+      subtitle =
+          'Solo la shortlist migliore passa al secondo controllo indipendente.';
+    } else if (_phase == 'odds') {
+      title = 'Controllo Sisal: $current / $total';
+      subtitle =
+          'Le quote vengono applicate dopo la valutazione sportiva auditata.';
+    } else {
+      title = 'Pre-analisi statistica: $current / $total';
+      subtitle = 'SmartCore cerca le candidate più forti senza usare le quote.';
+    }
 
     return Column(
       children: [
@@ -1401,17 +1253,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          oddsPhase
-              ? 'Controllo quote e profilo: $current / $total'
-              : 'Pre-analisi statistica: $current / $total',
+          title,
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white54, fontSize: 11),
         ),
         const SizedBox(height: 4),
         Text(
-          oddsPhase
-              ? 'Le probabilità sono già state calcolate: le quote servono solo al filtro finale.'
-              : 'Ricerca delle candidate statisticamente più forti.',
+          subtitle,
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white30, fontSize: 9),
         ),
@@ -1564,7 +1412,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             value: _count.toDouble(),
             min: 3,
             max: 15,
-            divisions: 7,
+            divisions: 12,
             label: '$_count',
             onChanged: _loading
                 ? null
@@ -1640,10 +1488,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             const SizedBox(height: 12),
             _summary(),
             const SizedBox(height: 15),
-            ...List.generate(
-              _results.length,
-              (index) => _resultCard(_results[index], index + 1),
-            ),
+            ..._groupedResultWidgets(),
             const SizedBox(height: 4),
             OutlinedButton.icon(
               onPressed: _share,
@@ -1671,6 +1516,47 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         ],
       ),
     );
+  }
+
+  List<Widget> _groupedResultWidgets() {
+    final widgets = <Widget>[];
+    String? currentGroup;
+    var position = 0;
+
+    for (final item in _results) {
+      final country = item.match.country.trim().isEmpty
+          ? 'Internazionale'
+          : item.match.country.trim();
+      final league = item.match.league.trim().isEmpty
+          ? 'Competizione'
+          : item.match.league.trim();
+      final group = '$country • $league';
+
+      if (group != currentGroup) {
+        if (widgets.isNotEmpty) {
+          widgets.add(const SizedBox(height: 6));
+        }
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 9),
+            child: Text(
+              group,
+              style: const TextStyle(
+                color: Color(0xFF00C853),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+        currentGroup = group;
+      }
+
+      position++;
+      widgets.add(_resultCard(item, position));
+    }
+
+    return widgets;
   }
 
   Widget _summary() {
