@@ -353,6 +353,53 @@ prima dell'inizio della partita.
 // HEALTH CHECK
 // ============================================================
 
+
+// ============================================================
+// SPORTS MODEL MARKET ISOLATION
+// ============================================================
+
+const SPORTS_MODEL_BLOCKED_KEY_FRAGMENTS = [
+  "odd",
+  "quota",
+  "bookmaker",
+  "stake",
+  "valuebet",
+  "impliedprobability",
+  "marketodds",
+  "marketprobability",
+  "betting",
+];
+
+function sanitizeForSportsModel(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForSportsModel(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const clean = {};
+
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = String(key)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    const blocked = SPORTS_MODEL_BLOCKED_KEY_FRAGMENTS.some(
+      (fragment) => normalized.includes(fragment),
+    );
+
+    if (blocked) {
+      continue;
+    }
+
+    clean[key] = sanitizeForSportsModel(item);
+  }
+
+  return clean;
+}
+
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -361,6 +408,8 @@ app.get("/health", (req, res) => {
     preMatchFilter: true,
     currentLeagueProtection: true,
     valueBetMode: "dart-mathematical",
+    auditor: true,
+    marketIsolation: true,
   });
 });
 
@@ -805,6 +854,13 @@ app.post("/analyze", async (req, res) => {
       typeof dossier === "object";
 
     // ==========================================================
+    // ISOLAMENTO QUOTE / BETTING DAL MODELLO SPORTIVO
+    // ==========================================================
+
+    const sportsMeta = sanitizeForSportsModel(meta || {});
+    const sportsData = sanitizeForSportsModel(smartBetData);
+
+    // ==========================================================
     // MATCH STATUS
     // ==========================================================
 
@@ -948,13 +1004,13 @@ Data:
 ${matchDate || "Non disponibile"}
 
 META PARTITA:
-${JSON.stringify(meta || {}, null, 2)}
+${JSON.stringify(sportsMeta, null, 2)}
 
 ============================================================
 MATCH DOSSIER SMARTBET
 ============================================================
 
-${JSON.stringify(smartBetData, null, 2)}
+${JSON.stringify(sportsData, null, 2)}
 
 ============================================================
 `;
@@ -1801,6 +1857,12 @@ Produci infine la valutazione probabilistica.
 
         valueBetMode:
           "dart-mathematical",
+
+        marketIsolation:
+          true,
+
+        oddsUsedInSportsModel:
+          false,
       },
     });
   } catch (error) {
@@ -1830,6 +1892,202 @@ Produci infine la valutazione probabilistica.
 // ============================================================
 // SERVER
 // ============================================================
+
+
+// ============================================================
+// AI AUDITOR - SECONDA AI INDIPENDENTE
+// ============================================================
+
+app.post("/audit", async (req, res) => {
+  try {
+    const {
+      homeTeam,
+      awayTeam,
+      matchDate,
+      dossier,
+      analysis,
+    } = req.body;
+
+    if (!homeTeam || !awayTeam || !analysis) {
+      return res.status(400).json({
+        success: false,
+        error: "homeTeam, awayTeam e analysis sono obbligatori",
+      });
+    }
+
+    const matchStatus = getMatchStatus(matchDate);
+
+    if (matchStatus === "FINISHED_OR_LIVE") {
+      return res.status(400).json({
+        success: false,
+        error: "Audit bloccato: partita già iniziata o conclusa.",
+        matchStatus,
+      });
+    }
+
+    // Difesa in profondità: eventuali campi betting vengono rimossi.
+    const sportsDossier = sanitizeForSportsModel(dossier || {});
+    const sportsAnalysis = sanitizeForSportsModel(analysis || {});
+
+    // Nessun tool web: l'Auditor usa solo dossier e analisi AI1.
+    const auditorResponse = await client.responses.create({
+      model: "gpt-5.1",
+      input: [
+        {
+          role: "system",
+          content: `
+Sei SmartBet Auditor, una seconda AI indipendente dall'analista principale.
+
+Il tuo compito NON è rifare lo stesso pronostico e NON è cercare conferme.
+Devi cercare attivamente i motivi per cui l'analisi principale potrebbe essere
+sbagliata, fragile o troppo sicura.
+
+REGOLE OBBLIGATORIE:
+- non usare quote bookmaker;
+- non usare probabilità implicite o consenso del mercato;
+- non usare tipster o pronostici betting;
+- non usare web search;
+- valuta soltanto il dossier sportivo e l'analisi ricevuta;
+- penalizza dati vecchi, incompleti o contraddittori;
+- penalizza probabilità estreme non sostenute dai dati;
+- controlla forza strutturale, forma, casa/trasferta, assenze,
+  cambi allenatore/rosa, promozioni/retrocessioni e inizio stagione;
+- non modificare ogni probabilità per forza: adjustment = 0 quando non serve;
+- ogni adjustment deve essere compreso tra -5 e +5 punti percentuali;
+- confidencePenalty deve essere tra 0 e 30;
+- STRONG_CONTRADICTION va usato solo per problemi seri;
+- DOUBT indica analisi plausibile ma fragile o sovrastimata;
+- CONFIRM indica analisi coerente con i dati disponibili.
+
+blockedMarkets contiene i mercati che, sulla base dei soli dati sportivi,
+ritieni troppo fragili per una selezione automatica. Valori ammessi:
+1, X, 2, 1X, X2, 12, OVER 1.5, UNDER 1.5, OVER 2.5, UNDER 2.5,
+GOAL, NO GOAL. Può essere vuoto.
+`,
+        },
+        {
+          role: "user",
+          content: `
+PARTITA: ${homeTeam} - ${awayTeam}
+DATA: ${matchDate || "Non disponibile"}
+
+MATCH DOSSIER:
+${JSON.stringify(sportsDossier, null, 2)}
+
+ANALISI PRINCIPALE DA CONTROLLARE:
+${JSON.stringify(sportsAnalysis, null, 2)}
+
+Domanda centrale: "Perché questa previsione potrebbe essere sbagliata?"
+`,
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "smartbet_audit",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["CONFIRM", "DOUBT", "STRONG_CONTRADICTION"],
+              },
+              riskScore: { type: "integer", minimum: 0, maximum: 100 },
+              confidencePenalty: { type: "integer", minimum: 0, maximum: 30 },
+              adjustment: {
+                type: "object",
+                properties: {
+                  home: { type: "integer", minimum: -5, maximum: 5 },
+                  draw: { type: "integer", minimum: -5, maximum: 5 },
+                  away: { type: "integer", minimum: -5, maximum: 5 },
+                },
+                required: ["home", "draw", "away"],
+                additionalProperties: false,
+              },
+              reasons: {
+                type: "array",
+                maxItems: 5,
+                items: { type: "string" },
+              },
+              missingFactors: {
+                type: "array",
+                maxItems: 5,
+                items: { type: "string" },
+              },
+              blockedMarkets: {
+                type: "array",
+                maxItems: 6,
+                items: {
+                  type: "string",
+                  enum: [
+                    "1", "X", "2", "1X", "X2", "12",
+                    "OVER 1.5", "UNDER 1.5", "OVER 2.5", "UNDER 2.5",
+                    "GOAL", "NO GOAL"
+                  ],
+                },
+              },
+            },
+            required: [
+              "status",
+              "riskScore",
+              "confidencePenalty",
+              "adjustment",
+              "reasons",
+              "missingFactors",
+              "blockedMarkets"
+            ],
+            additionalProperties: false,
+          },
+        },
+      },
+      max_output_tokens: 1800,
+    });
+
+    const rawText = auditorResponse.output_text;
+    let audit;
+
+    try {
+      audit = JSON.parse(rawText);
+    } catch (_) {
+      return res.status(500).json({
+        success: false,
+        error: "Risposta Auditor non valida",
+        raw: rawText,
+      });
+    }
+
+    console.log("");
+    console.log("========================================");
+    console.log("SMARTBET AUDITOR");
+    console.log("========================================");
+    console.log(`Partita: ${homeTeam} - ${awayTeam}`);
+    console.log(`Status: ${audit.status}`);
+    console.log(`Risk score: ${audit.riskScore}`);
+    console.log(`Confidence penalty: ${audit.confidencePenalty}`);
+    console.log(`Blocked markets: ${(audit.blockedMarkets || []).join(", ")}`);
+    console.log("========================================");
+
+    return res.json({
+      success: true,
+      audit,
+      meta: {
+        matchStatus,
+        preMatchProtected: true,
+        oddsUsed: false,
+        webUsed: false,
+        marketIsolation: true,
+      },
+    });
+  } catch (error) {
+    console.error("SMARTBET AUDITOR ERROR", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Errore Auditor",
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log("");
