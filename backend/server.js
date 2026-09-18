@@ -717,6 +717,7 @@ const allowedFootballPaths = new Set([
   "leagues",
   "odds/bets",
   "odds/bookmakers",
+  "players",
 ]);
 
 function footballTtlForPath(path, query = {}) {
@@ -746,6 +747,9 @@ function footballTtlForPath(path, query = {}) {
       return 60 * 60 * 1000;
 
     case "teams/statistics":
+      return 60 * 60 * 1000;
+
+    case "players":
       return 60 * 60 * 1000;
 
     case "players/squads":
