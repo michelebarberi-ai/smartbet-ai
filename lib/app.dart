@@ -9,7 +9,7 @@ class SmartBetApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'SmartBet AI',
+      title: 'SmartBet',
       theme: AppTheme.darkTheme,
       home: const HomeScreen(),
     );

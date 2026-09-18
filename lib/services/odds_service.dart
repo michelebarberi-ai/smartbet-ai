@@ -401,7 +401,11 @@ class OddsService {
                 if (outcome == 'OVER 1.5' ||
                     outcome == 'UNDER 1.5' ||
                     outcome == 'OVER 2.5' ||
-                    outcome == 'UNDER 2.5') {
+                    outcome == 'UNDER 2.5' ||
+                    outcome == 'OVER 3.5' ||
+                    outcome == 'UNDER 3.5' ||
+                    outcome == 'OVER 4.5' ||
+                    outcome == 'UNDER 4.5') {
                   _setBest(
                     bestByOutcome,
                     outcome: outcome,
@@ -410,6 +414,115 @@ class OddsService {
                     bookmakerName: bookmakerName,
                   );
                 }
+              }
+
+              continue;
+            }
+
+            // ------------------------------------------------------
+            // ------------------------------------------------------
+            // PATCH 02F-E — MERCATI VERIFICATI SUL FEED REALE
+            //
+            // 43 = Home Team Score a Goal      -> Yes
+            // 44 = Away Team Score a Goal      -> Yes
+            // 16 = Total - Home                -> Over 0.5 (fallback)
+            // 17 = Total - Away                -> Over 0.5 (fallback)
+            // 49 = Total Goals/Both Teams To Score
+            //      o/yes 2.5 -> GOAL + O2.5
+            //      u/no  2.5 -> NO GOAL + U2.5
+            //
+            // Multigol 186/223 e combo 183/282 risultano presenti
+            // nel catalogo API-Football ma non quotati nelle fixture
+            // testate: non vengono esposti finché il feed non li offre.
+            // ------------------------------------------------------
+
+            if (betId == 43 || betId == 44) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final value = _normalizeText(raw);
+
+                if (value == 'yes') {
+                  _setBest(
+                    bestByOutcome,
+                    outcome: betId == 43 ? 'CASA SEGNA' : 'OSPITE SEGNA',
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                }
+              }
+
+              continue;
+            }
+
+            if (betId == 16 || betId == 17) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final value = _normalizeText(raw);
+                final number = RegExp(
+                  r'([0-9]+(?:\.[0-9]+)?)',
+                ).firstMatch(value);
+
+                if (value.contains('over') && number?.group(1) == '0.5') {
+                  _setBest(
+                    bestByOutcome,
+                    outcome: betId == 16 ? 'CASA SEGNA' : 'OSPITE SEGNA',
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                }
+              }
+
+              continue;
+            }
+
+            if (betId == 49) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (odd <= 1) {
+                  continue;
+                }
+
+                final outcome = _verifiedGoalTotalComboOutcome(raw);
+
+                if (outcome == null) {
+                  continue;
+                }
+
+                _setBest(
+                  bestByOutcome,
+                  outcome: outcome,
+                  odd: odd,
+                  bookmakerId: bookmakerId,
+                  bookmakerName: bookmakerName,
+                );
               }
 
               continue;
@@ -662,11 +775,40 @@ class OddsService {
 
     final line = number.group(1);
 
-    if (line != '1.5' && line != '2.5') {
+    if (line != '1.5' && line != '2.5' && line != '3.5' && line != '4.5') {
       return null;
     }
 
     return '${isOver ? 'OVER' : 'UNDER'} $line';
+  }
+
+  String? _verifiedGoalTotalComboOutcome(String raw) {
+    final value = raw.toLowerCase().trim();
+    final compact = value.replaceAll(RegExp(r'\s+'), '');
+
+    if (!compact.contains('2.5')) {
+      return null;
+    }
+
+    final goalOver =
+        compact.startsWith('o/yes') ||
+        compact.startsWith('over/yes') ||
+        compact.startsWith('yes/over');
+
+    if (goalOver) {
+      return 'GOAL + O2.5';
+    }
+
+    final noGoalUnder =
+        compact.startsWith('u/no') ||
+        compact.startsWith('under/no') ||
+        compact.startsWith('no/under');
+
+    if (noGoalUnder) {
+      return 'NO GOAL + U2.5';
+    }
+
+    return null;
   }
 
   String? _bothTeamsOutcome(String raw) {

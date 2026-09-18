@@ -1,11 +1,61 @@
 import 'package:flutter/material.dart';
 
 import '../services/bankroll_store.dart';
+import '../services/user_profile_store.dart';
 import '../services/dashboard_store.dart';
 import '../widgets/ai_card.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
 import 'bankroll_history_screen.dart';
+import 'settings_screen.dart';
+
+String _smartBetGreeting() {
+  final hour = DateTime.now().hour;
+
+  if (hour < 12) return 'Buongiorno';
+  if (hour < 18) return 'Buon pomeriggio';
+  return 'Buonasera';
+}
+
+Widget _smartBetHomeTopBar(BuildContext context) {
+  final profile = UserProfileStore.instance;
+  profile.initialize();
+
+  return AnimatedBuilder(
+    animation: profile,
+    builder: (context, child) {
+      final name = profile.name;
+      final greeting = name.isEmpty
+          ? _smartBetGreeting()
+          : '${_smartBetGreeting()}, $name';
+
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              greeting,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Impostazioni',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -131,6 +181,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
                 children: [
+                  _smartBetHomeTopBar(context),
+                  const SizedBox(height: 4),
                   const HomeHeader(),
                   AiCard(
                     online: dashboard.aiOnline,

@@ -7,7 +7,7 @@ import '../screens/live_analysis_screen.dart';
 import '../screens/prediction_screen.dart';
 import '../screens/review_coupon_screen.dart';
 import '../screens/saved_screen.dart';
-import '../screens/settings_screen.dart';
+import '../screens/scorers_screen.dart';
 
 class MenuGrid extends StatelessWidget {
   const MenuGrid({super.key});
@@ -39,7 +39,7 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.auto_awesome_motion,
-        title: 'Crea Schedina\nAI',
+        title: 'Crea Schedina\nSmartBet',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
@@ -50,12 +50,34 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.auto_awesome,
-        title: 'Combinazioni\nAI',
+        title: 'Combinazioni\nSmartBet',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CombinationsAiScreen()),
+          );
+        },
+      ),
+      _MenuItem(
+        icon: Icons.sports_soccer_outlined,
+        title: 'Possibili\nMarcatori',
+        color: Colors.orange,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ScorersScreen()),
+          );
+        },
+      ),
+      _MenuItem(
+        icon: Icons.psychology,
+        title: 'Risultati del\nGiorno',
+        color: const Color(0xFF00C853),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PredictionScreen()),
           );
         },
       ),
@@ -71,17 +93,6 @@ class MenuGrid extends StatelessWidget {
         },
       ),
       _MenuItem(
-        icon: Icons.psychology,
-        title: 'Risultati del\nGiorno AI',
-        color: const Color(0xFF00C853),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PredictionScreen()),
-          );
-        },
-      ),
-      _MenuItem(
         icon: Icons.star,
         title: 'Pronostici\nSalvati',
         color: const Color(0xFF00C853),
@@ -89,17 +100,6 @@ class MenuGrid extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const SavedScreen()),
-          );
-        },
-      ),
-      _MenuItem(
-        icon: Icons.settings,
-        title: 'Impostazioni',
-        color: Colors.grey,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
           );
         },
       ),

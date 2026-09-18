@@ -8,9 +8,10 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
-import '../services/sisal_odds_service.dart';
+import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
+import '../widgets/competition_filter_sheet.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
   const CreateAiCouponScreen({super.key});
@@ -19,7 +20,7 @@ class CreateAiCouponScreen extends StatefulWidget {
   State<CreateAiCouponScreen> createState() => _CreateAiCouponScreenState();
 }
 
-enum _CouponProfile { premium, balanced, rapid }
+enum _CouponProfile { complete, balanced, rapid }
 
 enum _CouponPeriod { today, weekend, next3Days, custom }
 
@@ -62,12 +63,12 @@ class _CouponPick {
 }
 
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
-  final SisalOddsService _sisalOddsService = SisalOddsService();
+  final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
 
   // PATCH 02 — AUDITED SCHEDINA
 
-  _CouponProfile _profile = _CouponProfile.premium;
+  _CouponProfile _profile = _CouponProfile.complete;
 
   _CouponPeriod _period = _CouponPeriod.today;
   DateTimeRange? _customPeriod;
@@ -75,6 +76,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
+  final Set<String> _selectedCompetitionKeys = <String>{};
   String _phase = '';
 
   int _processed = 0;
@@ -88,8 +90,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   final List<_CouponPick> _results = [];
 
-  static const double _minimumOdd = 1.20;
-  // PATCH 02C — SISAL ODDS BOUNDARY + RAPIDA
+  static const double _minimumOdd = 1.25;
+  // PATCH 02F-A — CAMPIONATI + RECOVERY RAPIDA
 
   static const List<String> _marketOrder = [
     '1',
@@ -104,11 +106,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     'UNDER 2.5',
     'GOAL',
     'NO GOAL',
+    'OVER 3.5',
+    'UNDER 3.5',
+    'OVER 4.5',
+    'UNDER 4.5',
+    'CASA SEGNA',
+    'OSPITE SEGNA',
+    'GOAL + O2.5',
+    'NO GOAL + U2.5',
   ];
 
   @override
   void dispose() {
-    _sisalOddsService.dispose();
+    _oddsService.dispose();
     _aiService.dispose();
     super.dispose();
   }
@@ -118,8 +128,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
   String get _profileName {
     switch (_profile) {
-      case _CouponProfile.premium:
-        return 'PREMIUM';
+      case _CouponProfile.complete:
+        return 'COMPLETA';
       case _CouponProfile.balanced:
         return 'BILANCIATA';
       case _CouponProfile.rapid:
@@ -129,23 +139,27 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   String get _profileSubtitle {
     switch (_profile) {
-      case _CouponProfile.premium:
-        return 'Più selettiva';
+      case _CouponProfile.complete:
+        return 'COMPLETA — Controllo massimo\n'
+            'analisi SmartBet avanzata + Auditor su una shortlist ampia.';
       case _CouponProfile.balanced:
-        return 'Equilibrio qualità / quota';
+        return 'BILANCIATA — Equilibrio qualità/tempo\n'
+            'SmartBet + Auditor su una shortlist intermedia.';
       case _CouponProfile.rapid:
-        return 'Meno attesa, shortlist ridotta';
+        return 'RAPIDA ⚡ — Priorità velocità (~1 minuto)\n'
+            'Shortlist ridotta. L’Auditor completo interviene solo '
+            'sulle candidate più delicate.';
     }
   }
 
   String get _profileDescription {
     switch (_profile) {
-      case _CouponProfile.premium:
-        return 'Privilegia probabilità elevate e Smart Score solidi. Analizza una shortlist più ampia con AI avanzata + Auditor.';
+      case _CouponProfile.complete:
+        return 'Privilegia probabilità elevate e Smart Score solidi. Analizza una shortlist più ampia con analisi SmartBet avanzata + Auditor.';
       case _CouponProfile.balanced:
         return 'Cerca un compromesso tra affidabilità, quota e tempo di elaborazione.';
       case _CouponProfile.rapid:
-        return 'Riduce la shortlist avanzata per velocizzare la schedina. Mantiene comunque AI, Auditor, quota minima 1.20 e controllo Sisal.';
+        return 'Riduce la shortlist avanzata per velocizzare la schedina. Mantiene comunque AI, Auditor e quota minima 1.25.';
     }
   }
 
@@ -154,7 +168,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
 
   Map<String, int> _markets(AnalysisResult r) {
-    return {
+    final markets = <String, int>{
       '1': r.homeProbability,
       'X': r.drawProbability,
       '2': r.awayProbability,
@@ -168,6 +182,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       'GOAL': r.goalProbability,
       'NO GOAL': r.noGoalProbability,
     };
+
+    for (final market in SmartBetMarketProbabilityService.extendedMarkets) {
+      markets[market] = SmartBetMarketProbabilityService.probabilityFor(
+        r,
+        market,
+      );
+    }
+
+    return markets;
   }
 
   int _bestStatisticalProbability(AnalysisResult analysis) {
@@ -195,7 +218,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final p = probability / 100.0;
 
     switch (_profile) {
-      case _CouponProfile.premium:
+      case _CouponProfile.complete:
         return p >= 0.65 && smartScore >= 50 && odd >= 1.20 && odd <= 2.40;
       case _CouponProfile.balanced:
         return p >= 0.55 &&
@@ -222,7 +245,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final p = probability / 100.0;
 
     switch (_profile) {
-      case _CouponProfile.premium:
+      case _CouponProfile.complete:
         return p >= 0.55 && smartScore >= 40 && odd >= 1.20 && odd <= 3.00;
       case _CouponProfile.balanced:
         return p >= 0.45 &&
@@ -252,7 +275,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final evPoints = expectedValue * 100.0;
 
     switch (_profile) {
-      case _CouponProfile.premium:
+      case _CouponProfile.complete:
         return probabilityScore * 0.68 +
             smartScoreValue * 0.22 +
             evPoints.clamp(-10.0, 15.0).toDouble() * 0.10;
@@ -435,14 +458,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     int desired;
 
     switch (_profile) {
-      case _CouponProfile.premium:
+      case _CouponProfile.complete:
         desired = math.min(30, math.max(12, _count * 2));
         break;
       case _CouponProfile.balanced:
-        desired = math.min(24, math.max(10, _count + 5));
+        desired = math.min(18, math.max(8, _count + 3));
         break;
       case _CouponProfile.rapid:
-        desired = math.min(18, math.max(_count + 2, (_count * 1.4).ceil()));
+        final reserve = math.max(3, (_count * 0.40).ceil());
+        desired = math.min(24, math.max(8, _count + reserve));
         break;
     }
 
@@ -606,6 +630,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     setState(() {
       _period = _CouponPeriod.custom;
       _customPeriod = selected;
+      _selectedCompetitionKeys.clear();
       _results.clear();
       _error = null;
       _notice = null;
@@ -650,7 +675,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             (m) =>
                 m.hasTeamIds &&
                 _isUpcoming(m) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)),
+                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)) &&
+                (_selectedCompetitionKeys.isEmpty ||
+                    _selectedCompetitionKeys.contains(
+                      CompetitionFilterSheet.keyFor(m),
+                    )),
           )
           .toList();
 
@@ -668,9 +697,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return;
       }
 
-      // Fase 1: pre-analisi locale economica. Nessuna AI avanzata qui.
-      final maximumToScan = math.min(matches.length, 120);
-      const preliminaryBatchSize = 6;
+      // Fase 1: pre-analisi locale economica. Nessuna analisi SmartBet avanzata qui.
+      final maximumToScan = _profile == _CouponProfile.rapid
+          ? math.min(matches.length, math.max(60, _count * 6))
+          : math.min(matches.length, 120);
+      final preliminaryBatchSize = _profile == _CouponProfile.rapid ? 10 : 6;
       final preliminary = <_PreCandidate>[];
 
       setState(() {
@@ -698,6 +729,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 bestProbability: probability,
               );
             } catch (_) {
+              _errors++;
               return null;
             }
           }),
@@ -734,19 +766,43 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return;
       }
 
-      // Fase 2: soltanto le migliori candidate passano ad AI avanzata + Auditor.
+      // Fase 2: soltanto le migliori candidate passano ad analisi SmartBet avanzata + Auditor.
       final advancedCount = _advancedShortlistSize(preliminary.length);
       final advancedShortlist = preliminary.take(advancedCount).toList();
       final audited = <_PreCandidate>[];
       var auditRejected = 0;
-      const auditBatchSize = 2;
+      final auditBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
 
+      // RAPIDA:
+      // AI principale su shortlist ridotta.
+      // Auditor completo solo sulla candidata più delicata
+      // tra quelle che con maggiore probabilità finiranno in schedina.
+      final rapidAuditFixtureIds = <int>{};
+      if (_profile == _CouponProfile.rapid) {
+        final likelyFinal =
+            advancedShortlist
+                .take(math.min(_count, advancedShortlist.length))
+                .toList()
+              ..sort((a, b) {
+                final scoreA =
+                    (a.bestProbability * 0.70) + (a.analysis.smartScore * 0.30);
+                final scoreB =
+                    (b.bestProbability * 0.70) + (b.analysis.smartScore * 0.30);
+                return scoreA.compareTo(scoreB);
+              });
+
+        for (final candidate in likelyFinal.take(1)) {
+          rapidAuditFixtureIds.add(candidate.match.fixtureId);
+        }
+      }
       if (!mounted) return;
       setState(() {
         _phase = 'audit';
         _oddsProcessed = 0;
         _oddsTotal = advancedShortlist.length;
       });
+
+      var completedAdvanced = 0;
 
       for (
         var start = 0;
@@ -759,9 +815,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         final advanced = await Future.wait(
           batch.map((candidate) async {
             try {
-              final result = await _aiService.analyzeMatch(candidate.match);
+              final shouldRunAudit =
+                  _profile != _CouponProfile.rapid ||
+                  rapidAuditFixtureIds.contains(candidate.match.fixtureId);
+              final result = await _aiService.analyzeMatch(
+                candidate.match,
+                runAudit: shouldRunAudit,
+              );
 
-              if (result.smartScore <= 0 || _auditStrongContradiction(result)) {
+              if (result.smartScore <= 0) {
+                _errors++;
+                return null;
+              }
+
+              if (_auditStrongContradiction(result)) {
+                auditRejected++;
                 return null;
               }
 
@@ -772,22 +840,25 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               );
             } catch (_) {
               return null;
+            } finally {
+              completedAdvanced++;
+
+              if (mounted) {
+                setState(() {
+                  _oddsProcessed = math.min(completedAdvanced, _oddsTotal);
+                });
+              }
             }
           }),
         );
 
         for (final item in advanced) {
-          if (item == null) {
-            auditRejected++;
-          } else {
+          if (item != null) {
             audited.add(item);
           }
         }
 
         if (!mounted) return;
-        setState(() {
-          _oddsProcessed = end;
-        });
       }
 
       if (audited.isEmpty) {
@@ -817,24 +888,130 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _oddsTotal = audited.length;
       });
 
-      for (final candidate in audited) {
-        try {
-          final odds = await _sisalOddsService.getFixtureMarketOdds(
-            fixtureId: candidate.match.fixtureId,
-          );
+      final oddsBatchSize = _profile == _CouponProfile.rapid ? 6 : 4;
 
-          final pick = _bestPickForMatch(preliminary: candidate, odds: odds);
-          if (pick != null) {
-            qualified.add(pick);
-          }
-        } catch (_) {
-          _errors++;
-        }
+      for (var start = 0; start < audited.length; start += oddsBatchSize) {
+        final end = math.min(start + oddsBatchSize, audited.length);
+        final batch = audited.sublist(start, end);
+
+        final priced = await Future.wait(
+          batch.map((candidate) async {
+            try {
+              final odds = await _oddsService.getFixtureMarketOdds(
+                fixtureId: candidate.match.fixtureId,
+              );
+
+              return _bestPickForMatch(preliminary: candidate, odds: odds);
+            } catch (_) {
+              _errors++;
+              return null;
+            }
+          }),
+        );
+
+        qualified.addAll(priced.whereType<_CouponPick>());
+
+        final liveSelected = _liveSelectionSnapshot(qualified);
 
         if (!mounted) return;
+
         setState(() {
-          _oddsProcessed++;
+          _oddsProcessed = end;
+
+          _results
+            ..clear()
+            ..addAll(liveSelected);
         });
+      }
+
+      // PATCH 02F-F — RECOVERY RAPIDA DINAMICA
+      if (_profile == _CouponProfile.rapid) {
+        final minimumDesired = _count;
+
+        if (qualified.length < minimumDesired) {
+          final remainingCount = preliminary.length - advancedCount;
+          final recoveryPoolSize = remainingCount <= 0
+              ? 0
+              : math.min(remainingCount, math.min(12, math.max(6, _count)));
+
+          final extraPool = recoveryPoolSize <= 0
+              ? <_PreCandidate>[]
+              : preliminary.skip(advancedCount).take(recoveryPoolSize).toList();
+
+          if (extraPool.isNotEmpty) {
+            if (!mounted) return;
+            setState(() {
+              _phase = 'recovery';
+              _oddsProcessed = 0;
+              _oddsTotal = extraPool.length;
+            });
+          }
+
+          const recoveryBatchSize = 4;
+
+          for (
+            var start = 0;
+            start < extraPool.length && qualified.length < minimumDesired;
+            start += recoveryBatchSize
+          ) {
+            final end = math.min(start + recoveryBatchSize, extraPool.length);
+            final batch = extraPool.sublist(start, end);
+
+            final recovered = await Future.wait(
+              batch.map((candidate) async {
+                try {
+                  final result = await _aiService.analyzeMatch(
+                    candidate.match,
+                    runAudit: false,
+                  );
+
+                  if (result.smartScore <= 0) {
+                    _errors++;
+                    return null;
+                  }
+
+                  final recoveryCandidate = _PreCandidate(
+                    match: candidate.match,
+                    analysis: result,
+                    bestProbability: _bestStatisticalProbability(result),
+                  );
+
+                  final marketOdds = await _oddsService.getFixtureMarketOdds(
+                    fixtureId: candidate.match.fixtureId,
+                  );
+
+                  return _bestPickForMatch(
+                    preliminary: recoveryCandidate,
+                    odds: marketOdds,
+                  );
+                } catch (_) {
+                  _errors++;
+                  return null;
+                }
+              }),
+            );
+
+            for (final pick in recovered) {
+              if (pick == null) continue;
+              if (qualified.any(
+                (existing) => existing.match.fixtureId == pick.match.fixtureId,
+              )) {
+                continue;
+              }
+              qualified.add(pick);
+            }
+
+            final liveSelected = _liveSelectionSnapshot(qualified);
+
+            if (!mounted) return;
+            setState(() {
+              _oddsProcessed = end;
+              _results
+                ..clear()
+                ..addAll(liveSelected);
+            });
+          }
+        }
       }
 
       qualified.sort((a, b) {
@@ -868,11 +1045,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         if (_results.isEmpty) {
           _error =
-              'SmartBet non ha trovato selezioni auditate disponibili su Sisal con quota di almeno 1.20.';
+              'SmartBet non ha trovato selezioni auditate con quota disponibile di almeno 1.25.';
         } else if (_results.length < _count) {
           _notice =
               'Hai richiesto $_count partite. SmartBet ne consiglia ${_results.length} '
-              'disponibili su Sisal per mantenere qualità e quota minima 1.20: non forza eventi deboli.'
+              'con quota disponibile di almeno 1.25 per mantenere qualità: non forza eventi deboli.'
               '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
         } else if (adaptiveCount > 0 || auditRejected > 0) {
           final parts = <String>[];
@@ -883,7 +1060,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             parts.add('l’Auditor ha escluso $auditRejected candidate');
           }
           _notice =
-              '${parts.join(' • ')}. Bookmaker finale: Sisal • quota minima: 1.20.';
+              '${parts.join(' • ')}. Quota minima: 1.25. SmartBet usa la migliore quota disponibile nel feed.';
         }
       });
     } catch (e) {
@@ -921,6 +1098,28 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     return 'Si è verificato un problema durante la creazione della schedina.';
+  }
+
+  List<_CouponPick> _liveSelectionSnapshot(List<_CouponPick> source) {
+    final ranked = List<_CouponPick>.of(source);
+
+    ranked.sort((a, b) {
+      if (a.adaptive != b.adaptive) {
+        return a.adaptive ? 1 : -1;
+      }
+
+      final score = b.rankScore.compareTo(a.rankScore);
+      if (score != 0) return score;
+
+      final probability = b.probability.compareTo(a.probability);
+      if (probability != 0) return probability;
+
+      return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+    });
+
+    final selected = ranked.take(_count).toList();
+    selected.sort(_presentationCompare);
+    return selected;
   }
 
   // ============================================================
@@ -1033,7 +1232,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (_results.isEmpty) return;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET AI — SCHEDINA $_profileName')
+      ..writeln('SMARTBET — SCHEDINA $_profileName')
       ..writeln()
       ..writeln('${_results.length} partite')
       ..writeln(
@@ -1092,12 +1291,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return Colors.white70;
   }
 
-  Color _evColor(double value) {
-    if (value >= 0.05) return Colors.greenAccent;
-    if (value >= 0) return Colors.orangeAccent;
-    return Colors.white54;
-  }
-
   Widget _profileSelector() {
     Widget chip(_CouponProfile profile, String label) {
       final selected = _profile == profile;
@@ -1139,7 +1332,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     return Row(
       children: [
-        chip(_CouponProfile.premium, 'PREMIUM'),
+        chip(_CouponProfile.complete, 'COMPLETA'),
         chip(_CouponProfile.balanced, 'BILANCIATA'),
         chip(_CouponProfile.rapid, 'RAPIDA ⚡'),
       ],
@@ -1174,6 +1367,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
                 setState(() {
                   _period = period;
+                  _selectedCompetitionKeys.clear();
                   _results.clear();
                   _error = null;
                   _notice = null;
@@ -1217,10 +1411,123 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     );
   }
 
+  Future<void> _openCompetitionFilter() async {
+    try {
+      final all = await _loadMatchesForSelectedPeriod();
+      final available = all
+          .where(
+            (m) =>
+                m.hasTeamIds &&
+                _isUpcoming(m) &&
+                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)),
+          )
+          .toList();
+
+      if (!mounted) return;
+
+      final selected = await CompetitionFilterSheet.show(
+        context: context,
+        matches: available,
+        selectedKeys: _selectedCompetitionKeys,
+      );
+
+      if (selected == null || !mounted) return;
+
+      setState(() {
+        _selectedCompetitionKeys
+          ..clear()
+          ..addAll(selected);
+        _results.clear();
+        _error = null;
+        _notice = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossibile caricare i campionati disponibili.'),
+        ),
+      );
+    }
+  }
+
+  Widget _competitionSelector() {
+    final all = _selectedCompetitionKeys.isEmpty;
+
+    final leagues =
+        _selectedCompetitionKeys
+            .map((key) {
+              final parts = key.split('|||');
+              return parts.length > 1 ? parts.last.trim() : key.trim();
+            })
+            .where((name) => name.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final summary = all
+        ? 'Nessun filtro: SmartBet usa tutti i campionati disponibili.'
+        : leagues.length <= 3
+        ? leagues.join(' • ')
+        : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'CAMPIONATI',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          all
+              ? 'Tutti i campionati'
+              : '${leagues.length} campionati selezionati',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          summary,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _loading ? null : _openCompetitionFilter,
+            icon: const Icon(Icons.tune),
+            label: Text(
+              all ? 'SCEGLI CAMPIONATI' : 'MODIFICA CAMPIONATI',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF00C853),
+              side: const BorderSide(color: Color(0xFF00C853)),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _progress() {
     if (!_loading) return const SizedBox.shrink();
 
-    final advancedPhase = _phase == 'audit' || _phase == 'odds';
+    final advancedPhase =
+        _phase == 'audit' || _phase == 'odds' || _phase == 'recovery';
     final current = advancedPhase ? _oddsProcessed : _processed;
     final total = advancedPhase ? _oddsTotal : _total;
     final value = total > 0
@@ -1231,16 +1538,35 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     String subtitle;
 
     if (_phase == 'audit') {
-      title = 'AI avanzata + Auditor: $current / $total';
-      subtitle =
-          'Solo la shortlist migliore passa al secondo controllo indipendente.';
+      title = _profile == _CouponProfile.rapid
+          ? 'Analisi AI: $current / $total'
+          : 'analisi SmartBet avanzata + Auditor: $current / $total';
+      final remaining = math.max(0, total - current);
+      subtitle = _profile == _CouponProfile.rapid
+          ? current == 0
+                ? 'Avvio analisi delle $total candidate migliori…'
+                : remaining > 0
+                ? '$current candidate completate • $remaining ancora in analisi.'
+                : 'Analisi AI completata. Passaggio al controllo quote…'
+          : current == 0
+          ? 'Avvio analisi SmartBet avanzata e secondo controllo indipendente…'
+          : remaining > 0
+          ? '$current candidate completate • $remaining ancora in analisi.'
+          : 'Controllo AI completato. Passaggio alle quote…';
     } else if (_phase == 'odds') {
-      title = 'Controllo Sisal: $current / $total';
+      title =
+          'Quote + selezione: $current / $total • ${_results.length} / $_count trovate';
       subtitle =
-          'Le quote vengono applicate dopo la valutazione sportiva auditata.';
+          'Le selezioni valide compaiono subito qui sotto mentre SmartBet continua.';
+    } else if (_phase == 'recovery') {
+      title =
+          'Ricerca alternative: $current / $total • ${_results.length} / $_count trovate';
+      subtitle =
+          'SmartBet prova altre candidate senza abbassare quota minima o criteri di qualità.';
     } else {
-      title = 'Pre-analisi statistica: $current / $total';
-      subtitle = 'SmartCore cerca le candidate più forti senza usare le quote.';
+      title = 'Scansione statistica: $current / $total';
+      subtitle =
+          'SmartCore sta confrontando le partite disponibili prima dell’analisi AI.';
     }
 
     return Column(
@@ -1273,7 +1599,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Crea Schedina AI'),
+        title: const Text('Crea Schedina SmartBet'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -1352,6 +1678,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           const SizedBox(height: 18),
 
           _periodSelector(),
+
+          const SizedBox(height: 14),
+
+          _competitionSelector(),
 
           const SizedBox(height: 18),
 
@@ -1478,20 +1808,33 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 28),
             Text(
-              'Schedina $_profileName',
+              _loading
+                  ? 'Selezioni provvisorie • ${_results.length}/$_count'
+                  : 'Schedina $_profileName',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (_loading) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'SmartBet sta ancora lavorando: le selezioni possono aggiornarsi fino al completamento.',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             _summary(),
             const SizedBox(height: 15),
             ..._groupedResultWidgets(),
             const SizedBox(height: 4),
             OutlinedButton.icon(
-              onPressed: _share,
+              onPressed: _loading ? null : _share,
               icon: const Icon(Icons.ios_share_outlined),
               label: const Text('CONDIVIDI SCHEDINA'),
             ),
@@ -1613,8 +1956,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   Widget _resultCard(_CouponPick item, int position) {
     final probabilityColor = _probabilityColor(item.probability);
-    final evPercent = item.expectedValue * 100.0;
-    final edgePoints = item.edge * 100.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1753,28 +2094,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Smart Score: ${item.analysis.smartScore}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-              ),
-              Text(
-                'Edge ${edgePoints >= 0 ? '+' : ''}${edgePoints.toStringAsFixed(1)} p.p.',
-                style: const TextStyle(color: Colors.white54, fontSize: 10),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'EV ${evPercent >= 0 ? '+' : ''}${evPercent.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  color: _evColor(item.expectedValue),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          Text(
+            'Smart Score: ${item.analysis.smartScore}',
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

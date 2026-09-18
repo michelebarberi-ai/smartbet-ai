@@ -7,9 +7,10 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
-import 'analysis_detail_screen.dart';
+import '../widgets/competition_filter_sheet.dart';
 
 class CombinationsAiScreen extends StatefulWidget {
   const CombinationsAiScreen({super.key});
@@ -44,12 +45,14 @@ class _CombinationCandidate {
 }
 
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
+  final SmartBetAiService _aiService = SmartBetAiService();
   String _selectedMarket = 'X';
   int _topCount = 5;
   int _minimumSmartScore = 0;
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
+  final Set<String> _selectedCompetitionKeys = <String>{};
   bool _checkingOdds = false;
   int _processed = 0;
   int _total = 0;
@@ -62,7 +65,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final Set<int> _expandedComboFixtures = {};
 
   static const int _batchSize = 3;
-  static const double _minimumOdd = 1.15;
+  static const double _minimumOdd = 1.25;
 
   static const List<String> _markets = [
     '1',
@@ -78,7 +81,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     'GOAL',
     'NO GOAL',
     'COMBO CHANCE',
+    'OVER 3.5',
+    'UNDER 3.5',
+    'OVER 4.5',
+    'UNDER 4.5',
+    'CASA SEGNA',
+    'OSPITE SEGNA',
   ];
+
+  @override
+  void dispose() {
+    _aiService.dispose();
+    super.dispose();
+  }
 
   // ============================================================
   // MARKET PROBABILITY
@@ -121,10 +136,92 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       case 'NO GOAL':
         return result.noGoalProbability;
-
       default:
-        return 0;
+        return SmartBetMarketProbabilityService.probabilityFor(result, market);
     }
+  }
+
+  String _auditStatus(AnalysisResult analysis) {
+    final explanation = analysis.explanation.toUpperCase();
+    final risk = analysis.risk.toUpperCase();
+
+    if (explanation.contains('STATO: STRONG_CONTRADICTION') ||
+        risk.contains('FORTE DISCORDANZA')) {
+      return 'STRONG_CONTRADICTION';
+    }
+
+    if (explanation.contains('STATO: DOUBT') ||
+        risk.contains('AUDITOR: CON RISERVA')) {
+      return 'DOUBT';
+    }
+
+    return 'CONFIRM';
+  }
+
+  bool _auditStrongContradiction(AnalysisResult analysis) {
+    return _auditStatus(analysis) == 'STRONG_CONTRADICTION';
+  }
+
+  bool _auditDoubt(AnalysisResult analysis) {
+    return _auditStatus(analysis) == 'DOUBT';
+  }
+
+  String _normalizeAuditMarket(String value) {
+    return value
+        .toUpperCase()
+        .replaceAll('OVER', 'O')
+        .replaceAll('UNDER', 'U')
+        .replaceAll('NO GOAL', 'NOGOAL')
+        .replaceAll('BTTS YES', 'GOAL')
+        .replaceAll('BTTS NO', 'NOGOAL')
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  bool _auditorBlocksMarket(AnalysisResult analysis, String market) {
+    final line = analysis.explanation
+        .split(String.fromCharCode(10))
+        .where(
+          (item) => item.trim().toLowerCase().startsWith('mercati bloccati:'),
+        )
+        .cast<String?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+
+    if (line == null) return false;
+
+    final raw = line.split(':').skip(1).join(':').trim();
+    if (raw.isEmpty || raw.toLowerCase() == 'nessuno') return false;
+
+    final wanted = _normalizeAuditMarket(market);
+    final blocked = raw
+        .split(',')
+        .map((item) => _normalizeAuditMarket(item))
+        .where((item) => item.isNotEmpty)
+        .toSet();
+
+    return blocked.contains(wanted);
+  }
+
+  int _advancedShortlistSize(int available) {
+    final reserve = math.max(4, (_topCount * 0.50).ceil());
+    final desired = math.min(30, math.max(10, _topCount + reserve));
+    return math.min(available, desired);
+  }
+
+  int _auditedCandidateCompare(
+    _CombinationCandidate a,
+    _CombinationCandidate b,
+  ) {
+    final adjustedProbabilityA =
+        a.probability - (_auditDoubt(a.analysis) ? 6 : 0);
+    final adjustedProbabilityB =
+        b.probability - (_auditDoubt(b.analysis) ? 6 : 0);
+
+    final probabilityCompare = adjustedProbabilityB.compareTo(
+      adjustedProbabilityA,
+    );
+    if (probabilityCompare != 0) return probabilityCompare;
+
+    return b.analysis.smartScore.compareTo(a.analysis.smartScore);
   }
 
   // ============================================================
@@ -280,20 +377,23 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     }
 
     final expanded = _expandedComboFixtures.contains(fixtureId);
+    final showAll = _selectedMarket == 'COMBO CHANCE';
 
-    final visible = expanded ? combos : combos.take(6).toList();
+    final visible = showAll
+        ? combos
+        : (expanded ? combos : combos.take(6).toList());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 14),
-        const Row(
+        Row(
           children: [
-            Icon(Icons.hub_outlined, size: 16, color: Color(0xFF00C853)),
-            SizedBox(width: 6),
+            const Icon(Icons.hub_outlined, size: 16, color: Color(0xFF00C853)),
+            const SizedBox(width: 6),
             Text(
-              'COMBO CHANCE',
-              style: TextStyle(
+              showAll ? 'TUTTE LE COMBO' : 'COMBO CHANCE',
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -353,7 +453,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             );
           },
         ),
-        if (combos.length > 6) ...[
+        if (!showAll && combos.length > 6) ...[
           const SizedBox(height: 5),
           Align(
             alignment: Alignment.centerRight,
@@ -422,12 +522,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     try {
       final allMatches = await MatchRepository.getTodayMatches();
 
-      final matches = allMatches
+      final scheduleMatches = _italyScheduleOnly
+          ? allMatches.where(ItalyScheduleFilter.allows).toList()
+          : allMatches;
+
+      final matches = scheduleMatches
           .where(
-            (match) =>
-                match.hasTeamIds &&
-                _isUpcoming(match) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)),
+            (m) =>
+                _isUpcoming(m) &&
+                (_selectedCompetitionKeys.isEmpty ||
+                    _selectedCompetitionKeys.contains(
+                      CompetitionFilterSheet.keyFor(m),
+                    )),
           )
           .toList();
 
@@ -539,6 +645,97 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
+      final candidatesForOdds = <_CombinationCandidate>[];
+
+      if (_selectedMarket == 'COMBO CHANCE') {
+        // COMBO CHANCE resta separata: è un mercato derivato dal modello
+        // con probabilità congiunta Poisson e senza quota reale obbligatoria.
+        candidatesForOdds.addAll(allCandidates);
+      } else {
+        final advancedCount = _advancedShortlistSize(allCandidates.length);
+        final advancedShortlist = allCandidates.take(advancedCount).toList();
+
+        const auditBatchSize = 4;
+
+        for (
+          var start = 0;
+          start < advancedShortlist.length;
+          start += auditBatchSize
+        ) {
+          final end = math.min(
+            start + auditBatchSize,
+            advancedShortlist.length,
+          );
+          final batch = advancedShortlist.sublist(start, end);
+
+          final auditedBatch = await Future.wait(
+            batch.map((candidate) async {
+              try {
+                final advancedResult = await _aiService.analyzeMatch(
+                  candidate.match,
+                );
+
+                if (advancedResult.smartScore <= 0) {
+                  return null;
+                }
+
+                if (_auditStrongContradiction(advancedResult)) {
+                  return null;
+                }
+
+                if (_auditorBlocksMarket(advancedResult, _selectedMarket)) {
+                  return null;
+                }
+
+                final probability = _probabilityFor(
+                  advancedResult,
+                  _selectedMarket,
+                );
+
+                if (probability <= 0 ||
+                    advancedResult.smartScore < _minimumSmartScore) {
+                  return null;
+                }
+
+                return _CombinationCandidate(
+                  match: candidate.match,
+                  analysis: advancedResult,
+                  market: _selectedMarket,
+                  probability: probability,
+                );
+              } catch (_) {
+                return null;
+              }
+            }),
+          );
+
+          candidatesForOdds.addAll(
+            auditedBatch.whereType<_CombinationCandidate>(),
+          );
+
+          if (!mounted) {
+            return;
+          }
+        }
+
+        candidatesForOdds.sort(_auditedCandidateCompare);
+      }
+
+      if (candidatesForOdds.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _loading = false;
+          _checkingOdds = false;
+          _errorMessage = _selectedMarket == 'COMBO CHANCE'
+              ? 'Nessuna combinazione sufficientemente solida trovata.'
+              : 'Il secondo controllo AI non ha confermato candidate sufficientemente solide per il mercato scelto.';
+        });
+        return;
+      }
+
       setState(() {
         _checkingOdds = true;
       });
@@ -547,7 +744,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final validCandidates = <_CombinationCandidate>[];
 
       try {
-        for (final item in allCandidates) {
+        for (final item in candidatesForOdds) {
           if (!mounted || validCandidates.length >= _topCount) {
             break;
           }
@@ -574,7 +771,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           final bestOdd = marketOdds?.oddFor(item.market);
 
-          // Quota assente o inferiore a 1.20: selezione esclusa.
+          // Quota assente o inferiore a 1.25: selezione esclusa.
           if (bestOdd == null || bestOdd.odd < _minimumOdd) {
             continue;
           }
@@ -662,75 +859,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // ANALISI AVANZATA
   // ============================================================
 
-  Future<void> _openAdvancedAnalysis(MatchModel match) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1F2937),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text(
-                'SMARTBET AI',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Analisi avanzata della partita in corso...',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    try {
-      final advancedResult = await SmartBetAiService().analyzeMatch(match);
-
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context, rootNavigator: true).pop();
-
-      if (!mounted) {
-        return;
-      }
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              AnalysisDetailScreen(match: match, result: advancedResult),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context, rootNavigator: true).pop();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_friendlyErrorMessage(e))));
-    }
-  }
-
   // ============================================================
   // FORMAT
   // ============================================================
@@ -767,6 +895,113 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // ============================================================
   // SELECTORS
   // ============================================================
+  Future<void> _openCompetitionFilter() async {
+    try {
+      final allMatches = await MatchRepository.getTodayMatches();
+
+      final available = _italyScheduleOnly
+          ? allMatches.where(ItalyScheduleFilter.allows).toList()
+          : allMatches;
+
+      if (!mounted) return;
+
+      final selected = await CompetitionFilterSheet.show(
+        context: context,
+        matches: available,
+        selectedKeys: _selectedCompetitionKeys,
+      );
+
+      if (selected == null || !mounted) return;
+
+      setState(() {
+        _selectedCompetitionKeys
+          ..clear()
+          ..addAll(selected);
+        _results.clear();
+        _errorMessage = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossibile caricare i campionati disponibili.'),
+        ),
+      );
+    }
+  }
+
+  Widget _competitionSelector() {
+    final all = _selectedCompetitionKeys.isEmpty;
+
+    final leagues =
+        _selectedCompetitionKeys
+            .map((key) {
+              final parts = key.split('|||');
+              return parts.length > 1 ? parts.last.trim() : key.trim();
+            })
+            .where((name) => name.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final summary = all
+        ? 'Nessun filtro: la ricerca usa tutti i campionati disponibili.'
+        : leagues.length <= 3
+        ? leagues.join(' • ')
+        : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'CAMPIONATI',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          all
+              ? 'Tutti i campionati'
+              : '${leagues.length} campionati selezionati',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          summary,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _loading ? null : _openCompetitionFilter,
+            icon: const Icon(Icons.tune),
+            label: Text(
+              all ? 'SCEGLI CAMPIONATI' : 'MODIFICA CAMPIONATI',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF00C853),
+              side: const BorderSide(color: Color(0xFF00C853)),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _marketSelector() {
     return Wrap(
@@ -774,9 +1009,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       runSpacing: 8,
       children: _markets.map((market) {
         final selected = _selectedMarket == market;
+        final isComboChance = market == 'COMBO CHANCE';
 
         return ChoiceChip(
-          label: Text(market),
+          label: isComboChance
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hub_outlined, size: 15),
+                    const SizedBox(width: 6),
+                    const Text('COMBO CHANCE'),
+                  ],
+                )
+              : Text(market),
           selected: selected,
           onSelected: (_) {
             setState(() {
@@ -784,14 +1029,26 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               _results.clear();
             });
           },
-          selectedColor: const Color(0xFF00C853),
-          backgroundColor: const Color(0xFF1F2937),
+          selectedColor: isComboChance
+              ? Colors.orangeAccent.withValues(alpha: 0.88)
+              : const Color(0xFF00C853),
+          backgroundColor: isComboChance
+              ? Colors.orangeAccent.withValues(alpha: 0.08)
+              : const Color(0xFF1F2937),
           showCheckmark: false,
           side: BorderSide(
-            color: selected ? const Color(0xFF00C853) : Colors.white12,
+            color: selected
+                ? (isComboChance
+                      ? Colors.orangeAccent
+                      : const Color(0xFF00C853))
+                : (isComboChance
+                      ? Colors.orangeAccent.withValues(alpha: 0.45)
+                      : Colors.white12),
           ),
           labelStyle: TextStyle(
-            color: selected ? Colors.white : Colors.white70,
+            color: selected
+                ? (isComboChance ? Colors.black87 : Colors.white)
+                : (isComboChance ? Colors.orangeAccent : Colors.white70),
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
@@ -851,6 +1108,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     final result = item.analysis;
     final match = item.match;
     final scoreColor = _scoreColor(result.smartScore);
+    final isComboChance = _selectedMarket == 'COMBO CHANCE';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1003,13 +1261,39 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ),
             const SizedBox(height: 6),
-          ] else if (_selectedMarket == 'COMBO CHANCE') ...[
-            const Text(
-              'Quota combo bookmaker non disponibile',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
+          ] else if (isComboChance) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.orangeAccent.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.22),
+                ),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.hub_outlined,
+                    size: 16,
+                    color: Colors.orangeAccent,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'MODELLO SMARTBET • probabilità congiunta stimata. '
+                      'Nessuna quota bookmaker associata.',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 6),
@@ -1018,20 +1302,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             'Rischio pre-analisi: ${result.risk}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-
-          const SizedBox(height: 12),
-
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => _openAdvancedAnalysis(match),
-              icon: const Icon(Icons.psychology, size: 18),
-              label: const Text(
-                'ANALIZZA PARTITA',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
           ),
         ],
       ),
@@ -1049,7 +1319,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Combinazioni AI',
+          'Combinazioni SmartBet',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -1087,8 +1357,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           Text(
             _selectedMarket == 'COMBO CHANCE'
-                ? 'Filtro automatico: migliori Combo Chance per probabilità stimata.'
-                : 'Filtro automatico: solo selezioni con quota reale almeno 1.15.',
+                ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
+                : 'Filtro automatico: solo selezioni con quota reale almeno 1.25.',
             style: TextStyle(
               color: Colors.orangeAccent,
               fontSize: 11,
@@ -1134,6 +1404,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
 
+          const SizedBox(height: 18),
+
+          _competitionSelector(),
+
           const SizedBox(height: 22),
 
           const Text(
@@ -1149,6 +1423,44 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           const SizedBox(height: 10),
 
           _marketSelector(),
+
+          if (_selectedMarket == 'COMBO CHANCE') ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orangeAccent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.28),
+                ),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 17,
+                    color: Colors.orangeAccent,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Combo Chance è una stima del modello SmartBet: '
+                      'combina più condizioni sulla distribuzione dei possibili '
+                      'punteggi. Non è una quota bookmaker.',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 20),
 
@@ -1269,7 +1581,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 7),
             Text(
               _checkingOdds
-                  ? 'Controllo quote reali ≥ 1.15...'
+                  ? 'Controllo quote reali ≥ 1.25...'
                   : _total > 0
                   ? 'Analizzate $_processed / '
                         '$_total partite'
@@ -1350,7 +1662,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Text(
                 'Nessun risultato disponibile '
                 'per $_selectedMarket con i '
-                'filtri scelti e quota minima 1.15.',
+                'filtri scelti e quota minima 1.25.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white60, height: 1.4),
               ),

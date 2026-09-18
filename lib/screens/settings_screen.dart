@@ -1,8 +1,58 @@
 import 'package:flutter/material.dart';
+import '../services/user_profile_store.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/settings_store.dart';
 import '../services/smartbet_ai_service.dart';
+
+Future<void> _editSmartBetUserName(BuildContext context) async {
+  final profile = UserProfileStore.instance;
+  await profile.initialize();
+
+  if (!context.mounted) return;
+
+  final controller = TextEditingController(text: profile.name);
+
+  final value = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('Il tuo nome', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'Nome',
+            hintText: 'Es. Michele',
+          ),
+          onSubmitted: (value) {
+            Navigator.pop(dialogContext, value);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('ANNULLA'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('SALVA'),
+          ),
+        ],
+      );
+    },
+  );
+
+  // Non disponiamo qui il controller: il dialog può essere ancora
+  // nella fase finale di chiusura quando showDialog completa.
+  // In questo modo evitiamo "TextEditingController was used after being disposed".
+  if (value != null) {
+    await profile.setName(value);
+  }
+}
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -194,7 +244,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 24),
 
-              _sectionTitle('Schedina AI'),
+              _sectionTitle('Profilo'),
+              AnimatedBuilder(
+                animation: UserProfileStore.instance,
+                builder: (context, child) {
+                  final profile = UserProfileStore.instance;
+                  profile.initialize();
+
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: const Text('Nome'),
+                      subtitle: Text(
+                        profile.name.isEmpty
+                            ? 'Tocca per personalizzare il saluto della Home'
+                            : profile.name,
+                      ),
+                      trailing: const Icon(Icons.edit_outlined),
+                      onTap: () => _editSmartBetUserName(context),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 22),
+
+              _sectionTitle('Schedina SmartBet'),
 
               _settingsCard(
                 children: [
@@ -292,7 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: Color(0xFF00C853),
                     ),
                     title: Text(
-                      'SmartBet AI',
+                      'SmartBet',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
