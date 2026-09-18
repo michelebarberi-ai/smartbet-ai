@@ -431,7 +431,7 @@ class _SavedScreenState extends State<SavedScreen> {
 
             Text(
               'I pronostici che salverai '
-              'da Pronostico AI '
+              'da SmartBet '
               'compariranno qui.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white60, height: 1.4),

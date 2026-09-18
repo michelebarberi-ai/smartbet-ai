@@ -83,7 +83,7 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.fact_check_outlined,
-        title: 'Revisione\nSchedina AI',
+        title: 'Revisione\nSchedina SmartBet',
         color: const Color(0xFF00C853),
         onTap: () {
           Navigator.push(

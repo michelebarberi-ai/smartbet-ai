@@ -59,7 +59,7 @@ class HomeHeader extends StatelessWidget {
                 const SizedBox(height: 6),
 
                 const Text(
-                  "SMARTBET AI",
+                  "SMARTBET",
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w900,

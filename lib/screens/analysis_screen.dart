@@ -323,7 +323,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Puoi selezionare al massimo 12 partite per la schedina AI.',
+              'Puoi selezionare al massimo 12 partite per la schedina SmartBet.',
             ),
           ),
         );
@@ -372,7 +372,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const SizedBox(height: 20),
 
               const Text(
-                'CREAZIONE SCHEDINA AI',
+                'CREAZIONE SCHEDINA SMARTBET',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -1300,8 +1300,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         Expanded(
                           child: Text(
                             _isSelected(match)
-                                ? 'SELEZIONATA PER SCHEDINA AI'
-                                : 'AGGIUNGI ALLA SCHEDINA AI',
+                                ? 'SELEZIONATA PER SCHEDINA SMARTBET'
+                                : 'AGGIUNGI ALLA SCHEDINA SMARTBET',
                             style: TextStyle(
                               color: _isSelected(match)
                                   ? const Color(0xFF00C853)
@@ -1332,7 +1332,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Partita aggiunta alla Revisione Schedina AI.',
+                              'Partita aggiunta alla Revisione Schedina SmartBet.',
                             ),
                           ),
                         );
@@ -1342,7 +1342,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Questa partita è già presente nella Revisione Schedina AI.',
+                              'Questa partita è già presente nella Revisione Schedina SmartBet.',
                             ),
                           ),
                         );
@@ -1352,7 +1352,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Hai già raggiunto il limite di 12 partite nella Revisione Schedina AI.',
+                              'Hai già raggiunto il limite di 12 partite nella Revisione Schedina SmartBet.',
                             ),
                           ),
                         );
@@ -1422,7 +1422,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 SizedBox(height: 20),
 
                                 Text(
-                                  'SMARTBET AI',
+                                  'SMARTBET',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -1798,7 +1798,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "SMARTBET AI",
+            "SMARTBET",
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -1903,7 +1903,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         label: Text(
                           _creatingCoupon
                               ? 'CREAZIONE...'
-                              : 'CREA SCHEDINA AI (${_selectedMatches.length})',
+                              : 'CREA SCHEDINA SMARTBET (${_selectedMatches.length})',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         style: FilledButton.styleFrom(

@@ -760,7 +760,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
     final result = widget.result;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET AI — GIOCATA CONSIGLIATA')
+      ..writeln('SMARTBET — GIOCATA CONSIGLIATA')
       ..writeln()
       ..writeln(_matchLabel)
       ..writeln('Pronostico principale: ${result.prediction}')
@@ -783,7 +783,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       );
 
     await SharePlus.instance.share(
-      ShareParams(text: text.toString(), subject: 'SmartBet AI — $_matchLabel'),
+      ShareParams(text: text.toString(), subject: 'SmartBet — $_matchLabel'),
     );
   }
 
@@ -1019,7 +1019,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     const SizedBox(height: 14),
 
                     const Text(
-                      'Probabilità stimate da SmartBet AI',
+                      'Probabilità stimate da SmartBet',
                       style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ],
@@ -1057,7 +1057,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Valutazione complessiva SmartBet AI',
+                        'Valutazione complessiva SmartBet',
                         style: TextStyle(color: Colors.white70),
                       ),
                     ),
@@ -1292,7 +1292,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
       // Questi dati sono già mostrati
       // nella parte superiore della UI.
-      if (line == 'SMARTBET AI' ||
+      if (line == 'SMARTBET' ||
           line.startsWith('PRONOSTICO:') ||
           line.startsWith('PROBABILITÀ:') ||
           line.startsWith('1: ') ||

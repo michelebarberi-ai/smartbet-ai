@@ -606,7 +606,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       firstDate: today,
       lastDate: today.add(const Duration(days: 60)),
       initialDateRange: initialRange,
-      helpText: 'Periodo schedina AI',
+      helpText: 'Periodo schedina SmartBet',
       saveText: 'CONFERMA',
     );
 
@@ -1276,7 +1276,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'SmartBet AI — Schedina $_profileName',
+        subject: 'SmartBet — Schedina $_profileName',
       ),
     );
   }
@@ -1618,7 +1618,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 Icon(Icons.auto_awesome_motion, color: Colors.white, size: 30),
                 SizedBox(height: 10),
                 Text(
-                  'LA MIA SCHEDINA AI',
+                  'LA MIA SCHEDINA SMARTBET',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -1760,7 +1760,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             onPressed: _loading ? null : _createCoupon,
             icon: const Icon(Icons.auto_awesome),
             label: Text(
-              _loading ? 'ANALISI IN CORSO...' : 'CREA LA MIA SCHEDINA AI',
+              _loading
+                  ? 'ANALISI IN CORSO...'
+                  : 'CREA LA MIA SCHEDINA SMARTBET',
             ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),

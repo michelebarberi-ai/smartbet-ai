@@ -640,7 +640,7 @@ class _CouponScreenState extends State<CouponScreen> {
     final probability = result.estimatedCombinedProbability * 100;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET AI — SCHEDINA ${result.profileName.toUpperCase()}')
+      ..writeln('SMARTBET — SCHEDINA ${result.profileName.toUpperCase()}')
       ..writeln()
       ..writeln('${result.selectionCount} selezioni')
       ..writeln('Quota totale: ${result.totalOdd.toStringAsFixed(2)}')
@@ -674,7 +674,7 @@ class _CouponScreenState extends State<CouponScreen> {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'SmartBet AI — Schedina ${result.profileName.toUpperCase()}',
+        subject: 'SmartBet — Schedina ${result.profileName.toUpperCase()}',
       ),
     );
   }

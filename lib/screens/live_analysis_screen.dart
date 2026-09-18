@@ -303,7 +303,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi Live AI'),
+        title: const Text('Analisi Live SmartBet'),
         actions: [
           IconButton(
             onPressed: _reload,
@@ -614,7 +614,7 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi Live AI'),
+        title: const Text('Analisi Live SmartBet'),
         actions: [
           IconButton(onPressed: _reload, icon: const Icon(Icons.refresh)),
         ],

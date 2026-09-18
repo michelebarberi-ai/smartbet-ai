@@ -90,7 +90,7 @@ class AiCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      online ? 'SMARTBET AI' : 'SMARTBET NON DISPONIBILE',
+                      online ? 'SMARTBET' : 'SMARTBET NON DISPONIBILE',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,

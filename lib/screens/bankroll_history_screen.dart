@@ -197,7 +197,7 @@ class BankrollHistoryScreen extends StatelessWidget {
     }
 
     final text = StringBuffer()
-      ..writeln('SMARTBET AI — LE MIE GIOCATE')
+      ..writeln('SMARTBET — LE MIE GIOCATE')
       ..writeln()
       ..writeln('${bets.length} giocate registrate')
       ..writeln();
@@ -225,16 +225,13 @@ class BankrollHistoryScreen extends StatelessWidget {
     );
 
     await SharePlus.instance.share(
-      ShareParams(
-        text: text.toString(),
-        subject: 'SmartBet AI — Le mie giocate',
-      ),
+      ShareParams(text: text.toString(), subject: 'SmartBet — Le mie giocate'),
     );
   }
 
   Future<void> _shareBet(BankrollBet bet) async {
     final text = StringBuffer()
-      ..writeln('SMARTBET AI — GIOCATA REGISTRATA')
+      ..writeln('SMARTBET — GIOCATA REGISTRATA')
       ..writeln()
       ..writeln(bet.matchLabel)
       ..writeln('Mercato: ${bet.outcome}')
@@ -250,7 +247,7 @@ class BankrollHistoryScreen extends StatelessWidget {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'SmartBet AI — ${bet.matchLabel}',
+        subject: 'SmartBet — ${bet.matchLabel}',
       ),
     );
   }

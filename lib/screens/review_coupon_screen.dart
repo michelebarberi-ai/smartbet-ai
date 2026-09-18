@@ -1034,7 +1034,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Revisione Schedina AI',
+          'Revisione Schedina SmartBet',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
