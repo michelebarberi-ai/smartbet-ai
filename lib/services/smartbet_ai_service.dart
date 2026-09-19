@@ -14,6 +14,13 @@ import 'value_bet_calculator.dart';
 import 'value_bet_store.dart';
 import 'prediction_store.dart';
 
+class _SmartBetAuditSnapshot {
+  final Map<String, dynamic> dossier;
+  final Map<String, dynamic> analysis;
+
+  const _SmartBetAuditSnapshot({required this.dossier, required this.analysis});
+}
+
 class _SmartBetAudit {
   final String status;
   final int riskScore;
@@ -67,7 +74,51 @@ class _SmartBetAudit {
   bool get isDoubt => status == 'DOUBT';
 }
 
+class SmartBetFeasibilityAudit {
+  final String status;
+  final List<String> reasons;
+  final List<String> missingFactors;
+  final List<String> blockedMarkets;
+
+  const SmartBetFeasibilityAudit({
+    required this.status,
+    required this.reasons,
+    required this.missingFactors,
+    required this.blockedMarkets,
+  });
+
+  bool get isBlocked => status == 'STRONG_CONTRADICTION';
+  bool get isDoubt => status == 'DOUBT';
+  bool get isConfirmed => !isBlocked && !isDoubt;
+
+  bool blocksMarket(String market) {
+    final wanted = _normalizeMarket(market);
+    return blockedMarkets.map(_normalizeMarket).contains(wanted);
+  }
+
+  static String _normalizeMarket(String value) {
+    return value
+        .toUpperCase()
+        .replaceAll('OVER', 'O')
+        .replaceAll('UNDER', 'U')
+        .replaceAll('NO GOAL', 'NOGOAL')
+        .replaceAll('BTTS YES', 'GOAL')
+        .replaceAll('BTTS NO', 'NOGOAL')
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  static const neutral = SmartBetFeasibilityAudit(
+    status: 'CONFIRM',
+    reasons: <String>[],
+    missingFactors: <String>[],
+    blockedMarkets: <String>[],
+  );
+}
+
 class SmartBetAiService {
+  final Map<int, _SmartBetAuditSnapshot> _auditSnapshots =
+      <int, _SmartBetAuditSnapshot>{};
+
   final http.Client _client;
 
   final MatchDossierBuilder _dossierBuilder;
@@ -381,6 +432,11 @@ class SmartBetAiService {
       // AUDITOR - SECONDA AI INDIPENDENTE
       // ========================================================
 
+      _auditSnapshots[match.fixtureId] = _SmartBetAuditSnapshot(
+        dossier: Map<String, dynamic>.from(dossier.toJson()),
+        analysis: Map<String, dynamic>.from(analysis),
+      );
+
       final audit = runAudit
           ? await _runAudit(
               match: match,
@@ -442,6 +498,33 @@ class SmartBetAiService {
   // ============================================================
   // AUDITOR
   // ============================================================
+
+  /// Controllo finale di fattibilità: usa lo snapshot già creato
+  /// da analyzeMatch(..., runAudit: false) e chiama soltanto l'Auditor.
+  Future<SmartBetFeasibilityAudit> auditFeasibility(MatchModel match) async {
+    final snapshot = _auditSnapshots[match.fixtureId];
+
+    if (snapshot == null) {
+      print(
+        'SMARTBET AUDITOR: snapshot non disponibile per fixture '
+        '${match.fixtureId}; fallback neutro.',
+      );
+      return SmartBetFeasibilityAudit.neutral;
+    }
+
+    final audit = await _runAudit(
+      match: match,
+      dossier: snapshot.dossier,
+      analysis: snapshot.analysis,
+    );
+
+    return SmartBetFeasibilityAudit(
+      status: audit.status,
+      reasons: List<String>.unmodifiable(audit.reasons),
+      missingFactors: List<String>.unmodifiable(audit.missingFactors),
+      blockedMarkets: List<String>.unmodifiable(audit.blockedMarkets),
+    );
+  }
 
   Future<_SmartBetAudit> _runAudit({
     required MatchModel match,
@@ -1150,6 +1233,7 @@ $reason
   // ============================================================
 
   void dispose() {
+    _auditSnapshots.clear();
     _dossierBuilder.dispose();
 
     _oddsService.dispose();

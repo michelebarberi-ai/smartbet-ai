@@ -33,6 +33,7 @@ class _CombinationCandidate {
   final int probability;
   final double? odd;
   final String? bookmaker;
+  final String auditorStatus;
 
   const _CombinationCandidate({
     required this.match,
@@ -41,6 +42,7 @@ class _CombinationCandidate {
     required this.probability,
     this.odd,
     this.bookmaker,
+    this.auditorStatus = 'NON VERIFICATO',
   });
 }
 
@@ -166,39 +168,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     return _auditStatus(analysis) == 'DOUBT';
   }
 
-  String _normalizeAuditMarket(String value) {
-    return value
-        .toUpperCase()
-        .replaceAll('OVER', 'O')
-        .replaceAll('UNDER', 'U')
-        .replaceAll('NO GOAL', 'NOGOAL')
-        .replaceAll('BTTS YES', 'GOAL')
-        .replaceAll('BTTS NO', 'NOGOAL')
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-  }
-
-  bool _auditorBlocksMarket(AnalysisResult analysis, String market) {
-    final line = analysis.explanation
-        .split(String.fromCharCode(10))
-        .where(
-          (item) => item.trim().toLowerCase().startsWith('mercati bloccati:'),
-        )
-        .cast<String?>()
-        .firstWhere((item) => item != null, orElse: () => null);
-
-    if (line == null) return false;
-
-    final raw = line.split(':').skip(1).join(':').trim();
-    if (raw.isEmpty || raw.toLowerCase() == 'nessuno') return false;
-
-    final wanted = _normalizeAuditMarket(market);
-    final blocked = raw
-        .split(',')
-        .map((item) => _normalizeAuditMarket(item))
-        .where((item) => item.isNotEmpty)
-        .toSet();
-
-    return blocked.contains(wanted);
+  double _auditPenalty(AnalysisResult analysis) {
+    if (_auditStrongContradiction(analysis)) return 14.0;
+    if (_auditDoubt(analysis)) return 6.0;
+    return 0.0;
   }
 
   int _advancedShortlistSize(int available) {
@@ -211,10 +184,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     _CombinationCandidate a,
     _CombinationCandidate b,
   ) {
-    final adjustedProbabilityA =
-        a.probability - (_auditDoubt(a.analysis) ? 6 : 0);
-    final adjustedProbabilityB =
-        b.probability - (_auditDoubt(b.analysis) ? 6 : 0);
+    final adjustedProbabilityA = a.probability - _auditPenalty(a.analysis);
+    final adjustedProbabilityB = b.probability - _auditPenalty(b.analysis);
 
     final probabilityCompare = adjustedProbabilityB.compareTo(
       adjustedProbabilityA,
@@ -673,20 +644,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               try {
                 final advancedResult = await _aiService.analyzeMatch(
                   candidate.match,
+                  runAudit: false,
                 );
 
                 if (advancedResult.smartScore <= 0) {
                   return null;
                 }
-
-                if (_auditStrongContradiction(advancedResult)) {
-                  return null;
-                }
-
-                if (_auditorBlocksMarket(advancedResult, _selectedMarket)) {
-                  return null;
-                }
-
                 final probability = _probabilityFor(
                   advancedResult,
                   _selectedMarket,
@@ -731,7 +694,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           _checkingOdds = false;
           _errorMessage = _selectedMarket == 'COMBO CHANCE'
               ? 'Nessuna combinazione sufficientemente solida trovata.'
-              : 'Il secondo controllo AI non ha confermato candidate sufficientemente solide per il mercato scelto.';
+              : 'Nessuna candidata ha superato i controlli di qualità per il mercato scelto.';
         });
         return;
       }
@@ -742,10 +705,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       final oddsService = OddsService();
       final validCandidates = <_CombinationCandidate>[];
+      final reserveCount = math.max(2, (_topCount * 0.50).ceil());
+      final oddsTargetCount = _selectedMarket == 'COMBO CHANCE'
+          ? _topCount
+          : math.min(candidatesForOdds.length, _topCount + reserveCount);
 
       try {
         for (final item in candidatesForOdds) {
-          if (!mounted || validCandidates.length >= _topCount) {
+          if (!mounted || validCandidates.length >= oddsTargetCount) {
             break;
           }
 
@@ -801,11 +768,60 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         oddsService.dispose();
       }
 
+      // Auditor finale di fattibilità: SmartBet ha già deciso tutto.
+      if (_selectedMarket != 'COMBO CHANCE' && validCandidates.isNotEmpty) {
+        final checked = <_CombinationCandidate>[];
+        const feasibilityBatchSize = 3;
+
+        for (
+          var start = 0;
+          start < validCandidates.length && checked.length < _topCount;
+          start += feasibilityBatchSize
+        ) {
+          final end = math.min(
+            start + feasibilityBatchSize,
+            validCandidates.length,
+          );
+          final batch = validCandidates.sublist(start, end);
+
+          final auditedBatch = await Future.wait(
+            batch.map((item) async {
+              final audit = await _aiService.auditFeasibility(item.match);
+
+              if (audit.isBlocked || audit.blocksMarket(item.market)) {
+                return null;
+              }
+
+              return _CombinationCandidate(
+                match: item.match,
+                analysis: item.analysis,
+                market: item.market,
+                probability: item.probability,
+                odd: item.odd,
+                bookmaker: item.bookmaker,
+                auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+              );
+            }),
+          );
+
+          checked.addAll(auditedBatch.whereType<_CombinationCandidate>());
+        }
+
+        validCandidates
+          ..clear()
+          ..addAll(checked.take(_topCount));
+      } else if (validCandidates.length > _topCount) {
+        validCandidates.removeRange(_topCount, validCandidates.length);
+      }
+
       if (!mounted) {
         return;
       }
 
       setState(() {
+        _results
+          ..clear()
+          ..addAll(validCandidates);
         _checkingOdds = false;
         _loading = false;
       });

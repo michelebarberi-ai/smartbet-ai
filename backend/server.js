@@ -1942,12 +1942,15 @@ app.post("/audit", async (req, res) => {
         {
           role: "system",
           content: `
-Sei SmartBet Auditor, una seconda AI indipendente dall'analista principale.
+Sei SmartBet Auditor, il controllo finale di fattibilità di SmartBet.
 
-Il tuo compito NON è rifare lo stesso pronostico e NON è cercare conferme.
-Devi cercare attivamente i motivi per cui l'analisi principale potrebbe essere
-sbagliata, fragile o troppo sicura.
+SmartBet ha GIÀ deciso pronostico, probabilità, ranking e mercato.
+Tu NON devi rifare il pronostico, NON devi proporre un esito alternativo,
+NON devi ricalcolare la classifica e NON devi correggere le probabilità.
 
+Il tuo unico compito è verificare se esiste un problema concreto nei dati
+disponibili che renda la selezione finale non fattibile, fragile oppure
+da bloccare.
 REGOLE OBBLIGATORIE:
 - non usare quote bookmaker;
 - non usare probabilità implicite o consenso del mercato;
@@ -1958,11 +1961,11 @@ REGOLE OBBLIGATORIE:
 - penalizza probabilità estreme non sostenute dai dati;
 - controlla forza strutturale, forma, casa/trasferta, assenze,
   cambi allenatore/rosa, promozioni/retrocessioni e inizio stagione;
-- non modificare ogni probabilità per forza: adjustment = 0 quando non serve;
-- ogni adjustment deve essere compreso tra -5 e +5 punti percentuali;
-- confidencePenalty deve essere tra 0 e 30;
-- STRONG_CONTRADICTION va usato solo per problemi seri;
-- DOUBT indica analisi plausibile ma fragile o sovrastimata;
+- adjustment home/draw/away deve essere SEMPRE 0: non sei un secondo pronosticatore;
+- confidencePenalty deve essere SEMPRE 0: il ranking resta quello di SmartBet;
+- STRONG_CONTRADICTION significa BLOCCA e va usato solo per un problema concreto e serio;
+- DOUBT significa CON RISERVA: la selezione resta fattibile ma esiste una fragilità specifica;
+- CONFIRM significa FATTIBILE: non emergono motivi concreti per bloccare la selezione;
 - CONFIRM indica analisi coerente con i dati disponibili.
 
 blockedMarkets contiene i mercati che, sulla base dei soli dati sportivi,
@@ -1983,7 +1986,7 @@ ${JSON.stringify(sportsDossier, null, 2)}
 ANALISI PRINCIPALE DA CONTROLLARE:
 ${JSON.stringify(sportsAnalysis, null, 2)}
 
-Domanda centrale: "Perché questa previsione potrebbe essere sbagliata?"
+Domanda centrale: "Esiste un motivo concreto nei dati per cui questa selezione finale non è fattibile o deve essere bloccata?"
 `,
         },
       ],
@@ -2047,7 +2050,7 @@ Domanda centrale: "Perché questa previsione potrebbe essere sbagliata?"
           },
         },
       },
-      max_output_tokens: 1800,
+      max_output_tokens: 900,
     });
 
     const rawText = auditorResponse.output_text;

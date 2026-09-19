@@ -47,6 +47,7 @@ class _CouponPick {
   final double expectedValue;
   final double rankScore;
   final bool adaptive;
+  final String auditorStatus;
 
   const _CouponPick({
     required this.match,
@@ -59,6 +60,7 @@ class _CouponPick {
     required this.expectedValue,
     required this.rankScore,
     required this.adaptive,
+    this.auditorStatus = 'NON VERIFICATO',
   });
 }
 
@@ -141,10 +143,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     switch (_profile) {
       case _CouponProfile.complete:
         return 'COMPLETA — Controllo massimo\n'
-            'analisi SmartBet avanzata + Auditor su una shortlist ampia.';
+            'analisi SmartBet avanzata su shortlist ampia; Auditor finale solo sulle selezioni.';
       case _CouponProfile.balanced:
         return 'BILANCIATA — Equilibrio qualità/tempo\n'
-            'SmartBet + Auditor su una shortlist intermedia.';
+            'SmartBet su shortlist intermedia; Auditor finale di fattibilità.';
       case _CouponProfile.rapid:
         return 'RAPIDA ⚡ — Priorità velocità (~1 minuto)\n'
             'Shortlist ridotta. L’Auditor completo interviene solo '
@@ -292,14 +294,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required _PreCandidate preliminary,
     required FixtureMarketOdds? odds,
   }) {
-    if (_auditStrongContradiction(preliminary.analysis)) {
-      return null;
-    }
-
     final probabilities = _markets(preliminary.analysis);
     final primary = <_CouponPick>[];
     final adaptive = <_CouponPick>[];
-    final doubtPenalty = _auditDoubt(preliminary.analysis) ? 6.0 : 0.0;
+    final auditPenalty = _auditPenalty(preliminary.analysis);
 
     for (final market in _marketOrder) {
       if (_auditorBlocksMarket(preliminary.analysis, market)) {
@@ -325,7 +323,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             edge: edge,
             expectedValue: expectedValue,
           ) -
-          doubtPenalty;
+          auditPenalty;
 
       final pick = _CouponPick(
         match: preliminary.match,
@@ -417,6 +415,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   bool _auditDoubt(AnalysisResult analysis) {
     return _auditStatus(analysis) == 'DOUBT';
+  }
+
+  double _auditPenalty(AnalysisResult analysis) {
+    if (_auditStrongContradiction(analysis)) return 14.0;
+    if (_auditDoubt(analysis)) return 6.0;
+    return 0.0;
   }
 
   String _normalizeAuditMarket(String value) {
@@ -766,38 +770,18 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return;
       }
 
-      // Fase 2: soltanto le migliori candidate passano ad analisi SmartBet avanzata + Auditor.
+      // Fase 2: le migliori candidate passano alla sola analisi SmartBet avanzata.
       final advancedCount = _advancedShortlistSize(preliminary.length);
       final advancedShortlist = preliminary.take(advancedCount).toList();
       final audited = <_PreCandidate>[];
-      var auditRejected = 0;
+      var auditRejected =
+          0; // Solo esclusioni esplicite, non semplici discordienze.
       final auditBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
+      // L'Auditor non interviene in questa fase.
 
-      // RAPIDA:
-      // AI principale su shortlist ridotta.
-      // Auditor completo solo sulla candidata più delicata
-      // tra quelle che con maggiore probabilità finiranno in schedina.
-      final rapidAuditFixtureIds = <int>{};
-      if (_profile == _CouponProfile.rapid) {
-        final likelyFinal =
-            advancedShortlist
-                .take(math.min(_count, advancedShortlist.length))
-                .toList()
-              ..sort((a, b) {
-                final scoreA =
-                    (a.bestProbability * 0.70) + (a.analysis.smartScore * 0.30);
-                final scoreB =
-                    (b.bestProbability * 0.70) + (b.analysis.smartScore * 0.30);
-                return scoreA.compareTo(scoreB);
-              });
-
-        for (final candidate in likelyFinal.take(1)) {
-          rapidAuditFixtureIds.add(candidate.match.fixtureId);
-        }
-      }
       if (!mounted) return;
       setState(() {
-        _phase = 'audit';
+        _phase = 'advanced';
         _oddsProcessed = 0;
         _oddsTotal = advancedShortlist.length;
       });
@@ -815,24 +799,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         final advanced = await Future.wait(
           batch.map((candidate) async {
             try {
-              final shouldRunAudit =
-                  _profile != _CouponProfile.rapid ||
-                  rapidAuditFixtureIds.contains(candidate.match.fixtureId);
               final result = await _aiService.analyzeMatch(
                 candidate.match,
-                runAudit: shouldRunAudit,
+                runAudit: false,
               );
 
               if (result.smartScore <= 0) {
                 _errors++;
                 return null;
               }
-
-              if (_auditStrongContradiction(result)) {
-                auditRejected++;
-                return null;
-              }
-
               return _PreCandidate(
                 match: candidate.match,
                 analysis: result,
@@ -867,7 +842,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _loading = false;
           _phase = '';
           _error =
-              'L’Auditor non ha confermato candidate sufficientemente solide per la schedina.';
+              'SmartBet non ha prodotto candidate avanzate sufficientemente solide per la schedina.';
         });
         return;
       }
@@ -1028,7 +1003,66 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
-      final selected = qualified.take(_count).toList();
+      // Auditor finale di fattibilità solo sulle selezioni già quotate.
+      final reserveCount = math.max(2, (_count * 0.50).ceil());
+      final auditPoolSize = math.min(qualified.length, _count + reserveCount);
+      final auditPool = qualified.take(auditPoolSize).toList();
+      final feasible = <_CouponPick>[];
+
+      if (auditPool.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _phase = 'audit';
+          _oddsProcessed = 0;
+          _oddsTotal = auditPool.length;
+        });
+
+        const feasibilityBatchSize = 3;
+        var auditedCount = 0;
+
+        for (
+          var start = 0;
+          start < auditPool.length && feasible.length < _count;
+          start += feasibilityBatchSize
+        ) {
+          final end = math.min(start + feasibilityBatchSize, auditPool.length);
+          final batch = auditPool.sublist(start, end);
+
+          final checked = await Future.wait(
+            batch.map((pick) async {
+              final audit = await _aiService.auditFeasibility(pick.match);
+
+              if (audit.isBlocked || audit.blocksMarket(pick.market)) {
+                auditRejected++;
+                return null;
+              }
+
+              return _CouponPick(
+                match: pick.match,
+                analysis: pick.analysis,
+                market: pick.market,
+                probability: pick.probability,
+                odd: pick.odd,
+                bookmaker: pick.bookmaker,
+                edge: pick.edge,
+                expectedValue: pick.expectedValue,
+                rankScore: pick.rankScore,
+                adaptive: pick.adaptive,
+                auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+              );
+            }),
+          );
+
+          feasible.addAll(checked.whereType<_CouponPick>());
+          auditedCount = end;
+          if (!mounted) return;
+          setState(() {
+            _oddsProcessed = auditedCount;
+          });
+        }
+      }
+
+      final selected = feasible.take(_count).toList();
       final adaptiveCount = selected.where((e) => e.adaptive).length;
 
       // La qualità decide CHI entra. Paese/competizione/orario decidono solo
@@ -1045,7 +1079,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         if (_results.isEmpty) {
           _error =
-              'SmartBet non ha trovato selezioni auditate con quota disponibile di almeno 1.25.';
+              'SmartBet non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato il controllo finale di fattibilità.';
         } else if (_results.length < _count) {
           _notice =
               'Hai richiesto $_count partite. SmartBet ne consiglia ${_results.length} '
@@ -1527,7 +1561,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (!_loading) return const SizedBox.shrink();
 
     final advancedPhase =
-        _phase == 'audit' || _phase == 'odds' || _phase == 'recovery';
+        _phase == 'advanced' ||
+        _phase == 'audit' ||
+        _phase == 'odds' ||
+        _phase == 'recovery';
     final current = advancedPhase ? _oddsProcessed : _processed;
     final total = advancedPhase ? _oddsTotal : _total;
     final value = total > 0
@@ -1537,22 +1574,22 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     String title;
     String subtitle;
 
-    if (_phase == 'audit') {
-      title = _profile == _CouponProfile.rapid
-          ? 'Analisi AI: $current / $total'
-          : 'analisi SmartBet avanzata + Auditor: $current / $total';
+    if (_phase == 'advanced') {
+      title = 'Analisi SmartBet: $current / $total';
       final remaining = math.max(0, total - current);
-      subtitle = _profile == _CouponProfile.rapid
-          ? current == 0
-                ? 'Avvio analisi delle $total candidate migliori…'
-                : remaining > 0
-                ? '$current candidate completate • $remaining ancora in analisi.'
-                : 'Analisi AI completata. Passaggio al controllo quote…'
-          : current == 0
-          ? 'Avvio analisi SmartBet avanzata e secondo controllo indipendente…'
+      subtitle = current == 0
+          ? 'Avvio analisi avanzata delle candidate migliori…'
           : remaining > 0
           ? '$current candidate completate • $remaining ancora in analisi.'
-          : 'Controllo AI completato. Passaggio alle quote…';
+          : 'Analisi SmartBet completata. Passaggio alle quote…';
+    } else if (_phase == 'audit') {
+      title = 'Controllo fattibilità: $current / $total';
+      final remaining = math.max(0, total - current);
+      subtitle = current == 0
+          ? 'L’Auditor verifica solo le selezioni finali di SmartBet…'
+          : remaining > 0
+          ? '$current controllate • $remaining ancora da verificare.'
+          : 'Controllo di fattibilità completato.';
     } else if (_phase == 'odds') {
       title =
           'Quote + selezione: $current / $total • ${_results.length} / $_count trovate';
