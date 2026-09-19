@@ -11,6 +11,7 @@ import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_local_auditor.dart';
 import '../widgets/competition_filter_sheet.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
@@ -157,7 +158,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   String get _profileDescription {
     switch (_profile) {
       case _CouponProfile.complete:
-        return 'Privilegia probabilità elevate e Smart Score solidi. Analizza una shortlist più ampia con analisi SmartBet avanzata + Auditor.';
+        return 'Privilegia probabilità elevate e Smart Score solidi. SmartBet costruisce prima la schedina; l’Auditor controlla solo le selezioni finali.';
       case _CouponProfile.balanced:
         return 'Cerca un compromesso tra affidabilità, quota e tempo di elaborazione.';
       case _CouponProfile.rapid:
@@ -297,13 +298,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final probabilities = _markets(preliminary.analysis);
     final primary = <_CouponPick>[];
     final adaptive = <_CouponPick>[];
-    final auditPenalty = _auditPenalty(preliminary.analysis);
 
     for (final market in _marketOrder) {
-      if (_auditorBlocksMarket(preliminary.analysis, market)) {
-        continue;
-      }
-
       final probability = probabilities[market] ?? 0;
       final bestOdd = odds?.oddFor(market);
 
@@ -315,15 +311,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       final impliedProbability = 1.0 / bestOdd.odd;
       final edge = p - impliedProbability;
       final expectedValue = (p * bestOdd.odd) - 1.0;
-      final score =
-          _rankScore(
-            probability: probability,
-            smartScore: preliminary.analysis.smartScore,
-            odd: bestOdd.odd,
-            edge: edge,
-            expectedValue: expectedValue,
-          ) -
-          auditPenalty;
+      final score = _rankScore(
+        probability: probability,
+        smartScore: preliminary.analysis.smartScore,
+        odd: bestOdd.odd,
+        edge: edge,
+        expectedValue: expectedValue,
+      );
 
       final pick = _CouponPick(
         match: preliminary.match,
@@ -392,87 +386,27 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return null;
   }
 
-  String _auditStatus(AnalysisResult analysis) {
-    final explanation = analysis.explanation.toUpperCase();
-    final risk = analysis.risk.toUpperCase();
+  bool _hasRealQuotedMarket(FixtureMarketOdds? odds) {
+    if (odds == null) return false;
 
-    if (explanation.contains('STATO: STRONG_CONTRADICTION') ||
-        risk.contains('FORTE DISCORDANZA')) {
-      return 'STRONG_CONTRADICTION';
+    for (final market in _marketOrder) {
+      final quote = odds.oddFor(market);
+      if (quote != null && quote.odd >= _minimumOdd) {
+        return true;
+      }
     }
 
-    if (explanation.contains('STATO: DOUBT') ||
-        risk.contains('AUDITOR: CON RISERVA')) {
-      return 'DOUBT';
-    }
-
-    return 'CONFIRM';
-  }
-
-  bool _auditStrongContradiction(AnalysisResult analysis) {
-    return _auditStatus(analysis) == 'STRONG_CONTRADICTION';
-  }
-
-  bool _auditDoubt(AnalysisResult analysis) {
-    return _auditStatus(analysis) == 'DOUBT';
-  }
-
-  double _auditPenalty(AnalysisResult analysis) {
-    if (_auditStrongContradiction(analysis)) return 14.0;
-    if (_auditDoubt(analysis)) return 6.0;
-    return 0.0;
-  }
-
-  String _normalizeAuditMarket(String value) {
-    return value
-        .toUpperCase()
-        .replaceAll('OVER', 'O')
-        .replaceAll('UNDER', 'U')
-        .replaceAll('NO GOAL', 'NOGOAL')
-        .replaceAll('BTTS YES', 'GOAL')
-        .replaceAll('BTTS NO', 'NOGOAL')
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-  }
-
-  bool _auditorBlocksMarket(AnalysisResult analysis, String market) {
-    final line = analysis.explanation
-        .split(String.fromCharCode(10))
-        .where(
-          (item) => item.trim().toLowerCase().startsWith('mercati bloccati:'),
-        )
-        .cast<String?>()
-        .firstWhere((item) => item != null, orElse: () => null);
-
-    if (line == null) return false;
-
-    final raw = line.split(':').skip(1).join(':').trim();
-    if (raw.isEmpty || raw.toLowerCase() == 'nessuno') return false;
-
-    final wanted = _normalizeAuditMarket(market);
-    final blocked = raw
-        .split(',')
-        .map((item) => _normalizeAuditMarket(item))
-        .where((item) => item.isNotEmpty)
-        .toSet();
-
-    return blocked.contains(wanted);
+    return false;
   }
 
   int _advancedShortlistSize(int available) {
-    int desired;
-
-    switch (_profile) {
-      case _CouponProfile.complete:
-        desired = math.min(30, math.max(12, _count * 2));
-        break;
-      case _CouponProfile.balanced:
-        desired = math.min(18, math.max(8, _count + 3));
-        break;
-      case _CouponProfile.rapid:
-        final reserve = math.max(3, (_count * 0.40).ceil());
-        desired = math.min(24, math.max(8, _count + reserve));
-        break;
-    }
+    // PATCH 02V — COST CONTROL
+    //
+    // 5 risultati  -> max 6 analisi AI
+    // 10 risultati -> max 12 analisi AI
+    // 15 risultati -> max 17 analisi AI
+    final reserve = _count >= 10 ? 2 : 1;
+    final desired = _count + reserve;
 
     return math.min(available, desired);
   }
@@ -770,14 +704,80 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return;
       }
 
-      // Fase 2: le migliori candidate passano alla sola analisi SmartBet avanzata.
+      // Fase 2: QUOTE REALI PRIMA di OpenAI.
       final advancedCount = _advancedShortlistSize(preliminary.length);
-      final advancedShortlist = preliminary.take(advancedCount).toList();
+      // 02V: nessuna coda AI nascosta oltre il limite previsto.
+      final quoteTarget = math.min(preliminary.length, advancedCount);
+
+      final quoteQualified = <_PreCandidate>[];
+      final quoteCache = <int, FixtureMarketOdds?>{};
+
+      if (!mounted) return;
+
+      setState(() {
+        _phase = 'odds';
+        _oddsProcessed = 0;
+        _oddsTotal = preliminary.length;
+      });
+
+      final preQuoteBatchSize = _profile == _CouponProfile.rapid ? 8 : 6;
+
+      for (
+        var start = 0;
+        start < preliminary.length && quoteQualified.length < quoteTarget;
+        start += preQuoteBatchSize
+      ) {
+        final end = math.min(start + preQuoteBatchSize, preliminary.length);
+        final batch = preliminary.sublist(start, end);
+
+        final checked = await Future.wait(
+          batch.map((candidate) async {
+            try {
+              final odds = await _oddsService.getFixtureMarketOdds(
+                fixtureId: candidate.match.fixtureId,
+              );
+
+              if (!_hasRealQuotedMarket(odds)) return null;
+
+              quoteCache[candidate.match.fixtureId] = odds;
+              return candidate;
+            } catch (_) {
+              _errors++;
+              return null;
+            }
+          }),
+        );
+
+        quoteQualified.addAll(checked.whereType<_PreCandidate>());
+
+        if (!mounted) return;
+        setState(() {
+          _oddsProcessed = end;
+        });
+      }
+
+      if (quoteQualified.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _phase = '';
+          _error =
+              'Nessuna candidata dispone di quote reali sufficienti per i mercati SmartBet.';
+        });
+        return;
+      }
+
+      final advancedShortlist = quoteQualified
+          .take(math.min(advancedCount, quoteQualified.length))
+          .toList();
+
+      final reserveQuoted = quoteQualified
+          .skip(advancedShortlist.length)
+          .toList();
+
       final audited = <_PreCandidate>[];
-      var auditRejected =
-          0; // Solo esclusioni esplicite, non semplici discordienze.
-      final auditBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
-      // L'Auditor non interviene in questa fase.
+      var auditRejected = 0;
+      final aiBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
 
       if (!mounted) return;
       setState(() {
@@ -791,9 +791,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       for (
         var start = 0;
         start < advancedShortlist.length;
-        start += auditBatchSize
+        start += aiBatchSize
       ) {
-        final end = math.min(start + auditBatchSize, advancedShortlist.length);
+        final end = math.min(start + aiBatchSize, advancedShortlist.length);
         final batch = advancedShortlist.sublist(start, end);
 
         final advanced = await Future.wait(
@@ -802,12 +802,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               final result = await _aiService.analyzeMatch(
                 candidate.match,
                 runAudit: false,
+                automaticMode: true,
               );
 
               if (result.smartScore <= 0) {
                 _errors++;
                 return null;
               }
+
               return _PreCandidate(
                 match: candidate.match,
                 analysis: result,
@@ -817,7 +819,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               return null;
             } finally {
               completedAdvanced++;
-
               if (mounted) {
                 setState(() {
                   _oddsProcessed = math.min(completedAdvanced, _oddsTotal);
@@ -827,12 +828,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           }),
         );
 
-        for (final item in advanced) {
-          if (item != null) {
-            audited.add(item);
-          }
-        }
-
+        audited.addAll(advanced.whereType<_PreCandidate>());
         if (!mounted) return;
       }
 
@@ -853,139 +849,100 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
-      // Fase 3: soltanto dopo l'analisi sportiva controlliamo le quote reali.
       final qualified = <_CouponPick>[];
 
       if (!mounted) return;
       setState(() {
-        _phase = 'odds';
+        _phase = 'selection';
         _oddsProcessed = 0;
         _oddsTotal = audited.length;
       });
 
-      final oddsBatchSize = _profile == _CouponProfile.rapid ? 6 : 4;
-
-      for (var start = 0; start < audited.length; start += oddsBatchSize) {
-        final end = math.min(start + oddsBatchSize, audited.length);
-        final batch = audited.sublist(start, end);
-
-        final priced = await Future.wait(
-          batch.map((candidate) async {
-            try {
-              final odds = await _oddsService.getFixtureMarketOdds(
-                fixtureId: candidate.match.fixtureId,
-              );
-
-              return _bestPickForMatch(preliminary: candidate, odds: odds);
-            } catch (_) {
-              _errors++;
-              return null;
-            }
-          }),
+      for (var index = 0; index < audited.length; index++) {
+        final candidate = audited[index];
+        final pick = _bestPickForMatch(
+          preliminary: candidate,
+          odds: quoteCache[candidate.match.fixtureId],
         );
 
-        qualified.addAll(priced.whereType<_CouponPick>());
-
-        final liveSelected = _liveSelectionSnapshot(qualified);
+        if (pick != null) qualified.add(pick);
 
         if (!mounted) return;
-
+        final liveSelected = _liveSelectionSnapshot(qualified);
         setState(() {
-          _oddsProcessed = end;
-
+          _oddsProcessed = index + 1;
           _results
             ..clear()
             ..addAll(liveSelected);
         });
       }
 
-      // PATCH 02F-F — RECOVERY RAPIDA DINAMICA
-      if (_profile == _CouponProfile.rapid) {
-        final minimumDesired = _count;
+      // Recovery quote-first: solo riserve già quotate.
+      if (qualified.length < _count && reserveQuoted.isNotEmpty) {
+        if (!mounted) return;
 
-        if (qualified.length < minimumDesired) {
-          final remainingCount = preliminary.length - advancedCount;
-          final recoveryPoolSize = remainingCount <= 0
-              ? 0
-              : math.min(remainingCount, math.min(12, math.max(6, _count)));
+        setState(() {
+          _phase = 'recovery';
+          _oddsProcessed = 0;
+          _oddsTotal = reserveQuoted.length;
+        });
 
-          final extraPool = recoveryPoolSize <= 0
-              ? <_PreCandidate>[]
-              : preliminary.skip(advancedCount).take(recoveryPoolSize).toList();
+        final recoveryBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
 
-          if (extraPool.isNotEmpty) {
-            if (!mounted) return;
-            setState(() {
-              _phase = 'recovery';
-              _oddsProcessed = 0;
-              _oddsTotal = extraPool.length;
-            });
-          }
+        for (
+          var start = 0;
+          start < reserveQuoted.length && qualified.length < _count;
+          start += recoveryBatchSize
+        ) {
+          final end = math.min(start + recoveryBatchSize, reserveQuoted.length);
+          final batch = reserveQuoted.sublist(start, end);
 
-          const recoveryBatchSize = 4;
+          final recovered = await Future.wait(
+            batch.map((candidate) async {
+              try {
+                final result = await _aiService.analyzeMatch(
+                  candidate.match,
+                  runAudit: false,
+                  automaticMode: true,
+                );
 
-          for (
-            var start = 0;
-            start < extraPool.length && qualified.length < minimumDesired;
-            start += recoveryBatchSize
-          ) {
-            final end = math.min(start + recoveryBatchSize, extraPool.length);
-            final batch = extraPool.sublist(start, end);
+                if (result.smartScore <= 0) return null;
 
-            final recovered = await Future.wait(
-              batch.map((candidate) async {
-                try {
-                  final result = await _aiService.analyzeMatch(
-                    candidate.match,
-                    runAudit: false,
-                  );
+                final recoveryCandidate = _PreCandidate(
+                  match: candidate.match,
+                  analysis: result,
+                  bestProbability: _bestStatisticalProbability(result),
+                );
 
-                  if (result.smartScore <= 0) {
-                    _errors++;
-                    return null;
-                  }
-
-                  final recoveryCandidate = _PreCandidate(
-                    match: candidate.match,
-                    analysis: result,
-                    bestProbability: _bestStatisticalProbability(result),
-                  );
-
-                  final marketOdds = await _oddsService.getFixtureMarketOdds(
-                    fixtureId: candidate.match.fixtureId,
-                  );
-
-                  return _bestPickForMatch(
-                    preliminary: recoveryCandidate,
-                    odds: marketOdds,
-                  );
-                } catch (_) {
-                  _errors++;
-                  return null;
-                }
-              }),
-            );
-
-            for (final pick in recovered) {
-              if (pick == null) continue;
-              if (qualified.any(
-                (existing) => existing.match.fixtureId == pick.match.fixtureId,
-              )) {
-                continue;
+                return _bestPickForMatch(
+                  preliminary: recoveryCandidate,
+                  odds: quoteCache[candidate.match.fixtureId],
+                );
+              } catch (_) {
+                _errors++;
+                return null;
               }
-              qualified.add(pick);
+            }),
+          );
+
+          for (final pick in recovered) {
+            if (pick == null) continue;
+            if (qualified.any(
+              (existing) => existing.match.fixtureId == pick.match.fixtureId,
+            )) {
+              continue;
             }
-
-            final liveSelected = _liveSelectionSnapshot(qualified);
-
-            if (!mounted) return;
-            setState(() {
-              _oddsProcessed = end;
-              _results
-                ..clear()
-                ..addAll(liveSelected);
-            });
+            qualified.add(pick);
           }
+
+          if (!mounted) return;
+          final liveSelected = _liveSelectionSnapshot(qualified);
+          setState(() {
+            _oddsProcessed = end;
+            _results
+              ..clear()
+              ..addAll(liveSelected);
+          });
         }
       }
 
@@ -1003,62 +960,98 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
-      // Auditor finale di fattibilità solo sulle selezioni già quotate.
-      final reserveCount = math.max(2, (_count * 0.50).ceil());
-      final auditPoolSize = math.min(qualified.length, _count + reserveCount);
-      final auditPool = qualified.take(auditPoolSize).toList();
+      // Verifica locale finale di fattibilità:
+      // controlla prima SOLO le vere finaliste.
+      // Le riserve vengono auditate soltanto se una finalista viene bloccata.
       final feasible = <_CouponPick>[];
+      final finalists = qualified.take(_count).toList();
+      final reserves = qualified.skip(_count).toList();
 
-      if (auditPool.isNotEmpty) {
+      if (finalists.isNotEmpty) {
         if (!mounted) return;
+
         setState(() {
           _phase = 'audit';
           _oddsProcessed = 0;
-          _oddsTotal = auditPool.length;
+          _oddsTotal = finalists.length;
         });
 
-        const feasibilityBatchSize = 3;
-        var auditedCount = 0;
+        final checkedFinalists = await Future.wait(
+          finalists.map((pick) async {
+            final audit = SmartBetLocalAuditor.evaluate(
+              analysis: pick.analysis,
+              market: pick.market,
+              probability: pick.probability,
+              odd: pick.odd ?? 0.0,
+            );
 
-        for (
-          var start = 0;
-          start < auditPool.length && feasible.length < _count;
-          start += feasibilityBatchSize
-        ) {
-          final end = math.min(start + feasibilityBatchSize, auditPool.length);
-          final batch = auditPool.sublist(start, end);
+            if (audit.isBlocked || audit.blocksMarket(pick.market)) {
+              auditRejected++;
+              return null;
+            }
 
-          final checked = await Future.wait(
-            batch.map((pick) async {
-              final audit = await _aiService.auditFeasibility(pick.match);
+            return _CouponPick(
+              match: pick.match,
+              analysis: pick.analysis,
+              market: pick.market,
+              probability: pick.probability,
+              odd: pick.odd,
+              bookmaker: pick.bookmaker,
+              edge: pick.edge,
+              expectedValue: pick.expectedValue,
+              rankScore: pick.rankScore,
+              adaptive: pick.adaptive,
+              auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+            );
+          }),
+        );
 
-              if (audit.isBlocked || audit.blocksMarket(pick.market)) {
-                auditRejected++;
-                return null;
-              }
+        feasible.addAll(checkedFinalists.whereType<_CouponPick>());
 
-              return _CouponPick(
-                match: pick.match,
-                analysis: pick.analysis,
-                market: pick.market,
-                probability: pick.probability,
-                odd: pick.odd,
-                bookmaker: pick.bookmaker,
-                edge: pick.edge,
-                expectedValue: pick.expectedValue,
-                rankScore: pick.rankScore,
-                adaptive: pick.adaptive,
-                auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
-              );
-            }),
+        if (!mounted) return;
+
+        setState(() {
+          _oddsProcessed = finalists.length;
+        });
+
+        var reserveIndex = 0;
+
+        while (feasible.length < _count && reserveIndex < reserves.length) {
+          final pick = reserves[reserveIndex++];
+          final audit = SmartBetLocalAuditor.evaluate(
+            analysis: pick.analysis,
+            market: pick.market,
+            probability: pick.probability,
+            odd: pick.odd ?? 0.0,
           );
 
-          feasible.addAll(checked.whereType<_CouponPick>());
-          auditedCount = end;
           if (!mounted) return;
+
           setState(() {
-            _oddsProcessed = auditedCount;
+            _oddsTotal = finalists.length + reserveIndex;
+            _oddsProcessed = finalists.length + reserveIndex;
           });
+
+          if (audit.isBlocked || audit.blocksMarket(pick.market)) {
+            auditRejected++;
+            continue;
+          }
+
+          feasible.add(
+            _CouponPick(
+              match: pick.match,
+              analysis: pick.analysis,
+              market: pick.market,
+              probability: pick.probability,
+              odd: pick.odd,
+              bookmaker: pick.bookmaker,
+              edge: pick.edge,
+              expectedValue: pick.expectedValue,
+              rankScore: pick.rankScore,
+              adaptive: pick.adaptive,
+              auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+            ),
+          );
         }
       }
 
@@ -1078,8 +1071,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _phase = '';
 
         if (_results.isEmpty) {
-          _error =
-              'SmartBet non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato il controllo finale di fattibilità.';
+          _error = _aiService.aiServiceUnavailable
+              ? _aiService.aiServiceUnavailableMessage
+              : 'SmartBet non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato i controlli di qualità.';
         } else if (_results.length < _count) {
           _notice =
               'Hai richiesto $_count partite. SmartBet ne consiglia ${_results.length} '
@@ -2053,7 +2047,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'SCELTA AI',
+                      'SCELTA SMARTBET',
                       style: TextStyle(
                         color: Colors.white38,
                         fontSize: 9,

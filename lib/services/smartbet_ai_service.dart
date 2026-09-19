@@ -116,6 +116,57 @@ class SmartBetFeasibilityAudit {
 }
 
 class SmartBetAiService {
+  static DateTime? _globalAiUnavailableUntil;
+  static String? _globalAiUnavailableReason;
+
+  bool get aiServiceUnavailable {
+    final until = _globalAiUnavailableUntil;
+
+    if (until == null) return false;
+
+    if (DateTime.now().isAfter(until)) {
+      _globalAiUnavailableUntil = null;
+      _globalAiUnavailableReason = null;
+      return false;
+    }
+
+    return true;
+  }
+
+  String get aiServiceUnavailableMessage =>
+      _globalAiUnavailableReason ??
+      'Servizio SmartBet AI temporaneamente non disponibile.';
+
+  void _markAiUnavailable(
+    String reason, {
+    Duration duration = const Duration(minutes: 2),
+  }) {
+    _globalAiUnavailableReason = reason.trim().isEmpty
+        ? 'Servizio SmartBet AI temporaneamente non disponibile.'
+        : reason;
+    _globalAiUnavailableUntil = DateTime.now().add(duration);
+  }
+
+  void _markAiAvailable() {
+    _globalAiUnavailableUntil = null;
+    _globalAiUnavailableReason = null;
+  }
+
+  bool _looksLikeAiUnavailable(String value) {
+    final text = value.toLowerCase();
+
+    return text.contains('ai_unavailable') ||
+        text.contains('ai_billing_unavailable') ||
+        text.contains('ai_rate_limited') ||
+        text.contains('credit_balance_exhausted') ||
+        text.contains('no credits remaining') ||
+        text.contains('insufficient_quota') ||
+        text.contains('spend limit') ||
+        text.contains('usage limit') ||
+        text.contains('servizio smartbet ai temporaneamente non disponibile') ||
+        text.contains('servizio smartbet ai momentaneamente occupato');
+  }
+
   final Map<int, _SmartBetAuditSnapshot> _auditSnapshots =
       <int, _SmartBetAuditSnapshot>{};
 
@@ -152,8 +203,13 @@ class SmartBetAiService {
 
   Future<AnalysisResult> analyzeMatch(
     MatchModel match, {
-    bool runAudit = true,
+    bool runAudit = false,
+    bool automaticMode = false,
   }) async {
+    if (aiServiceUnavailable) {
+      return _errorResult(aiServiceUnavailableMessage);
+    }
+
     print('');
     print('========================================');
     print('SMARTBET AI - ANALISI PARTITA');
@@ -309,6 +365,7 @@ class SmartBetAiService {
 
         'matchDate': match.date,
 
+        'analysisMode': automaticMode ? 'automatic' : 'detailed',
         'dossier': dossier.toJson(),
 
         'meta': {
@@ -381,24 +438,41 @@ class SmartBetAiService {
       if (response.statusCode != 200) {
         print('');
         print('SMARTBET AI BACKEND ERROR');
-
         print(response.body);
+
+        var message =
+            'Il backend AI ha restituito lo stato ${response.statusCode}.';
+        var code = '';
 
         try {
           final errorDecoded = jsonDecode(response.body);
 
           if (errorDecoded is Map<String, dynamic>) {
-            return _errorResult(
-              errorDecoded['error']?.toString() ?? 'Errore backend AI.',
-            );
+            message = errorDecoded['error']?.toString() ?? message;
+            code = errorDecoded['code']?.toString() ?? '';
           }
         } catch (_) {}
 
-        return _errorResult(
-          'Il backend AI ha restituito '
-          'lo stato ${response.statusCode}.',
-        );
+        if (response.statusCode == 503 ||
+            _looksLikeAiUnavailable('$code $message')) {
+          final friendly = message.toLowerCase().contains('occupato')
+              ? 'Servizio SmartBet AI momentaneamente occupato. Riprova tra poco.'
+              : 'Servizio SmartBet AI temporaneamente non disponibile.';
+
+          _markAiUnavailable(
+            friendly,
+            duration: response.statusCode == 429
+                ? const Duration(seconds: 45)
+                : const Duration(minutes: 2),
+          );
+
+          return _errorResult(friendly);
+        }
+
+        return _errorResult(message);
       }
+
+      _markAiAvailable();
 
       // ========================================================
       // JSON
@@ -414,9 +488,17 @@ class SmartBetAiService {
       }
 
       if (decoded['success'] != true) {
-        return _errorResult(
-          decoded['error']?.toString() ?? 'Errore backend AI.',
-        );
+        final message = decoded['error']?.toString() ?? 'Errore backend AI.';
+        final code = decoded['code']?.toString() ?? '';
+
+        if (_looksLikeAiUnavailable('$code $message')) {
+          const friendly =
+              'Servizio SmartBet AI temporaneamente non disponibile.';
+          _markAiUnavailable(friendly);
+          return _errorResult(friendly);
+        }
+
+        return _errorResult(message);
       }
 
       final analysis = decoded['analysis'];
@@ -799,6 +881,9 @@ class SmartBetAiService {
       goalProbability: baseResult.goalProbability,
       noGoalProbability: baseResult.noGoalProbability,
 
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+      expectedAwayGoals: baseResult.expectedAwayGoals,
+
       prediction: prediction,
       valueBet: valueBet,
       risk: risk,
@@ -1075,6 +1160,9 @@ $finalVerdict
       goalProbability: baseResult.goalProbability,
 
       noGoalProbability: baseResult.noGoalProbability,
+
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+      expectedAwayGoals: baseResult.expectedAwayGoals,
 
       prediction: prediction,
 

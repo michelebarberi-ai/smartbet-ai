@@ -9,6 +9,7 @@ import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/odds_service.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_market_probability_service.dart';
 
 class PredictionScreen extends StatefulWidget {
@@ -34,7 +35,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
   static const int _wantedResults = 3;
   static const int _maximumMatchesToAnalyze = 36;
   static const int _preBatchSize = 6;
-  static const int _auditBatchSize = 4;
   static const int _oddsBatchSize = 6;
   static const double _minimumOdd = 1.25;
 
@@ -581,66 +581,24 @@ class _PredictionScreenState extends State<PredictionScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
-      final firstShortlistSize = math.min(preliminary.length, 12);
-      final firstShortlist = preliminary.take(firstShortlistSize).toList();
+      // ========================================================
+      // 02R3H FIX — RISULTATI DEL GIORNO COST CONTROL
+      // ========================================================
+      //
+      // SmartCore locale -> quote -> shortlist ->
+      // SmartBet automatico economico -> Auditor locale.
+      //
+      // Massimo 6 chiamate AI.
+      // Stop immediato appena abbiamo 3 risultati validi.
+      // ========================================================
 
-      final audited = <_PreCandidate>[];
-      var completedAdvanced = 0;
+      final quoteQualified = <_DailyPick>[];
 
-      if (!mounted) {
-        return;
-      }
+      // Questa fase NON usa OpenAI.
+      // Controlliamo prima che esistano quote realmente utili.
+      final quoteScanSize = math.min(preliminary.length, 18);
 
-      setState(() {
-        _phase = 'audit';
-        _processed = 0;
-        _total = firstShortlist.length;
-      });
-
-      for (
-        var start = 0;
-        start < firstShortlist.length;
-        start += _auditBatchSize
-      ) {
-        final end = math.min(start + _auditBatchSize, firstShortlist.length);
-        final batch = firstShortlist.sublist(start, end);
-
-        final advanced = await Future.wait(
-          batch.map((candidate) async {
-            try {
-              final result = await _aiService.analyzeMatch(candidate.match);
-
-              if (result.smartScore <= 0 || _auditStrongContradiction(result)) {
-                return null;
-              }
-
-              return _PreCandidate(
-                match: candidate.match,
-                analysis: result,
-                bestProbability: _bestStatisticalProbability(result),
-              );
-            } catch (_) {
-              return null;
-            } finally {
-              completedAdvanced++;
-
-              if (mounted) {
-                setState(() {
-                  _processed = math.min(completedAdvanced, _total);
-                });
-              }
-            }
-          }),
-        );
-
-        audited.addAll(advanced.whereType<_PreCandidate>());
-
-        if (!mounted) {
-          return;
-        }
-      }
-
-      final qualified = <_DailyPick>[];
+      final quoteScan = preliminary.take(quoteScanSize).toList();
 
       if (!mounted) {
         return;
@@ -649,12 +607,13 @@ class _PredictionScreenState extends State<PredictionScreen> {
       setState(() {
         _phase = 'odds';
         _processed = 0;
-        _total = audited.length;
+        _total = quoteScan.length;
       });
 
-      for (var start = 0; start < audited.length; start += _oddsBatchSize) {
-        final end = math.min(start + _oddsBatchSize, audited.length);
-        final batch = audited.sublist(start, end);
+      for (var start = 0; start < quoteScan.length; start += _oddsBatchSize) {
+        final end = math.min(start + _oddsBatchSize, quoteScan.length);
+
+        final batch = quoteScan.sublist(start, end);
 
         final priced = await Future.wait(
           batch.map((candidate) async {
@@ -674,8 +633,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           }),
         );
 
-        qualified.addAll(priced.whereType<_DailyPick>());
-        final live = _topSnapshot(qualified);
+        quoteQualified.addAll(priced.whereType<_DailyPick>());
 
         if (!mounted) {
           return;
@@ -683,73 +641,132 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
         setState(() {
           _processed = end;
-          _results
-            ..clear()
-            ..addAll(live);
         });
       }
 
-      // Recovery: solo se le prime 12 candidate non bastano.
-      if (qualified.length < _wantedResults &&
-          preliminary.length > firstShortlistSize) {
-        final remaining = preliminary.skip(firstShortlistSize).take(8).toList();
+      // Ordiniamo le candidate già quotate
+      // usando soltanto dati locali.
+      quoteQualified.sort((a, b) {
+        final score = b.rankScore.compareTo(a.rankScore);
 
-        if (remaining.isNotEmpty) {
+        if (score != 0) {
+          return score;
+        }
+
+        final probability = b.probability.compareTo(a.probability);
+
+        if (probability != 0) {
+          return probability;
+        }
+
+        return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+      });
+
+      // TOP 3 + massimo 3 riserve.
+      // Quindi massimo assoluto: 6 chiamate AI.
+      final aiPoolSize = math.min(quoteQualified.length, 6);
+
+      final aiPool = quoteQualified.take(aiPoolSize).toList();
+
+      final qualified = <_DailyPick>[];
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _phase = 'audit';
+        _processed = 0;
+        _total = aiPool.length;
+      });
+
+      // ========================================================
+      // SMARTBET AUTOMATICO ECONOMICO
+      // ========================================================
+
+      for (
+        var index = 0;
+        index < aiPool.length && qualified.length < _wantedResults;
+        index++
+      ) {
+        final seed = aiPool[index];
+
+        try {
+          final advancedResult = await _aiService.analyzeMatch(
+            seed.match,
+            runAudit: false,
+            automaticMode: true,
+          );
+
+          if (advancedResult.smartScore <= 0) {
+            continue;
+          }
+
+          final odds = await _oddsService.getFixtureMarketOdds(
+            fixtureId: seed.match.fixtureId,
+          );
+
+          final pick = _bestPickForMatch(
+            match: seed.match,
+            analysis: advancedResult,
+            odds: odds,
+          );
+
+          if (pick == null) {
+            continue;
+          }
+
+          // Auditor completamente locale:
+          // nessuna seconda chiamata OpenAI.
+          final audit = SmartBetLocalAuditor.evaluate(
+            analysis: pick.analysis,
+            market: pick.market,
+            probability: pick.probability,
+            odd: pick.odd,
+          );
+
+          if (audit.isBlocked) {
+            continue;
+          }
+
+          // Preserviamo anche i 3 risultati esatti
+          // già calcolati da _bestPickForMatch().
+          final checkedPick = _DailyPick(
+            match: pick.match,
+            analysis: pick.analysis,
+            market: pick.market,
+            probability: pick.probability,
+            odd: pick.odd,
+            bookmaker: pick.bookmaker,
+            edge: pick.edge,
+            expectedValue: pick.expectedValue,
+            rankScore: pick.rankScore,
+            auditStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+            exactPrimary: pick.exactPrimary,
+            exactAlternative: pick.exactAlternative,
+            exactThird: pick.exactThird,
+          );
+
+          qualified.add(checkedPick);
+
+          final live = _topSnapshot(qualified);
+
           if (!mounted) {
             return;
           }
 
           setState(() {
-            _phase = 'recovery';
-            _processed = 0;
-            _total = remaining.length;
+            _results
+              ..clear()
+              ..addAll(live);
           });
-
-          for (
-            var start = 0;
-            start < remaining.length && qualified.length < _wantedResults;
-            start += _auditBatchSize
-          ) {
-            final end = math.min(start + _auditBatchSize, remaining.length);
-            final batch = remaining.sublist(start, end);
-
-            final recovered = await Future.wait(
-              batch.map((candidate) async {
-                try {
-                  final result = await _aiService.analyzeMatch(candidate.match);
-
-                  if (result.smartScore <= 0 ||
-                      _auditStrongContradiction(result)) {
-                    return null;
-                  }
-
-                  final odds = await _oddsService.getFixtureMarketOdds(
-                    fixtureId: candidate.match.fixtureId,
-                  );
-
-                  return _bestPickForMatch(
-                    match: candidate.match,
-                    analysis: result,
-                    odds: odds,
-                  );
-                } catch (_) {
-                  return null;
-                }
-              }),
-            );
-
-            qualified.addAll(recovered.whereType<_DailyPick>());
-            final live = _topSnapshot(qualified);
-
-            if (!mounted) {
-              return;
-            }
-
+        } catch (_) {
+          // Se una candidata fallisce,
+          // prova la riserva successiva.
+        } finally {
+          if (mounted) {
             setState(() {
-              _processed = end;
-              _results
-                ..clear()
-                ..addAll(live);
+              _processed = index + 1;
             });
           }
         }
@@ -867,6 +884,21 @@ class _PredictionScreenState extends State<PredictionScreen> {
   // CARD
   // ============================================================
 
+  String _dailyMarketDisplayName(String market) {
+    switch (market) {
+      case 'CASA 2+ GOL':
+        return 'CASA ALMENO 2 GOL';
+      case 'CASA 3+ GOL':
+        return 'CASA ALMENO 3 GOL';
+      case 'OSPITE 2+ GOL':
+        return 'OSPITE ALMENO 2 GOL';
+      case 'OSPITE 3+ GOL':
+        return 'OSPITE ALMENO 3 GOL';
+      default:
+        return market;
+    }
+  }
+
   Widget _resultCard(_DailyPick item, int position) {
     final scoreColor = _scoreColor(item.analysis.smartScore);
     final auditColor = _auditColor(item);
@@ -935,7 +967,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
               Expanded(
                 child: _mainValueBox(
                   label: 'SCELTA SMARTBET',
-                  value: item.market,
+                  value: _dailyMarketDisplayName(item.market),
                   valueColor: const Color(0xFF00C853),
                 ),
               ),

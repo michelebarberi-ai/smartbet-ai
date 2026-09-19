@@ -3,18 +3,6 @@ import 'package:flutter/material.dart';
 class HomeHeader extends StatelessWidget {
   const HomeHeader({super.key});
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-
-    if (hour < 12) {
-      return "Buongiorno 👋";
-    } else if (hour < 18) {
-      return "Buon pomeriggio 👋";
-    } else {
-      return "Buonasera 🌙";
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -51,13 +39,6 @@ class HomeHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _greeting(),
-                  style: const TextStyle(fontSize: 15, color: Colors.white70),
-                ),
-
-                const SizedBox(height: 6),
-
                 const Text(
                   "SMARTBET",
                   style: TextStyle(

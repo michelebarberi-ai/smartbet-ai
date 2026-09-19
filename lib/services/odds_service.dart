@@ -436,6 +436,41 @@ class OddsService {
             // testate: non vengono esposti finché il feed non li offre.
             // ------------------------------------------------------
 
+            // 14 = Team To Score First
+            if (betId == 14) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) continue;
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+                if (odd <= 1) continue;
+
+                final value = _normalizeText(
+                  raw,
+                ).replaceAll(' ', '').replaceAll('-', '').replaceAll('_', '');
+
+                String? outcome;
+                if (value == 'home' || value == '1' || value == 'hometeam') {
+                  outcome = 'CASA SEGNA PRIMA';
+                } else if (value == 'away' ||
+                    value == '2' ||
+                    value == 'awayteam') {
+                  outcome = 'OSPITE SEGNA PRIMA';
+                }
+
+                if (outcome != null) {
+                  _setBest(
+                    bestByOutcome,
+                    outcome: outcome,
+                    odd: odd,
+                    bookmakerId: bookmakerId,
+                    bookmakerName: bookmakerName,
+                  );
+                }
+              }
+              continue;
+            }
+
             if (betId == 43 || betId == 44) {
               for (final valueItem in values) {
                 if (valueItem is! Map<String, dynamic>) {
@@ -483,17 +518,62 @@ class OddsService {
                   r'([0-9]+(?:\.[0-9]+)?)',
                 ).firstMatch(value);
 
-                if (value.contains('over') && number?.group(1) == '0.5') {
+                if (value.contains('over')) {
+                  final line = number?.group(1);
+                  String? outcome;
+
+                  if (line == '0.5') {
+                    outcome = betId == 16 ? 'CASA SEGNA' : 'OSPITE SEGNA';
+                  } else if (line == '1.5') {
+                    outcome = betId == 16 ? 'CASA 2+ GOL' : 'OSPITE 2+ GOL';
+                  } else if (line == '2.5') {
+                    outcome = betId == 16 ? 'CASA 3+ GOL' : 'OSPITE 3+ GOL';
+                  }
+
+                  if (outcome != null) {
+                    _setBest(
+                      bestByOutcome,
+                      outcome: outcome,
+                      odd: odd,
+                      bookmakerId: bookmakerId,
+                      bookmakerName: bookmakerName,
+                    );
+                  }
+                }
+              }
+
+              continue;
+            }
+
+            // Mercati dedicati team goals.
+            if (betId == 234 || betId == 235 || betId == 236 || betId == 237) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) continue;
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+                if (odd <= 1) continue;
+
+                if (_normalizeText(raw) != 'yes') continue;
+
+                final outcome = switch (betId) {
+                  234 => 'CASA 3+ GOL',
+                  235 => 'OSPITE 3+ GOL',
+                  236 => 'OSPITE 2+ GOL',
+                  237 => 'CASA 2+ GOL',
+                  _ => '',
+                };
+
+                if (outcome.isNotEmpty) {
                   _setBest(
                     bestByOutcome,
-                    outcome: betId == 16 ? 'CASA SEGNA' : 'OSPITE SEGNA',
+                    outcome: outcome,
                     odd: odd,
                     bookmakerId: bookmakerId,
                     bookmakerName: bookmakerName,
                   );
                 }
               }
-
               continue;
             }
 

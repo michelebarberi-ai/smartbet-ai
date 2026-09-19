@@ -16,6 +16,12 @@ class SmartBetMarketProbabilityService {
     'UNDER 4.5',
     'CASA SEGNA',
     'OSPITE SEGNA',
+    'CASA SEGNA PRIMA',
+    'OSPITE SEGNA PRIMA',
+    'CASA 2+ GOL',
+    'OSPITE 2+ GOL',
+    'CASA 3+ GOL',
+    'OSPITE 3+ GOL',
     'GOAL + O2.5',
     'NO GOAL + U2.5',
   ];
@@ -27,6 +33,23 @@ class SmartBetMarketProbabilityService {
 
     if (homeLambda <= 0 || awayLambda <= 0) {
       return 0;
+    }
+
+    final totalLambda = homeLambda + awayLambda;
+    final firstGoalMass = totalLambda <= 0 ? 0.0 : 1.0 - math.exp(-totalLambda);
+
+    if (key == 'CASA SEGNA PRIMA') {
+      final p = totalLambda <= 0
+          ? 0.0
+          : (homeLambda / totalLambda) * firstGoalMass;
+      return (p * 100).round().clamp(0, 100);
+    }
+
+    if (key == 'OSPITE SEGNA PRIMA') {
+      final p = totalLambda <= 0
+          ? 0.0
+          : (awayLambda / totalLambda) * firstGoalMass;
+      return (p * 100).round().clamp(0, 100);
     }
 
     final scores = _scoreGrid(homeLambda, awayLambda);
@@ -47,6 +70,14 @@ class SmartBetMarketProbabilityService {
           return home >= 1;
         case 'OSPITE SEGNA':
           return away >= 1;
+        case 'CASA 2+ GOL':
+          return home >= 2;
+        case 'OSPITE 2+ GOL':
+          return away >= 2;
+        case 'CASA 3+ GOL':
+          return home >= 3;
+        case 'OSPITE 3+ GOL':
+          return away >= 3;
         case 'MULTIGOL 1-4':
           return total >= 1 && total <= 4;
         case 'MULTIGOL 2-4':

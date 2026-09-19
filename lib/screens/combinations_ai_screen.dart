@@ -10,6 +10,7 @@ import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_local_auditor.dart';
 import '../widgets/competition_filter_sheet.dart';
 
 class CombinationsAiScreen extends StatefulWidget {
@@ -26,6 +27,20 @@ class _ComboChance {
   const _ComboChance({required this.label, required this.probability});
 }
 
+class _FamilyOptionDetail {
+  final String market;
+  final int probability;
+  final double? odd;
+  final String? bookmaker;
+
+  const _FamilyOptionDetail({
+    required this.market,
+    required this.probability,
+    this.odd,
+    this.bookmaker,
+  });
+}
+
 class _CombinationCandidate {
   final MatchModel match;
   final AnalysisResult analysis;
@@ -34,6 +49,7 @@ class _CombinationCandidate {
   final double? odd;
   final String? bookmaker;
   final String auditorStatus;
+  final List<_FamilyOptionDetail> familyOptions;
 
   const _CombinationCandidate({
     required this.match,
@@ -43,6 +59,7 @@ class _CombinationCandidate {
     this.odd,
     this.bookmaker,
     this.auditorStatus = 'NON VERIFICATO',
+    this.familyOptions = const [],
   });
 }
 
@@ -76,17 +93,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     '1X',
     'X2',
     '12',
-    'OVER 1.5',
-    'UNDER 1.5',
-    'OVER 2.5',
-    'UNDER 2.5',
+    'OVER',
+    'UNDER',
     'GOAL',
     'NO GOAL',
     'COMBO CHANCE',
-    'OVER 3.5',
-    'UNDER 3.5',
-    'OVER 4.5',
-    'UNDER 4.5',
     'CASA SEGNA',
     'OSPITE SEGNA',
   ];
@@ -141,6 +152,115 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       default:
         return SmartBetMarketProbabilityService.probabilityFor(result, market);
     }
+  }
+
+  List<String> _familyOptions(String market) {
+    switch (market) {
+      case 'OVER':
+        return const ['OVER 1.5', 'OVER 2.5', 'OVER 3.5', 'OVER 4.5'];
+      case 'UNDER':
+        return const ['UNDER 1.5', 'UNDER 2.5', 'UNDER 3.5', 'UNDER 4.5'];
+      case 'CASA SEGNA':
+        return const [
+          'CASA SEGNA',
+          'CASA SEGNA PRIMA',
+          'CASA 2+ GOL',
+          'CASA 3+ GOL',
+        ];
+      case 'OSPITE SEGNA':
+        return const [
+          'OSPITE SEGNA',
+          'OSPITE SEGNA PRIMA',
+          'OSPITE 2+ GOL',
+          'OSPITE 3+ GOL',
+        ];
+      default:
+        return [market];
+    }
+  }
+
+  bool _isFamilyMarket(String market) {
+    return market == 'OVER' ||
+        market == 'UNDER' ||
+        market == 'CASA SEGNA' ||
+        market == 'OSPITE SEGNA';
+  }
+
+  int _searchProbabilityFor(AnalysisResult result, String market) {
+    if (!_isFamilyMarket(market)) {
+      // Mercati normali: identico comportamento precedente.
+      return _probabilityFor(result, market);
+    }
+
+    var best = 0;
+
+    for (final option in _familyOptions(market)) {
+      final probability = _probabilityFor(result, option);
+
+      if (probability > best) {
+        best = probability;
+      }
+    }
+
+    return best;
+  }
+
+  _CombinationCandidate? _bestFamilyQuotedCandidate({
+    required _CombinationCandidate candidate,
+    required dynamic marketOdds,
+    required String family,
+  }) {
+    final familyOptions = <_FamilyOptionDetail>[];
+
+    String? selectedMarket;
+    int selectedProbability = -1;
+    double? selectedOdd;
+    String? selectedBookmaker;
+
+    for (final option in _familyOptions(family)) {
+      final bestOdd = marketOdds?.oddFor(option);
+      final probability = _probabilityFor(candidate.analysis, option);
+
+      // Conserviamo SEMPRE la casistica per mostrarla all'utente,
+      // anche se non ha quota o la quota è sotto il minimo.
+      familyOptions.add(
+        _FamilyOptionDetail(
+          market: option,
+          probability: probability,
+          odd: bestOdd?.odd,
+          bookmaker: bestOdd?.bookmakerName,
+        ),
+      );
+
+      // Per la scelta SmartBet restano validi i filtri reali.
+      if (probability <= 0 || bestOdd == null || bestOdd.odd < _minimumOdd) {
+        continue;
+      }
+
+      if (selectedMarket == null ||
+          probability > selectedProbability ||
+          (probability == selectedProbability &&
+              bestOdd.odd > (selectedOdd ?? 0.0))) {
+        selectedMarket = option;
+        selectedProbability = probability;
+        selectedOdd = bestOdd.odd;
+        selectedBookmaker = bestOdd.bookmakerName;
+      }
+    }
+
+    if (selectedMarket == null || selectedOdd == null) {
+      return null;
+    }
+
+    return _CombinationCandidate(
+      match: candidate.match,
+      analysis: candidate.analysis,
+      market: selectedMarket,
+      probability: selectedProbability,
+      odd: selectedOdd,
+      bookmaker: selectedBookmaker,
+      familyOptions: familyOptions,
+    );
   }
 
   String _auditStatus(AnalysisResult analysis) {
@@ -549,7 +669,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 );
               }
 
-              final probability = _probabilityFor(analysis, _selectedMarket);
+              final probability = _searchProbabilityFor(
+                analysis,
+                _selectedMarket,
+              );
 
               return _CombinationCandidate(
                 match: match,
@@ -623,36 +746,117 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         // con probabilità congiunta Poisson e senza quota reale obbligatoria.
         candidatesForOdds.addAll(allCandidates);
       } else {
-        final advancedCount = _advancedShortlistSize(allCandidates.length);
-        final advancedShortlist = allCandidates.take(advancedCount).toList();
+        final isFamilyMarket = _isFamilyMarket(_selectedMarket);
 
-        const auditBatchSize = 4;
+        List<_CombinationCandidate> advancedInput;
+
+        if (isFamilyMarket) {
+          // Scorre le candidate finché trova abbastanza partite con almeno
+          // un sotto-mercato della famiglia realmente quotato >= 1.25.
+          final quoteScan = allCandidates;
+          final preQuoted = <_CombinationCandidate>[];
+          final targetQuoted = math.max(_topCount + 5, 10);
+
+          final preQuoteOddsService = OddsService();
+
+          try {
+            const quoteBatchSize = 6;
+
+            for (
+              var start = 0;
+              start < quoteScan.length && preQuoted.length < targetQuoted;
+              start += quoteBatchSize
+            ) {
+              final end = math.min(start + quoteBatchSize, quoteScan.length);
+              final batch = quoteScan.sublist(start, end);
+
+              final quotedBatch = await Future.wait(
+                batch.map((candidate) async {
+                  try {
+                    final marketOdds = await preQuoteOddsService
+                        .getFixtureMarketOdds(
+                          fixtureId: candidate.match.fixtureId,
+                        );
+
+                    return _bestFamilyQuotedCandidate(
+                      candidate: candidate,
+                      marketOdds: marketOdds,
+                      family: _selectedMarket,
+                    );
+                  } catch (_) {
+                    return null;
+                  }
+                }),
+              );
+
+              preQuoted.addAll(quotedBatch.whereType<_CombinationCandidate>());
+            }
+          } finally {
+            preQuoteOddsService.dispose();
+          }
+
+          advancedInput = preQuoted;
+        } else {
+          // Percorso originale per 1/X/2/1X/X2/12/GOAL/NO GOAL.
+          final advancedCount = _advancedShortlistSize(allCandidates.length);
+          advancedInput = allCandidates.take(advancedCount).toList();
+        }
+
+        // PATCH 02V — COST CONTROL
+        // Una sola AI principale su una shortlist molto piccola.
+        final smartAiReserve = _topCount >= 10 ? 2 : 1;
+        final smartAiLimit = math.min(
+          advancedInput.length,
+          _topCount + smartAiReserve,
+        );
+        advancedInput = advancedInput.take(smartAiLimit).toList();
+
+        const advancedBatchSize = 4;
 
         for (
           var start = 0;
-          start < advancedShortlist.length;
-          start += auditBatchSize
+          start < advancedInput.length;
+          start += advancedBatchSize
         ) {
-          final end = math.min(
-            start + auditBatchSize,
-            advancedShortlist.length,
-          );
-          final batch = advancedShortlist.sublist(start, end);
+          final end = math.min(start + advancedBatchSize, advancedInput.length);
+          final batch = advancedInput.sublist(start, end);
 
-          final auditedBatch = await Future.wait(
+          final analyzedBatch = await Future.wait(
             batch.map((candidate) async {
               try {
                 final advancedResult = await _aiService.analyzeMatch(
                   candidate.match,
                   runAudit: false,
+                  automaticMode: true,
                 );
 
                 if (advancedResult.smartScore <= 0) {
                   return null;
                 }
+
+                final actualMarket = isFamilyMarket
+                    ? candidate.market
+                    : _selectedMarket;
+
+                final familyOptions = isFamilyMarket
+                    ? candidate.familyOptions
+                          .map(
+                            (option) => _FamilyOptionDetail(
+                              market: option.market,
+                              probability: _probabilityFor(
+                                advancedResult,
+                                option.market,
+                              ),
+                              odd: option.odd,
+                              bookmaker: option.bookmaker,
+                            ),
+                          )
+                          .toList(growable: false)
+                    : const <_FamilyOptionDetail>[];
+
                 final probability = _probabilityFor(
                   advancedResult,
-                  _selectedMarket,
+                  actualMarket,
                 );
 
                 if (probability <= 0 ||
@@ -663,8 +867,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 return _CombinationCandidate(
                   match: candidate.match,
                   analysis: advancedResult,
-                  market: _selectedMarket,
+                  market: actualMarket,
                   probability: probability,
+                  odd: candidate.odd,
+                  bookmaker: candidate.bookmaker,
+                  familyOptions: familyOptions,
                 );
               } catch (_) {
                 return null;
@@ -673,7 +880,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           );
 
           candidatesForOdds.addAll(
-            auditedBatch.whereType<_CombinationCandidate>(),
+            analyzedBatch.whereType<_CombinationCandidate>(),
           );
 
           if (!mounted) {
@@ -692,7 +899,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         setState(() {
           _loading = false;
           _checkingOdds = false;
-          _errorMessage = _selectedMarket == 'COMBO CHANCE'
+          _errorMessage = _aiService.aiServiceUnavailable
+              ? _aiService.aiServiceUnavailableMessage
+              : _selectedMarket == 'COMBO CHANCE'
               ? 'Nessuna combinazione sufficientemente solida trovata.'
               : 'Nessuna candidata ha superato i controlli di qualità per il mercato scelto.';
         });
@@ -732,27 +941,34 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             continue;
           }
 
-          final marketOdds = await oddsService.getFixtureMarketOdds(
-            fixtureId: item.match.fixtureId,
-          );
+          if (item.odd != null &&
+              item.odd! >= _minimumOdd &&
+              item.bookmaker != null) {
+            // I mercati-famiglia sono già stati pre-quotati.
+            validCandidates.add(item);
+          } else {
+            final marketOdds = await oddsService.getFixtureMarketOdds(
+              fixtureId: item.match.fixtureId,
+            );
 
-          final bestOdd = marketOdds?.oddFor(item.market);
+            final bestOdd = marketOdds?.oddFor(item.market);
 
-          // Quota assente o inferiore a 1.25: selezione esclusa.
-          if (bestOdd == null || bestOdd.odd < _minimumOdd) {
-            continue;
+            // Quota assente o inferiore a 1.25: selezione esclusa.
+            if (bestOdd == null || bestOdd.odd < _minimumOdd) {
+              continue;
+            }
+
+            validCandidates.add(
+              _CombinationCandidate(
+                match: item.match,
+                analysis: item.analysis,
+                market: item.market,
+                probability: item.probability,
+                odd: bestOdd.odd,
+                bookmaker: bestOdd.bookmakerName,
+              ),
+            );
           }
-
-          validCandidates.add(
-            _CombinationCandidate(
-              match: item.match,
-              analysis: item.analysis,
-              market: item.market,
-              probability: item.probability,
-              odd: bestOdd.odd,
-              bookmaker: bestOdd.bookmakerName,
-            ),
-          );
 
           if (!mounted) {
             return;
@@ -786,7 +1002,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           final auditedBatch = await Future.wait(
             batch.map((item) async {
-              final audit = await _aiService.auditFeasibility(item.match);
+              final audit = SmartBetLocalAuditor.evaluate(
+                analysis: item.analysis,
+                market: item.market,
+                probability: item.probability,
+                odd: item.odd ?? 0.0,
+              );
 
               if (audit.isBlocked || audit.blocksMarket(item.market)) {
                 return null;
@@ -800,6 +1021,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 odd: item.odd,
                 bookmaker: item.bookmaker,
                 auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+                familyOptions: item.familyOptions,
               );
             }),
           );
@@ -1120,11 +1342,180 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // RESULT CARD
   // ============================================================
 
+  String _familyDisplayName(String market) {
+    switch (market) {
+      case 'CASA SEGNA':
+        return 'CASA ALMENO 1 GOL';
+      case 'CASA 2+ GOL':
+        return 'CASA ALMENO 2 GOL';
+      case 'CASA 3+ GOL':
+        return 'CASA ALMENO 3 GOL';
+      case 'OSPITE SEGNA':
+        return 'OSPITE ALMENO 1 GOL';
+      case 'OSPITE 2+ GOL':
+        return 'OSPITE ALMENO 2 GOL';
+      case 'OSPITE 3+ GOL':
+        return 'OSPITE ALMENO 3 GOL';
+      default:
+        return market;
+    }
+  }
+
+  Widget _familyBreakdownSection(_CombinationCandidate item) {
+    if (!_isFamilyMarket(_selectedMarket) || item.familyOptions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: const Color(0xFF00C853).withValues(alpha: 0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome,
+                color: Color(0xFF00C853),
+                size: 16,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'SCELTA SMARTBET: ${_familyDisplayName(item.market)}',
+                  style: const TextStyle(
+                    color: Color(0xFF00C853),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'TUTTE LE PROBABILITÀ',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 7),
+          ...item.familyOptions.map((option) {
+            final selected = option.market == item.market;
+
+            final quoteText = option.odd == null
+                ? 'Quota n/d'
+                : option.odd! < _minimumOdd
+                ? 'Quota ${option.odd!.toStringAsFixed(2)} • sotto minimo'
+                : 'Quota ${option.odd!.toStringAsFixed(2)}';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFF00C853).withValues(alpha: 0.10)
+                    : Colors.white.withValues(alpha: 0.025),
+                borderRadius: BorderRadius.circular(9),
+                border: selected
+                    ? Border.all(
+                        color: const Color(0xFF00C853).withValues(alpha: 0.28),
+                      )
+                    : null,
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        child: selected
+                            ? const Icon(
+                                Icons.star,
+                                size: 14,
+                                color: Color(0xFF00C853),
+                              )
+                            : null,
+                      ),
+                      Expanded(
+                        child: Text(
+                          _familyDisplayName(option.market),
+                          style: TextStyle(
+                            color: selected ? Colors.white : Colors.white70,
+                            fontSize: 11,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${option.probability}%',
+                        style: TextStyle(
+                          color: selected
+                              ? const Color(0xFF00C853)
+                              : Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Text(
+                          quoteText,
+                          style: TextStyle(
+                            color:
+                                option.odd != null && option.odd! >= _minimumOdd
+                                ? Colors.white54
+                                : Colors.orangeAccent,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                      if (option.bookmaker?.trim().isNotEmpty == true)
+                        Flexible(
+                          child: Text(
+                            option.bookmaker!,
+                            textAlign: TextAlign.right,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white30,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _resultCard(_CombinationCandidate item, int rank) {
     final result = item.analysis;
     final match = item.match;
     final scoreColor = _scoreColor(result.smartScore);
     final isComboChance = _selectedMarket == 'COMBO CHANCE';
+    final isFamilyMarket = _isFamilyMarket(_selectedMarket);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1206,7 +1597,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   child: Column(
                     children: [
                       Text(
-                        item.market,
+                        _familyDisplayName(item.market),
                         style: const TextStyle(
                           color: Colors.white54,
                           fontSize: 11,
@@ -1262,7 +1653,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ],
           ),
 
-          _comboChanceSection(result, match.fixtureId),
+          if (isComboChance) _comboChanceSection(result, match.fixtureId),
+
+          if (isFamilyMarket) ...[
+            const SizedBox(height: 12),
+            _familyBreakdownSection(item),
+          ],
 
           const SizedBox(height: 10),
 
@@ -1555,7 +1951,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text('3', style: TextStyle(color: Colors.white38, fontSize: 11)),
-              Text('10', style: TextStyle(color: Colors.white38, fontSize: 11)),
+              Text('15', style: TextStyle(color: Colors.white38, fontSize: 11)),
             ],
           ),
 
@@ -1700,7 +2096,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const Text(
             'Le percentuali mostrate sono stime '
-            'della pre-analisi statistica e non '
+            'del modello SmartBet e non '
             'garantiscono l’esito della partita.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white30, fontSize: 10, height: 1.4),
