@@ -59,3 +59,11 @@ backups/
 
 # Backend local/debug files
 backend/server_broken.js
+
+# SmartBet local development backups
+*.pre_patch*
+*.backup_*
+*.broken_*
+*.failed*
+*.auditor_candidate
+backup_*/
