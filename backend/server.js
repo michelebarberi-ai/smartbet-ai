@@ -26,6 +26,107 @@ const client = new OpenAI({
 
 const PORT = process.env.PORT || 3000;
 
+const AI_CIRCUIT_BREAKER_MS = 2 * 60 * 1000;
+
+let aiUnavailableUntil = 0;
+let aiUnavailableReason = null;
+let aiUnavailableCode = null;
+
+function isAiCircuitOpen() {
+  if (!aiUnavailableUntil) return false;
+
+  if (Date.now() >= aiUnavailableUntil) {
+    aiUnavailableUntil = 0;
+    aiUnavailableReason = null;
+    aiUnavailableCode = null;
+    return false;
+  }
+
+  return true;
+}
+
+function markAiUnavailable(reason, code = "AI_UNAVAILABLE", durationMs = AI_CIRCUIT_BREAKER_MS) {
+  aiUnavailableUntil = Date.now() + durationMs;
+  aiUnavailableReason =
+    reason || "Servizio SmartBet AI temporaneamente non disponibile.";
+  aiUnavailableCode = code;
+}
+
+function markAiAvailable() {
+  aiUnavailableUntil = 0;
+  aiUnavailableReason = null;
+  aiUnavailableCode = null;
+}
+
+function classifyAiProviderError(error) {
+  const status = Number(
+    error?.status ??
+    error?.statusCode ??
+    error?.response?.status ??
+    0
+  );
+
+  const code = String(
+    error?.code ??
+    error?.error?.code ??
+    error?.response?.data?.error?.code ??
+    ""
+  ).toLowerCase();
+
+  const message = String(
+    error?.message ??
+    error?.error?.message ??
+    error?.response?.data?.error?.message ??
+    error ??
+    ""
+  );
+
+  const lower = message.toLowerCase();
+
+  const billingProblem =
+    code.includes("credit_balance_exhausted") ||
+    code.includes("spend_limit") ||
+    code.includes("usage_limit") ||
+    lower.includes("no credits remaining") ||
+    lower.includes("credit balance") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("spend limit") ||
+    lower.includes("usage limit");
+
+  if (billingProblem) {
+    return {
+      unavailable: true,
+      code: "AI_BILLING_UNAVAILABLE",
+      durationMs: 5 * 60 * 1000,
+      publicMessage:
+        "Servizio SmartBet AI temporaneamente non disponibile.",
+    };
+  }
+
+  if (status === 429) {
+    return {
+      unavailable: true,
+      code: "AI_RATE_LIMITED",
+      durationMs: 45 * 1000,
+      publicMessage:
+        "Servizio SmartBet AI momentaneamente occupato. Riprova tra poco.",
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      unavailable: true,
+      code: "AI_PROVIDER_UNAVAILABLE",
+      durationMs: 30 * 1000,
+      publicMessage:
+        "Servizio SmartBet AI temporaneamente non disponibile.",
+    };
+  }
+
+  return null;
+}
+
+
 const SUPPORT_EMAIL =
   process.env.SUPPORT_EMAIL || "support@example.com";
 
@@ -410,6 +511,9 @@ app.get("/health", (req, res) => {
     valueBetMode: "dart-mathematical",
     auditor: true,
     marketIsolation: true,
+    aiAvailable: !isAiCircuitOpen(),
+    aiStatus: isAiCircuitOpen() ? "unavailable" : "available",
+    aiReason: isAiCircuitOpen() ? aiUnavailableReason : null,
   });
 });
 
@@ -826,6 +930,18 @@ app.get(/^\/football\/api\/(.+)$/, async (req, res) => {
 
 app.post("/analyze", async (req, res) => {
   try {
+
+    if (isAiCircuitOpen()) {
+      return res.status(503).json({
+        success: false,
+        code: aiUnavailableCode || "AI_UNAVAILABLE",
+        aiAvailable: false,
+        error:
+          aiUnavailableReason ||
+          "Servizio SmartBet AI temporaneamente non disponibile.",
+      });
+    }
+
     const {
       homeTeam,
       awayTeam,
@@ -833,7 +949,10 @@ app.post("/analyze", async (req, res) => {
       dossier,
       meta,
       statistics,
+    analysisMode,
     } = req.body;
+
+    const automaticMode = analysisMode === "automatic";
 
     // ==========================================================
     // CONTROLLO BASE
@@ -1027,14 +1146,20 @@ ${JSON.stringify(sportsData, null, 2)}
 
     const response =
       await client.responses.create({
-        model: "gpt-5.1",
+        model: automaticMode ? "gpt-5.6-luna" : "gpt-5.1",
 
-        tools: [
-          {
-            type: "web_search",
-            search_context_size: "medium",
-          },
-        ],
+        reasoning: { effort: automaticMode ? "low" : "none" },
+
+        tools: automaticMode
+          ? []
+          : [
+              {
+                type: "web_search",
+                search_context_size: "medium",
+              },
+            ],
+
+        max_output_tokens: automaticMode ? 1200 : 3000,
 
         input: [
           {
@@ -1047,6 +1172,18 @@ Sei un analista professionale specializzato
 nell'analisi PRE-PARTITA delle partite di calcio.
 
 ${buildPreMatchRules(matchDate)}
+
+${automaticMode ? `
+============================================================
+MODALITÀ AUTOMATICA SMARTBET
+============================================================
+
+Questa analisi fa parte di una selezione automatica.
+Usa esclusivamente il Match Dossier e i dati strutturati ricevuti.
+Non richiedere né simulare ricerche web.
+Sii conciso e restituisci soltanto l’analisi necessaria al JSON richiesto.
+============================================================
+` : ""}
 
 ============================================================
 GERARCHIA DELLE INFORMAZIONI
@@ -1831,6 +1968,8 @@ Produci infine la valutazione probabilistica.
     // RISPOSTA FLUTTER
     // ==========================================================
 
+    markAiAvailable();
+
     return res.json({
       success: true,
 
@@ -1872,6 +2011,23 @@ Produci infine la valutazione probabilistica.
       },
     });
   } catch (error) {
+    const aiFailure = classifyAiProviderError(error);
+
+    if (aiFailure) {
+      markAiUnavailable(
+        aiFailure.publicMessage,
+        aiFailure.code,
+        aiFailure.durationMs,
+      );
+
+      return res.status(503).json({
+        success: false,
+        code: aiFailure.code,
+        aiAvailable: false,
+        error: aiFailure.publicMessage,
+      });
+    }
+
     console.error("");
     console.error(
       "========================================"
