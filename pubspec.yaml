@@ -2,8 +2,7 @@ name: smartbet_ai_new
 description: "SmartBet AI"
 publish_to: 'none'
 
-version: 1.0.0+8
-
+version: 1.0.0+9
 environment:
   sdk: ^3.12.2
 
@@ -26,5 +25,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    - .env
     - assets/smartbet_app_icon.png

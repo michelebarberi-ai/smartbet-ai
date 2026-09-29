@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/match_model.dart';
@@ -128,9 +127,7 @@ class FootballDataService {
   static final Map<int, Future<List<Map<String, dynamic>>>> _standingsCache =
       {};
 
-  String get _apiKey {
-    return dotenv.env['FOOTBALL_DATA_API_KEY']?.trim() ?? '';
-  }
+  String get _apiKey => '';
 
   Map<String, String> get _headers {
     return {'X-Auth-Token': _apiKey, 'Accept': 'application/json'};
