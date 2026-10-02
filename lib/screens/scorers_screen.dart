@@ -152,7 +152,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
           _loading = false;
           _phase = 'done';
           _error =
-              'SmartBet non è riuscito a costruire la shortlist delle partite.';
+              'GoalVdLine non è riuscito a costruire la shortlist delle partite.';
         });
         return;
       }
@@ -219,7 +219,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
 
         if (_results.isEmpty) {
           _error =
-              'Oggi SmartBet non ha trovato marcatori con dati '
+              'Oggi GoalVdLine non ha trovato marcatori con dati '
               'sufficientemente solidi. Nessun nome viene forzato.';
         }
       });
@@ -289,7 +289,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
     if (raw.contains('socket') ||
         raw.contains('host lookup') ||
         raw.contains('network')) {
-      return 'Impossibile collegarsi ai servizi SmartBet. '
+      return 'Impossibile collegarsi ai servizi GoalVdLine. '
           'Controlla la connessione e riprova.';
     }
 
@@ -310,14 +310,14 @@ class _ScorersScreenState extends State<ScorersScreen> {
       case 'players':
         return 'Analisi giocatori: $_processed / $_total';
       default:
-        return 'SmartBet sta lavorando…';
+        return 'GoalVdLine sta lavorando…';
     }
   }
 
   String get _progressSubtitle {
     switch (_phase) {
       case 'scan':
-        return 'SmartBet individua le partite con il miglior potenziale offensivo.';
+        return 'GoalVdLine individua le partite con il miglior potenziale offensivo.';
       case 'players':
         return 'Gol, minuti, titolarità, tiri, assenze e formazioni vengono incrociati.';
       default:
@@ -353,7 +353,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
           ),
           SizedBox(height: 11),
           Text(
-            'SmartBet cerca fino a 5 giocatori con il profilo più '
+            'GoalVdLine cerca fino a 5 giocatori con il profilo più '
             'interessante nelle partite di oggi. Nessun marcatore '
             'viene inserito solo per raggiungere il numero richiesto.',
             style: TextStyle(color: Colors.white, fontSize: 13, height: 1.45),
@@ -546,7 +546,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
                   child: Column(
                     children: [
                       const Text(
-                        'PROBABILITÀ SMARTBET',
+                        'PROBABILITÀ GOALVDLINE',
                         style: TextStyle(
                           color: Colors.white54,
                           fontSize: 9.5,
@@ -745,7 +745,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Possibili Marcatori SmartBet',
+          'Possibili Marcatori GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -791,7 +791,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
             if (_loading) ...[
               const SizedBox(height: 5),
               const Text(
-                'La classifica può aggiornarsi mentre SmartBet continua l’analisi.',
+                'La classifica può aggiornarsi mentre GoalVdLine continua l’analisi.',
                 style: TextStyle(color: Colors.white38, fontSize: 10),
               ),
             ],

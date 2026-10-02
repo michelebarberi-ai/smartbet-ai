@@ -273,7 +273,7 @@ class _SmartScoreFilteredScreenState extends State<SmartScoreFilteredScreen> {
               CircularProgressIndicator(),
               SizedBox(height: 20),
               Text(
-                'SMARTBET',
+                'GOALVDLINE',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,

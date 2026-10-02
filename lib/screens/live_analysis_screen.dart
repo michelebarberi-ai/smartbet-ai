@@ -303,7 +303,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi Live SmartBet'),
+        title: const Text('Analisi Live GoalVdLine'),
         actions: [
           IconButton(
             onPressed: _reload,
@@ -614,7 +614,7 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi Live SmartBet'),
+        title: const Text('Analisi Live GoalVdLine'),
         actions: [
           IconButton(onPressed: _reload, icon: const Icon(Icons.refresh)),
         ],
@@ -788,7 +788,7 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
           Text(
             analysis.dataQuality == 'Limitati' || analysis.confidence < 55
                 ? 'STIMA PRELIMINARE LIVE'
-                : 'SMARTBET LIVE',
+                : 'GOALVDLINE LIVE',
             style: const TextStyle(
               color: Color(0xFF00C853),
               fontWeight: FontWeight.bold,

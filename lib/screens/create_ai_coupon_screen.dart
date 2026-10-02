@@ -144,10 +144,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     switch (_profile) {
       case _CouponProfile.complete:
         return 'COMPLETA — Controllo massimo\n'
-            'analisi SmartBet avanzata su shortlist ampia; Auditor finale solo sulle selezioni.';
+            'analisi GoalVdLine avanzata su shortlist ampia; Auditor finale solo sulle selezioni.';
       case _CouponProfile.balanced:
         return 'BILANCIATA — Equilibrio qualità/tempo\n'
-            'SmartBet su shortlist intermedia; Auditor finale di fattibilità.';
+            'GoalVdLine su shortlist intermedia; Auditor finale di fattibilità.';
       case _CouponProfile.rapid:
         return 'RAPIDA ⚡ — Priorità velocità (~1 minuto)\n'
             'Shortlist ridotta. L’Auditor completo interviene solo '
@@ -158,7 +158,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   String get _profileDescription {
     switch (_profile) {
       case _CouponProfile.complete:
-        return 'Privilegia probabilità elevate e Smart Score solidi. SmartBet costruisce prima la schedina; l’Auditor controlla solo le selezioni finali.';
+        return 'Privilegia probabilità elevate e Smart Score solidi. GoalVdLine costruisce prima la schedina; l’Auditor controlla solo le selezioni finali.';
       case _CouponProfile.balanced:
         return 'Cerca un compromesso tra affidabilità, quota e tempo di elaborazione.';
       case _CouponProfile.rapid:
@@ -544,7 +544,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       firstDate: today,
       lastDate: today.add(const Duration(days: 60)),
       initialDateRange: initialRange,
-      helpText: 'Periodo schedina SmartBet',
+      helpText: 'Periodo schedina GoalVdLine',
       saveText: 'CONFERMA',
     );
 
@@ -699,7 +699,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _loading = false;
           _phase = '';
           _error =
-              'SmartBet non ha trovato partite con dati statistici sufficienti.';
+              'GoalVdLine non ha trovato partite con dati statistici sufficienti.';
         });
         return;
       }
@@ -762,7 +762,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _loading = false;
           _phase = '';
           _error =
-              'Nessuna candidata dispone di quote reali sufficienti per i mercati SmartBet.';
+              'Nessuna candidata dispone di quote reali sufficienti per i mercati GoalVdLine.';
         });
         return;
       }
@@ -838,7 +838,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _loading = false;
           _phase = '';
           _error =
-              'SmartBet non ha prodotto candidate avanzate sufficientemente solide per la schedina.';
+              'GoalVdLine non ha prodotto candidate avanzate sufficientemente solide per la schedina.';
         });
         return;
       }
@@ -1073,10 +1073,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         if (_results.isEmpty) {
           _error = _aiService.aiServiceUnavailable
               ? _aiService.aiServiceUnavailableMessage
-              : 'SmartBet non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato i controlli di qualità.';
+              : 'GoalVdLine non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato i controlli di qualità.';
         } else if (_results.length < _count) {
           _notice =
-              'Hai richiesto $_count partite. SmartBet ne consiglia ${_results.length} '
+              'Hai richiesto $_count partite. GoalVdLine ne consiglia ${_results.length} '
               'con quota disponibile di almeno 1.25 per mantenere qualità: non forza eventi deboli.'
               '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
         } else if (adaptiveCount > 0 || auditRejected > 0) {
@@ -1088,7 +1088,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             parts.add('l’Auditor ha escluso $auditRejected candidate');
           }
           _notice =
-              '${parts.join(' • ')}. Quota minima: 1.25. SmartBet usa la migliore quota disponibile nel feed.';
+              '${parts.join(' • ')}. Quota minima: 1.25. GoalVdLine usa la migliore quota disponibile nel feed.';
         }
       });
     } catch (e) {
@@ -1260,7 +1260,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (_results.isEmpty) return;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET — SCHEDINA $_profileName')
+      ..writeln('GOALVDLINE — SCHEDINA $_profileName')
       ..writeln()
       ..writeln('${_results.length} partite')
       ..writeln(
@@ -1304,7 +1304,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'SmartBet — Schedina $_profileName',
+        subject: 'GoalVdLine — Schedina $_profileName',
       ),
     );
   }
@@ -1493,7 +1493,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     final summary = all
-        ? 'Nessun filtro: SmartBet usa tutti i campionati disponibili.'
+        ? 'Nessun filtro: GoalVdLine usa tutti i campionati disponibili.'
         : leagues.length <= 3
         ? leagues.join(' • ')
         : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
@@ -1569,18 +1569,18 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     String subtitle;
 
     if (_phase == 'advanced') {
-      title = 'Analisi SmartBet: $current / $total';
+      title = 'Analisi GoalVdLine: $current / $total';
       final remaining = math.max(0, total - current);
       subtitle = current == 0
           ? 'Avvio analisi avanzata delle candidate migliori…'
           : remaining > 0
           ? '$current candidate completate • $remaining ancora in analisi.'
-          : 'Analisi SmartBet completata. Passaggio alle quote…';
+          : 'Analisi GoalVdLine completata. Passaggio alle quote…';
     } else if (_phase == 'audit') {
       title = 'Controllo fattibilità: $current / $total';
       final remaining = math.max(0, total - current);
       subtitle = current == 0
-          ? 'L’Auditor verifica solo le selezioni finali di SmartBet…'
+          ? 'L’Auditor verifica solo le selezioni finali di GoalVdLine…'
           : remaining > 0
           ? '$current controllate • $remaining ancora da verificare.'
           : 'Controllo di fattibilità completato.';
@@ -1588,12 +1588,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       title =
           'Quote + selezione: $current / $total • ${_results.length} / $_count trovate';
       subtitle =
-          'Le selezioni valide compaiono subito qui sotto mentre SmartBet continua.';
+          'Le selezioni valide compaiono subito qui sotto mentre GoalVdLine continua.';
     } else if (_phase == 'recovery') {
       title =
           'Ricerca alternative: $current / $total • ${_results.length} / $_count trovate';
       subtitle =
-          'SmartBet prova altre candidate senza abbassare quota minima o criteri di qualità.';
+          'GoalVdLine prova altre candidate senza abbassare quota minima o criteri di qualità.';
     } else {
       title = 'Scansione statistica: $current / $total';
       subtitle =
@@ -1630,7 +1630,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Crea Schedina SmartBet'),
+        title: const Text('Crea Schedina GoalVdLine'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -1649,7 +1649,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 Icon(Icons.auto_awesome_motion, color: Colors.white, size: 30),
                 SizedBox(height: 10),
                 Text(
-                  'LA MIA SCHEDINA SMARTBET',
+                  'LA MIA SCHEDINA GOALVDLINE',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -1658,7 +1658,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
                 SizedBox(height: 7),
                 Text(
-                  'SmartBet calcola prima le probabilità e successivamente '
+                  'GoalVdLine calcola prima le probabilità e successivamente '
                   'usa le quote reali per costruire il profilo scelto.',
                   style: TextStyle(color: Colors.white70, height: 1.4),
                 ),
@@ -1793,7 +1793,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             label: Text(
               _loading
                   ? 'ANALISI IN CORSO...'
-                  : 'CREA LA MIA SCHEDINA SMARTBET',
+                  : 'CREA LA MIA SCHEDINA GOALVDLINE',
             ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1853,7 +1853,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             if (_loading) ...[
               const SizedBox(height: 6),
               const Text(
-                'SmartBet sta ancora lavorando: le selezioni possono aggiornarsi fino al completamento.',
+                'GoalVdLine sta ancora lavorando: le selezioni possono aggiornarsi fino al completamento.',
                 style: TextStyle(
                   color: Colors.white54,
                   fontSize: 11,
@@ -2047,7 +2047,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'SCELTA SMARTBET',
+                      'SCELTA GOALVDLINE',
                       style: TextStyle(
                         color: Colors.white38,
                         fontSize: 9,

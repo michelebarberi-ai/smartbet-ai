@@ -38,7 +38,7 @@ class AiCard extends StatelessWidget {
     final date = lastUpdate;
 
     if (date == null) {
-      return 'Sincronizzazione SmartBet';
+      return 'Sincronizzazione GoalVdLine';
     }
 
     final hour = date.hour.toString().padLeft(2, '0');
@@ -90,7 +90,7 @@ class AiCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      online ? 'SMARTBET' : 'SMARTBET NON DISPONIBILE',
+                      online ? 'GOALVDLINE' : 'GOALVDLINE NON DISPONIBILE',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,

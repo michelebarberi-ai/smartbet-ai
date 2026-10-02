@@ -573,7 +573,7 @@ class SmartBetCouponService {
         message:
             '${profile.name}: non ci sono abbastanza selezioni '
             'con qualità sufficiente. '
-            'SmartBet non forza eventi deboli.',
+            'GoalVdLine non forza eventi deboli.',
       );
     }
 

@@ -39,7 +39,7 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.auto_awesome_motion,
-        title: 'Crea Schedina\nSmartBet',
+        title: 'Crea Schedina\nGoalVdLine',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
@@ -50,7 +50,7 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.auto_awesome,
-        title: 'Combinazioni\nSmartBet',
+        title: 'Combinazioni\nGoalVdLine',
         color: Colors.orange,
         onTap: () {
           Navigator.push(
@@ -83,7 +83,7 @@ class MenuGrid extends StatelessWidget {
       ),
       _MenuItem(
         icon: Icons.fact_check_outlined,
-        title: 'Revisione\nSchedina SmartBet',
+        title: 'Revisione\nSchedina GoalVdLine',
         color: const Color(0xFF00C853),
         onTap: () {
           Navigator.push(

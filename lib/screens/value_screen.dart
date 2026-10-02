@@ -354,7 +354,7 @@ class ValueScreen extends StatelessWidget {
 
             Text(
               'Le Value Bet trovate durante le analisi '
-              'SmartBet compariranno automaticamente qui.',
+              'GoalVdLine compariranno automaticamente qui.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white60, height: 1.4),
             ),

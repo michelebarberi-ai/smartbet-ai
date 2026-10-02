@@ -336,7 +336,7 @@ class SmartBetAutoCouponService {
     if (selectedPreliminary.isEmpty) {
       return SmartBetAutoCouponResult(
         coupons: _emptyCouponSet(
-          'SmartBet non ha trovato partite '
+          'GoalVdLine non ha trovato partite '
           'con dati statistici sufficienti.',
         ),
         totalMatches: allMatches.length,
@@ -424,7 +424,7 @@ class SmartBetAutoCouponService {
         current: advancedShortlist.length,
         total: advancedShortlist.length,
         message: coupons.hasAnyCoupon
-            ? '${coupons.availableProfiles} strategie SmartBet pronte.'
+            ? '${coupons.availableProfiles} strategie GoalVdLine pronte.'
             : 'Nessuna schedina consigliata.',
       ),
     );

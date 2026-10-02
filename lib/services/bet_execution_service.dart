@@ -81,7 +81,7 @@ class BetExecutionService {
     if (!analysis.shouldBet) {
       return BetExecutionPreview.noBet(
         bankroll: bankrollManager,
-        message: 'SmartBet non consiglia al momento una giocata specifica.',
+        message: 'GoalVdLine non consiglia al momento una giocata specifica.',
       );
     }
 

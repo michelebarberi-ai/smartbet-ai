@@ -40,7 +40,7 @@ class HomeHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "SMARTBET",
+                  "GOALVDLINE",
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w900,

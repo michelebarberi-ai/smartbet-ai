@@ -142,7 +142,7 @@ class ValueBetCalculator {
         away: null,
         bestValue: null,
         label: 'NO',
-        explanation: 'Probabilità SmartBet non valide.',
+        explanation: 'Probabilità GoalVdLine non valide.',
       );
     }
 
@@ -216,7 +216,7 @@ class ValueBetCalculator {
         bestValue: null,
         label: 'NO',
         explanation:
-            'Nessun esito supera le soglie SmartBet '
+            'Nessun esito supera le soglie GoalVdLine '
             'di edge ed expected value.',
       );
     }
@@ -242,7 +242,7 @@ class ValueBetCalculator {
         '(${bestValue.bookmakerName}) | '
         'AI ${aiPercent.toStringAsFixed(1)}% | '
         'Mercato fair ${marketPercent.toStringAsFixed(1)}% | '
-        'Quota equa SmartBet ${fairOdd.toStringAsFixed(2)} | '
+        'Quota equa GoalVdLine ${fairOdd.toStringAsFixed(2)} | '
         'Edge ${edgePercent >= 0 ? '+' : ''}'
         '${edgePercent.toStringAsFixed(1)} p.p. | '
         'EV ${evPercent >= 0 ? '+' : ''}'

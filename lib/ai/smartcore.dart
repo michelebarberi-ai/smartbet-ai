@@ -462,7 +462,7 @@ ANALISI NON DISPONIBILE
 
 $reason
 
-SmartBet non genera un pronostico
+GoalVdLine non genera un pronostico
 quando i dati statistici non sono sufficienti.
 """,
     );

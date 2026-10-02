@@ -200,7 +200,7 @@ class DecisionEngine {
         probability: homeDraw,
         reason:
             'La vittoria ospite è lo scenario meno probabile; '
-            'SmartBet protegge casa e pareggio.',
+            'GoalVdLine protegge casa e pareggio.',
       );
     }
 
@@ -210,7 +210,7 @@ class DecisionEngine {
         probability: drawAway,
         reason:
             'La vittoria casa è lo scenario meno probabile; '
-            'SmartBet protegge pareggio e vittoria ospite.',
+            'GoalVdLine protegge pareggio e vittoria ospite.',
       );
     }
 
@@ -219,7 +219,7 @@ class DecisionEngine {
       probability: homeAway,
       reason:
           'Il pareggio è lo scenario meno probabile; '
-          'SmartBet protegge entrambe le possibilità di vittoria.',
+          'GoalVdLine protegge entrambe le possibilità di vittoria.',
     );
   }
 }

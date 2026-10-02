@@ -335,7 +335,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: Text(
-            'SmartBet modificherà $modifications selezioni '
+            'GoalVdLine modificherà $modifications selezioni '
             'e rimuoverà $discards partite.\n\n'
             'Le selezioni indicate come TIENI resteranno invariate.',
             style: const TextStyle(color: Colors.white70, height: 1.4),
@@ -1034,7 +1034,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Revisione Schedina SmartBet',
+          'Revisione Schedina GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -1269,7 +1269,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
                 const SizedBox(height: 12),
                 const Text(
                   'Le selezioni vengono salvate automaticamente. '
-                  'SmartBet mostrerà prima i suggerimenti e nessuna modifica '
+                  'GoalVdLine mostrerà prima i suggerimenti e nessuna modifica '
                   'verrà applicata senza conferma.',
                   textAlign: TextAlign.center,
                   style: TextStyle(

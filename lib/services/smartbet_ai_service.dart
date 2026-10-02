@@ -135,14 +135,14 @@ class SmartBetAiService {
 
   String get aiServiceUnavailableMessage =>
       _globalAiUnavailableReason ??
-      'Servizio SmartBet AI temporaneamente non disponibile.';
+      'Servizio GoalVdLine AI temporaneamente non disponibile.';
 
   void _markAiUnavailable(
     String reason, {
     Duration duration = const Duration(minutes: 2),
   }) {
     _globalAiUnavailableReason = reason.trim().isEmpty
-        ? 'Servizio SmartBet AI temporaneamente non disponibile.'
+        ? 'Servizio GoalVdLine AI temporaneamente non disponibile.'
         : reason;
     _globalAiUnavailableUntil = DateTime.now().add(duration);
   }
@@ -163,6 +163,10 @@ class SmartBetAiService {
         text.contains('insufficient_quota') ||
         text.contains('spend limit') ||
         text.contains('usage limit') ||
+        text.contains(
+          'servizio goalvdline ai temporaneamente non disponibile',
+        ) ||
+        text.contains('servizio goalvdline ai momentaneamente occupato') ||
         text.contains('servizio smartbet ai temporaneamente non disponibile') ||
         text.contains('servizio smartbet ai momentaneamente occupato');
   }
@@ -456,8 +460,8 @@ class SmartBetAiService {
         if (response.statusCode == 503 ||
             _looksLikeAiUnavailable('$code $message')) {
           final friendly = message.toLowerCase().contains('occupato')
-              ? 'Servizio SmartBet AI momentaneamente occupato. Riprova tra poco.'
-              : 'Servizio SmartBet AI temporaneamente non disponibile.';
+              ? 'Servizio GoalVdLine AI momentaneamente occupato. Riprova tra poco.'
+              : 'Servizio GoalVdLine AI temporaneamente non disponibile.';
 
           _markAiUnavailable(
             friendly,
@@ -493,7 +497,7 @@ class SmartBetAiService {
 
         if (_looksLikeAiUnavailable('$code $message')) {
           const friendly =
-              'Servizio SmartBet AI temporaneamente non disponibile.';
+              'Servizio GoalVdLine AI temporaneamente non disponibile.';
           _markAiUnavailable(friendly);
           return _errorResult(friendly);
         }
@@ -1206,7 +1210,7 @@ $finalVerdict
     );
 
     print(
-      'Quota equa SmartBet: '
+      'Quota equa GoalVdLine: '
       '${item.smartBetFairOdd.toStringAsFixed(2)}',
     );
 

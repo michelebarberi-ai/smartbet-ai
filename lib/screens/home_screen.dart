@@ -196,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 18),
 
                   const Text(
-                    'Prestazioni SmartBet',
+                    'Prestazioni GoalVdLine',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 26,
@@ -207,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
 
                   const Text(
-                    'Verifica nel tempo l’efficacia delle analisi SmartBet '
+                    'Verifica nel tempo l’efficacia delle analisi GoalVdLine '
                     'attraverso le giocate registrate.',
                     style: TextStyle(
                       color: Colors.white54,

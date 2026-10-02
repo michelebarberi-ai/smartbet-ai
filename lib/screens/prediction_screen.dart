@@ -567,7 +567,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           _loading = false;
           _phase = '';
           _error =
-              'SmartBet non ha trovato candidate statistiche utilizzabili.';
+              'GoalVdLine non ha trovato candidate statistiche utilizzabili.';
         });
         return;
       }
@@ -787,7 +787,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
         if (_results.isEmpty) {
           _error =
-              'SmartBet non ha trovato selezioni del giorno con qualità, '
+              'GoalVdLine non ha trovato selezioni del giorno con qualità, '
               'Auditor e quota reale sufficienti.';
         }
       });
@@ -966,7 +966,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
             children: [
               Expanded(
                 child: _mainValueBox(
-                  label: 'SCELTA SMARTBET',
+                  label: 'SCELTA GOALVDLINE',
                   value: _dailyMarketDisplayName(item.market),
                   valueColor: const Color(0xFF00C853),
                 ),
@@ -1232,7 +1232,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
         subtitle = 'SmartCore confronta le partite del Palinsesto Italia.';
         break;
       case 'audit':
-        title = 'SmartBet + Auditor: $_processed / $_total';
+        title = 'GoalVdLine + Auditor: $_processed / $_total';
         subtitle = 'Secondo controllo indipendente sulle candidate migliori.';
         break;
       case 'odds':
@@ -1244,7 +1244,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
         title =
             'Ricerca alternative: $_processed / $_total • ${_results.length}/$_wantedResults trovate';
         subtitle =
-            'SmartBet cerca alternative senza abbassare la quota minima.';
+            'GoalVdLine cerca alternative senza abbassare la quota minima.';
         break;
       default:
         title = 'Caricamento partite…';
@@ -1318,7 +1318,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Risultati del Giorno SmartBet',
+          'Risultati del Giorno GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -1376,8 +1376,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'SmartBet cerca le 3 selezioni più solide del giorno '
-                    'tra i mercati supportati, con analisi SmartBet avanzata, Auditor '
+                    'GoalVdLine cerca le 3 selezioni più solide del giorno '
+                    'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
                     'e quota bookmaker reale almeno 1.25.',
                     style: TextStyle(color: Colors.white, height: 1.35),
                   ),

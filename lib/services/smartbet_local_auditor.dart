@@ -46,7 +46,9 @@ class SmartBetLocalAuditor {
 
     final implied = 100.0 / odd;
     if (probability - implied < -12.0) {
-      reasons.add('Probabilità SmartBet inferiore alla probabilità implicita.');
+      reasons.add(
+        'Probabilità GoalVdLine inferiore alla probabilità implicita.',
+      );
     }
 
     return SmartBetLocalAudit(

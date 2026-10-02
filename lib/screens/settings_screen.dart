@@ -94,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(color: Colors.white),
           ),
           content: const Text(
-            'Vuoi ripristinare le impostazioni predefinite di SmartBet?',
+            'Vuoi ripristinare le impostazioni predefinite di GoalVdLine?',
             style: TextStyle(color: Colors.white70),
           ),
           actions: [
@@ -269,7 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 22),
 
-              _sectionTitle('Schedina SmartBet'),
+              _sectionTitle('Schedina GoalVdLine'),
 
               _settingsCard(
                 children: [
@@ -322,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 10),
 
                   Text(
-                    'SmartBet potrà usare fino a '
+                    'GoalVdLine potrà usare fino a '
                     '${_store.couponSelections} selezioni nella schedina.',
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
@@ -367,7 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: Color(0xFF00C853),
                     ),
                     title: Text(
-                      'SmartBet',
+                      'GoalVdLine',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -445,7 +445,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     subtitle: const Text(
-                      'Contatta il supporto SmartBet.',
+                      'Contatta il supporto GoalVdLine.',
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                     trailing: const Icon(

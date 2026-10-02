@@ -1389,7 +1389,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
-                  'SCELTA SMARTBET: ${_familyDisplayName(item.market)}',
+                  'SCELTA GOALVDLINE: ${_familyDisplayName(item.market)}',
                   style: const TextStyle(
                     color: Color(0xFF00C853),
                     fontSize: 11,
@@ -1695,7 +1695,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'MODELLO SMARTBET • probabilità congiunta stimata. '
+                      'MODELLO GOALVDLINE • probabilità congiunta stimata. '
                       'Nessuna quota bookmaker associata.',
                       style: TextStyle(
                         color: Colors.white60,
@@ -1731,7 +1731,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Combinazioni SmartBet',
+          'Combinazioni GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -1758,7 +1758,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           const SizedBox(height: 8),
 
           const Text(
-            'Scegli un mercato e SmartBet '
+            'Scegli un mercato e GoalVdLine '
             'scansionerà le partite di oggi, '
             'mostrando quelle con la probabilità '
             'più alta nella pre-analisi.',
@@ -1859,7 +1859,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Combo Chance è una stima del modello SmartBet: '
+                      'Combo Chance è una stima del modello GoalVdLine: '
                       'combina più condizioni sulla distribuzione dei possibili '
                       'punteggi. Non è una quota bookmaker.',
                       style: TextStyle(
@@ -2096,7 +2096,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const Text(
             'Le percentuali mostrate sono stime '
-            'del modello SmartBet e non '
+            'del modello GoalVdLine e non '
             'garantiscono l’esito della partita.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white30, fontSize: 10, height: 1.4),

@@ -240,7 +240,7 @@ class _CouponScreenState extends State<CouponScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'SCHEDINA SMARTBET',
+                      'SCHEDINA GOALVDLINE',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -640,7 +640,7 @@ class _CouponScreenState extends State<CouponScreen> {
     final probability = result.estimatedCombinedProbability * 100;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET — SCHEDINA ${result.profileName.toUpperCase()}')
+      ..writeln('GOALVDLINE — SCHEDINA ${result.profileName.toUpperCase()}')
       ..writeln()
       ..writeln('${result.selectionCount} selezioni')
       ..writeln('Quota totale: ${result.totalOdd.toStringAsFixed(2)}')
@@ -674,7 +674,7 @@ class _CouponScreenState extends State<CouponScreen> {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'SmartBet — Schedina ${result.profileName.toUpperCase()}',
+        subject: 'GoalVdLine — Schedina ${result.profileName.toUpperCase()}',
       ),
     );
   }
@@ -709,7 +709,7 @@ class _CouponScreenState extends State<CouponScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         title: const Text(
-          'Schedina SmartBet',
+          'Schedina GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: const Color(0xFF111827),
@@ -738,7 +738,7 @@ class _CouponScreenState extends State<CouponScreen> {
               const SizedBox(height: 24),
 
               const Text(
-                'Selezioni SmartBet',
+                'Selezioni GoalVdLine',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -788,7 +788,7 @@ class _CouponScreenState extends State<CouponScreen> {
                         'Premium privilegia qualità e prudenza. '
                         'Bilanciata cerca un compromesso tra affidabilità '
                         'e quota. Value accetta opportunità più aggressive '
-                        'solo dopo i controlli SmartBet. '
+                        'solo dopo i controlli GoalVdLine. '
                         'La probabilità stimata considera che tutti gli '
                         'eventi debbano risultare corretti.',
                         style: TextStyle(

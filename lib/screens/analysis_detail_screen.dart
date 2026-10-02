@@ -276,7 +276,7 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Probabilità SmartBet: ${_selected.probability.toStringAsFixed(0)}%',
+              'Probabilità GoalVdLine: ${_selected.probability.toStringAsFixed(0)}%',
               style: const TextStyle(
                 color: Colors.greenAccent,
                 fontSize: 12,
@@ -368,7 +368,7 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
                 borderRadius: BorderRadius.circular(13),
               ),
               child: const Text(
-                'SmartBet propone il pronostico, ma nello storico '
+                'GoalVdLine propone il pronostico, ma nello storico '
                 'viene registrato ciò che hai effettivamente giocato.',
                 style: TextStyle(
                   color: Colors.white54,
@@ -760,7 +760,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
     final result = widget.result;
 
     final text = StringBuffer()
-      ..writeln('SMARTBET — GIOCATA CONSIGLIATA')
+      ..writeln('GOALVDLINE — GIOCATA CONSIGLIATA')
       ..writeln()
       ..writeln(_matchLabel)
       ..writeln('Pronostico principale: ${result.prediction}')
@@ -783,7 +783,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       );
 
     await SharePlus.instance.share(
-      ShareParams(text: text.toString(), subject: 'SmartBet — $_matchLabel'),
+      ShareParams(text: text.toString(), subject: 'GoalVdLine — $_matchLabel'),
     );
   }
 
@@ -800,7 +800,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi SmartBet'),
+        title: const Text('Analisi GoalVdLine'),
       ),
       body: AnimatedBuilder(
         animation: _bankroll,
@@ -1019,7 +1019,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     const SizedBox(height: 14),
 
                     const Text(
-                      'Probabilità stimate da SmartBet',
+                      'Probabilità stimate da GoalVdLine',
                       style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ],
@@ -1057,7 +1057,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Valutazione complessiva SmartBet',
+                        'Valutazione complessiva GoalVdLine',
                         style: TextStyle(color: Colors.white70),
                       ),
                     ),
@@ -1091,8 +1091,8 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     Text(
                       result.shouldBet
                           ? 'La quota disponibile è interessante rispetto '
-                                'alla probabilità stimata da SmartBet.'
-                          : 'SmartBet non rileva al momento una quota '
+                                'alla probabilità stimata da GoalVdLine.'
+                          : 'GoalVdLine non rileva al momento una quota '
                                 'sufficientemente interessante da giocare.',
                       style: const TextStyle(
                         color: Colors.white54,
@@ -1606,7 +1606,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Text(
-                'SmartBet non rileva al momento una quota '
+                'GoalVdLine non rileva al momento una quota '
                 'sufficientemente interessante da consigliare. '
                 'Puoi comunque registrare manualmente la giocata '
                 'che hai effettuato.',
