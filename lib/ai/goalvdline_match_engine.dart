@@ -391,12 +391,42 @@ class GoalVdLineMatchEngine {
     final best = probabilities[0];
     final second = probabilities[1];
 
-    // Quanto il primo scenario domina sul secondo.
-    final separation = ((best - second) * 100.0).clamp(0.0, 30.0);
+    // ==========================================================
+    // CHIAREZZA DEL PRONOSTICO
+    // ==========================================================
+    //
+    // La qualità dei dati NON significa automaticamente che
+    // una partita sia facile da prevedere.
+    //
+    // Esempio:
+    //
+    // 1 = 38%
+    // X = 27%
+    // 2 = 35%
+    //
+    // può avere dati eccellenti, ma resta una partita molto
+    // equilibrata e quindi poco prevedibile.
+    // ==========================================================
 
-    // 80% qualità dei dati.
-    // 20% chiarezza del risultato simulato.
-    final confidence = (dataConfidence * 0.80) + ((separation / 30.0) * 20.0);
+    final bestProbabilityClarity =
+        (((best - (1.0 / 3.0)) / (2.0 / 3.0)) * 100.0)
+            .clamp(0.0, 100.0)
+            .toDouble();
+
+    // Differenza tra primo e secondo scenario.
+    //
+    // Un distacco di 40 punti percentuali viene considerato
+    // già estremamente netto.
+    final separationClarity = (((best - second) / 0.40) * 100.0)
+        .clamp(0.0, 100.0)
+        .toDouble();
+
+    final outcomeClarity =
+        (bestProbabilityClarity * 0.60) + (separationClarity * 0.40);
+
+    // 55% qualità dei dati
+    // 45% chiarezza effettiva dell'esito simulato
+    final confidence = (dataConfidence * 0.55) + (outcomeClarity * 0.45);
 
     return confidence.round().clamp(1, 95);
   }
