@@ -65,8 +65,14 @@ class GoalVdLineMatchEngine {
     // ==========================================================
 
     for (var i = 0; i < simulations; i++) {
-      final homeGoals = _samplePoisson(random, homeLambda);
-      final awayGoals = _samplePoisson(random, awayLambda);
+      final score = _sampleDixonColesScore(
+        random: random,
+        homeLambda: homeLambda,
+        awayLambda: awayLambda,
+      );
+
+      final homeGoals = score.$1;
+      final awayGoals = score.$2;
 
       // --------------------------------------------------------
       // 1X2
@@ -337,6 +343,63 @@ class GoalVdLineMatchEngine {
             availabilityWeight;
 
     return (weighted / totalWeight).clamp(-1.0, 1.0).toDouble();
+  }
+
+  // ============================================================
+  // DIXON-COLES SCORE SAMPLING
+  // ============================================================
+  //
+  // Due Poisson indipendenti tendono a rappresentare peggio
+  // alcune partite a punteggio basso.
+  //
+  // La correzione Dixon-Coles modifica solamente:
+  // 0-0, 0-1, 1-0 e 1-1.
+  //
+  // rho = -0.18 deriva dal backtest cross-validato iniziale.
+  // È ancora un parametro provvisorio da rivalidare su campioni
+  // storici più ampi.
+  // ============================================================
+
+  static (int, int) _sampleDixonColesScore({
+    required math.Random random,
+    required double homeLambda,
+    required double awayLambda,
+  }) {
+    const rho = -0.18;
+
+    final tau00 = 1.0 - (homeLambda * awayLambda * rho);
+    final tau01 = 1.0 + (homeLambda * rho);
+    final tau10 = 1.0 + (awayLambda * rho);
+    final tau11 = 1.0 - rho;
+
+    final maxTau = math.max(
+      1.0,
+      math.max(tau00, math.max(tau01, math.max(tau10, tau11))),
+    );
+
+    while (true) {
+      final homeGoals = _samplePoisson(random, homeLambda);
+      final awayGoals = _samplePoisson(random, awayLambda);
+
+      var tau = 1.0;
+
+      if (homeGoals == 0 && awayGoals == 0) {
+        tau = tau00;
+      } else if (homeGoals == 0 && awayGoals == 1) {
+        tau = tau01;
+      } else if (homeGoals == 1 && awayGoals == 0) {
+        tau = tau10;
+      } else if (homeGoals == 1 && awayGoals == 1) {
+        tau = tau11;
+      }
+
+      // Protezione numerica.
+      tau = tau.clamp(0.000001, double.infinity).toDouble();
+
+      if (random.nextDouble() <= tau / maxTau) {
+        return (homeGoals, awayGoals);
+      }
+    }
   }
 
   // ============================================================
