@@ -219,15 +219,20 @@ class GoalVdLineMatchEngine {
     // ==========================================================
     // MATCHUP ATTACCO VS DIFESA
     // ==========================================================
-
-    final attackDefenseEdge =
-        (attacker.attackStrength.clamp(0.0, 100.0) -
-            defender.defenseStrength.clamp(0.0, 100.0)) /
-        100.0;
-
-    final attackDefenseFactor = 1.0 + (attackDefenseEdge * 0.22);
-
-    expectedGoals *= attackDefenseFactor;
+    //
+    // Il matchup è già incorporato nella base expected goals:
+    //
+    // - gol segnati dall'attaccante
+    // - gol subiti dal difensore
+    // - produzione offensiva recente
+    // - vulnerabilità difensiva recente
+    //
+    // attackStrength e defenseStrength derivano dagli stessi
+    // gol stagionali. Riapplicarli qui amplificava due volte
+    // la stessa informazione e poteva creare lambda troppo
+    // distanti tra le squadre.
+    //
+    // Nessun moltiplicatore aggiuntivo in questa fase.
 
     // ==========================================================
     // FORZA COMPLESSIVA RELATIVA
