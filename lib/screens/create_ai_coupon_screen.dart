@@ -667,7 +667,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 bestProbability: probability,
               );
             } catch (_) {
-              _errors++;
               return null;
             }
           }),
@@ -675,6 +674,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         final valid = analyzed.whereType<_PreCandidate>();
         preliminary.addAll(valid);
+
+        // Ogni partita fallita deve essere conteggiata una sola volta.
         _errors += analyzed.length - valid.length;
 
         if (!mounted) return;
@@ -777,6 +778,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       final audited = <_PreCandidate>[];
       var auditRejected = 0;
+      var localAdvancedFallback = false;
+
       final aiBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
 
       if (!mounted) return;
@@ -833,14 +836,29 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
 
       if (audited.isEmpty) {
+        // Le candidate hanno già superato:
+        // - presenza ID
+        // - SmartCore locale
+        // - controllo statistico
+        // - presenza quote reali
+        //
+        // Se il servizio AI avanzato fallisce temporaneamente,
+        // NON buttiamo via candidate già valide.
+        //
+        // Continuiamo con l'analisi locale e lasciamo comunque
+        // all'Auditor finale il controllo di qualità.
+        localAdvancedFallback = true;
+
+        audited.addAll(advancedShortlist);
+
         if (!mounted) return;
+
         setState(() {
-          _loading = false;
-          _phase = '';
-          _error =
-              'GoalVdLine non ha prodotto candidate avanzate sufficientemente solide per la schedina.';
+          _notice =
+              'Analisi avanzata temporaneamente non disponibile. '
+              'GoalVdLine continua con analisi statistica locale, '
+              'quote reali e controlli di qualità.';
         });
-        return;
       }
 
       audited.sort((a, b) {
@@ -899,6 +917,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
           final recovered = await Future.wait(
             batch.map((candidate) async {
+              if (localAdvancedFallback) {
+                return _bestPickForMatch(
+                  preliminary: candidate,
+                  odds: quoteCache[candidate.match.fixtureId],
+                );
+              }
+
               try {
                 final result = await _aiService.analyzeMatch(
                   candidate.match,
