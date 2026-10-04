@@ -151,6 +151,7 @@ class HistoricalTeamService {
     required String teamName,
     required int season,
     required int leagueId,
+    required DateTime referenceDate,
     String leagueName = '',
   }) async {
     if (teamId <= 0 || season <= 0 || leagueId <= 0) {
@@ -162,7 +163,9 @@ class HistoricalTeamService {
       return null;
     }
 
-    final cacheKey = '$teamId-$season-$leagueId';
+    final referenceKey = referenceDate.toUtc().toIso8601String();
+
+    final cacheKey = '$teamId-$season-$leagueId-$referenceKey';
 
     if (_cache.containsKey(cacheKey)) {
       print('');
@@ -182,6 +185,7 @@ class HistoricalTeamService {
     print('Stagione: $season');
     print('League ID: $leagueId');
     print('League: $leagueName');
+    print('Data riferimento: ${referenceDate.toIso8601String()}');
     print('========================================');
 
     final uri = Uri.parse('${ApiConfig.baseUrl}/fixtures').replace(
@@ -260,6 +264,7 @@ class HistoricalTeamService {
         season: season,
         leagueId: leagueId,
         leagueName: leagueName,
+        referenceDate: referenceDate,
       );
 
       _cache[cacheKey] = data;
@@ -285,6 +290,7 @@ class HistoricalTeamService {
     required int season,
     required int leagueId,
     required String leagueName,
+    required DateTime referenceDate,
   }) {
     int matchesPlayed = 0;
 
@@ -308,6 +314,8 @@ class HistoricalTeamService {
     int ignoredNotFinished = 0;
     int ignoredInvalidGoals = 0;
     int ignoredInvalidTeam = 0;
+    int ignoredInvalidDate = 0;
+    int ignoredAfterReferenceDate = 0;
 
     for (final item in fixtures) {
       if (item is! Map<String, dynamic>) {
@@ -321,6 +329,29 @@ class HistoricalTeamService {
       if (fixture is! Map<String, dynamic> ||
           teams is! Map<String, dynamic> ||
           goals is! Map<String, dynamic>) {
+        continue;
+      }
+
+      // ========================================================
+      // CONTROLLO DATA PRE-MATCH
+      // ========================================================
+      //
+      // Per backtest e analisi storiche possono essere utilizzate
+      // esclusivamente partite disputate PRIMA della gara target.
+      //
+      // In questo modo nessun risultato futuro può contaminare
+      // le statistiche disponibili al momento del pronostico.
+      // ========================================================
+
+      final fixtureDate = DateTime.tryParse(fixture['date']?.toString() ?? '');
+
+      if (fixtureDate == null) {
+        ignoredInvalidDate++;
+        continue;
+      }
+
+      if (!fixtureDate.isBefore(referenceDate)) {
+        ignoredAfterReferenceDate++;
         continue;
       }
 
@@ -452,6 +483,16 @@ class HistoricalTeamService {
     print(
       'Ignorate non concluse: '
       '$ignoredNotFinished',
+    );
+
+    print(
+      'Ignorate successive alla data riferimento: '
+      '$ignoredAfterReferenceDate',
+    );
+
+    print(
+      'Ignorate con data non valida: '
+      '$ignoredInvalidDate',
     );
 
     print(

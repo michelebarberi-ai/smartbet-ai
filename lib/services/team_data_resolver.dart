@@ -165,14 +165,16 @@ class TeamDataResolver {
     required DateTime referenceDate,
   }) async {
     final referenceYear = referenceDate.year;
+    final referenceKey = referenceDate.toUtc().toIso8601String();
 
-    final cacheKey = '$teamId|${teamName.toLowerCase()}|$referenceYear';
+    final cacheKey = '$teamId|${teamName.toLowerCase()}|$referenceKey';
 
     if (_cache.containsKey(cacheKey)) {
       print('');
       print('SMARTBET CACHE HIT');
       print('Squadra: $teamName');
       print('Anno riferimento: $referenceYear');
+      print('Data riferimento: ${referenceDate.toIso8601String()}');
 
       return _cache[cacheKey];
     }
@@ -189,6 +191,7 @@ class TeamDataResolver {
       teamId: teamId,
       teamName: teamName,
       referenceYear: referenceYear,
+      referenceDate: referenceDate,
     );
 
     _cache[cacheKey] = resolved;
@@ -204,6 +207,7 @@ class TeamDataResolver {
     required int teamId,
     required String teamName,
     required int referenceYear,
+    required DateTime referenceDate,
   }) async {
     final seasons = [referenceYear, referenceYear - 1];
 
@@ -331,6 +335,7 @@ class TeamDataResolver {
           season: season,
           leagueId: leagueId,
           leagueName: leagueName,
+          referenceDate: referenceDate,
         );
 
         if (historical == null) {
