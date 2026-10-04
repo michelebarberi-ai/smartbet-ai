@@ -501,12 +501,21 @@ class GoalVdLineMatchEngine {
         .clamp(0.0, 100.0)
         .toDouble();
 
-    final outcomeClarity =
-        (bestProbabilityClarity * 0.60) + (separationClarity * 0.40);
-
-    // 55% qualità dei dati
-    // 45% chiarezza effettiva dell'esito simulato
-    final confidence = (dataConfidence * 0.55) + (outcomeClarity * 0.45);
+    // La confidence deve riflettere soprattutto quanto il
+    // pronostico è realmente separato dalle alternative.
+    //
+    // I backtest su due campioni indipendenti hanno mostrato che
+    // il distacco tra primo e secondo esito è più discriminante
+    // della sola qualità dei dati.
+    //
+    // Pesi effettivi:
+    // - 35% qualità dati
+    // - 25% probabilità dell'esito migliore
+    // - 40% separazione tra primo e secondo esito
+    final confidence =
+        (dataConfidence * 0.35) +
+        (bestProbabilityClarity * 0.25) +
+        (separationClarity * 0.40);
 
     return confidence.round().clamp(1, 95);
   }
