@@ -241,10 +241,22 @@ class GoalVdLineMatchEngine {
     // DISPONIBILITÀ ROSA
     // ==========================================================
 
+    // 85 rappresenta il livello neutro definito dall'adapter.
+    //
+    // Prima veniva usato 50 come punto neutro: una squadra con
+    // availabilityStrength = 85 riceveva quindi automaticamente
+    // circa +5.6% di expected goals anche senza un vero beneficio.
+    //
+    // Ora:
+    // 85 = neutro
+    // <85 = penalizzazione progressiva
+    // >85 = piccolo beneficio
     final availability =
-        (attacker.availabilityStrength.clamp(0.0, 100.0) - 50.0) / 50.0;
+        ((attacker.availabilityStrength.clamp(45.0, 95.0) - 85.0) / 40.0)
+            .clamp(-1.0, 0.25)
+            .toDouble();
 
-    expectedGoals *= 1.0 + (availability * 0.08);
+    expectedGoals *= 1.0 + (availability * 0.06);
 
     // ==========================================================
     // CONTESTO
