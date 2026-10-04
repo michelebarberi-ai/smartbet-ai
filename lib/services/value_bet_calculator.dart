@@ -116,6 +116,7 @@ class ValueBetCalculator {
     required int drawProbability,
     required int awayProbability,
     required int dataConfidence,
+    int? predictionConfidence,
     required MatchOdds? odds,
   }) {
     // ==========================================================
@@ -156,6 +157,7 @@ class ValueBetCalculator {
       aiProbability: homeProbability / 100.0,
       fairMarketProbability: odds.fairHomeProbability,
       dataConfidence: dataConfidence,
+      predictionConfidence: predictionConfidence,
     );
 
     // ==========================================================
@@ -168,6 +170,7 @@ class ValueBetCalculator {
       aiProbability: drawProbability / 100.0,
       fairMarketProbability: odds.fairDrawProbability,
       dataConfidence: dataConfidence,
+      predictionConfidence: predictionConfidence,
     );
 
     // ==========================================================
@@ -180,6 +183,7 @@ class ValueBetCalculator {
       aiProbability: awayProbability / 100.0,
       fairMarketProbability: odds.fairAwayProbability,
       dataConfidence: dataConfidence,
+      predictionConfidence: predictionConfidence,
     );
 
     // ==========================================================
@@ -271,6 +275,7 @@ class ValueBetCalculator {
     required double aiProbability,
     required double fairMarketProbability,
     required int dataConfidence,
+    required int? predictionConfidence,
   }) {
     // ==========================================================
     // EDGE
@@ -301,10 +306,21 @@ class ValueBetCalculator {
     // CLASSIFICAZIONE
     // ==========================================================
 
+    // Compatibilità:
+    // se predictionConfidence non viene ancora fornita,
+    // manteniamo il comportamento precedente usando dataConfidence.
+    //
+    // Quando DiegoAI sarà collegata al flusso principale,
+    // predictionConfidence rappresenterà invece la confidence
+    // del Match Engine validata sui backtest.
+    final effectivePredictionConfidence =
+        predictionConfidence ?? dataConfidence;
+
     final classification = _classify(
       edge: edge,
       expectedValue: expectedValue,
-      confidence: dataConfidence,
+      dataConfidence: dataConfidence,
+      predictionConfidence: effectivePredictionConfidence,
     );
 
     return ValueBetOutcome(
@@ -328,13 +344,14 @@ class ValueBetCalculator {
   String _classify({
     required double edge,
     required double expectedValue,
-    required int confidence,
+    required int dataConfidence,
+    required int predictionConfidence,
   }) {
     // ----------------------------------------------------------
     // CONFIDENCE TROPPO BASSA
     // ----------------------------------------------------------
 
-    if (confidence < 50) {
+    if (dataConfidence < 50 || predictionConfidence < 50) {
       return 'NO VALUE';
     }
 
@@ -342,7 +359,7 @@ class ValueBetCalculator {
     // STRONG VALUE
     // ----------------------------------------------------------
 
-    if (confidence >= 70 && edge >= 0.08 && expectedValue >= 0.12) {
+    if (predictionConfidence >= 70 && edge >= 0.08 && expectedValue >= 0.12) {
       return 'STRONG VALUE';
     }
 
@@ -350,7 +367,7 @@ class ValueBetCalculator {
     // VALUE
     // ----------------------------------------------------------
 
-    if (confidence >= 60 && edge >= 0.05 && expectedValue >= 0.07) {
+    if (predictionConfidence >= 60 && edge >= 0.05 && expectedValue >= 0.07) {
       return 'VALUE';
     }
 
@@ -358,7 +375,7 @@ class ValueBetCalculator {
     // WEAK VALUE
     // ----------------------------------------------------------
 
-    if (confidence >= 55 && edge >= 0.03 && expectedValue >= 0.04) {
+    if (predictionConfidence >= 55 && edge >= 0.03 && expectedValue >= 0.04) {
       return 'WEAK VALUE';
     }
 
