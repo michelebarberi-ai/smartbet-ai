@@ -68,7 +68,10 @@ class ContextResearcher {
   // RICERCA COMPLETA
   // ============================================================
 
-  Future<MatchContext> research(MatchModel match) async {
+  Future<MatchContext> research(
+    MatchModel match, {
+    bool backtestSafe = false,
+  }) async {
     print('');
     print('========================================');
     print('SMARTBET - CONTEXT RESEARCHER');
@@ -102,11 +105,13 @@ class ContextResearcher {
     // H2H
     // ==========================================================
 
-    final h2h = await _getHeadToHead(
-      homeTeamId: match.homeTeamId,
-      awayTeamId: match.awayTeamId,
-      matchDate: match.date,
-    );
+    final h2h = backtestSafe
+        ? <String>[]
+        : await _getHeadToHead(
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            matchDate: match.date,
+          );
 
     // ==========================================================
     // ASSENZE
@@ -118,11 +123,13 @@ class ContextResearcher {
     // Non facciamo fallback stagionali.
     // ==========================================================
 
-    final injuryData = await _getFixtureInjuries(
-      fixtureId: match.fixtureId,
-      homeTeamId: match.homeTeamId,
-      awayTeamId: match.awayTeamId,
-    );
+    final injuryData = backtestSafe
+        ? const _FixtureInjuryData(home: [], away: [])
+        : await _getFixtureInjuries(
+            fixtureId: match.fixtureId,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+          );
 
     // ==========================================================
     // LINEUP
@@ -132,13 +139,15 @@ class ContextResearcher {
     // La risposta contiene entrambe le squadre.
     // ==========================================================
 
-    final lineupData = await _getFixtureLineups(
-      fixtureId: match.fixtureId,
-      homeTeamId: match.homeTeamId,
-      awayTeamId: match.awayTeamId,
-      homeTeamName: match.homeTeam,
-      awayTeamName: match.awayTeam,
-    );
+    final lineupData = backtestSafe
+        ? const _FixtureLineupData(home: [], away: [])
+        : await _getFixtureLineups(
+            fixtureId: match.fixtureId,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeTeamName: match.homeTeam,
+            awayTeamName: match.awayTeam,
+          );
 
     // ==========================================================
     // CONFIDENCE CONTESTO
@@ -166,7 +175,11 @@ class ContextResearcher {
       availableSources++;
     }
 
-    final confidence = ((availableSources / 5) * 100).round().clamp(0, 100);
+    final expectedSources = backtestSafe ? 2 : 5;
+
+    final confidence = ((availableSources / expectedSources) * 100)
+        .round()
+        .clamp(0, 100);
 
     // ==========================================================
     // LOG

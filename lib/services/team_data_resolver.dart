@@ -163,11 +163,14 @@ class TeamDataResolver {
     required int teamId,
     required String teamName,
     required DateTime referenceDate,
+    int minCurrentSeasonMatches = 3,
   }) async {
     final referenceYear = referenceDate.year;
     final referenceKey = referenceDate.toUtc().toIso8601String();
 
-    final cacheKey = '$teamId|${teamName.toLowerCase()}|$referenceKey';
+    final cacheKey =
+        '$teamId|${teamName.toLowerCase()}|$referenceKey'
+        '|minCurrent=$minCurrentSeasonMatches';
 
     if (_cache.containsKey(cacheKey)) {
       print('');
@@ -192,6 +195,7 @@ class TeamDataResolver {
       teamName: teamName,
       referenceYear: referenceYear,
       referenceDate: referenceDate,
+      minCurrentSeasonMatches: minCurrentSeasonMatches,
     );
 
     _cache[cacheKey] = resolved;
@@ -208,6 +212,7 @@ class TeamDataResolver {
     required String teamName,
     required int referenceYear,
     required DateTime referenceDate,
+    required int minCurrentSeasonMatches,
   }) async {
     final seasons = [referenceYear, referenceYear - 1];
 
@@ -348,10 +353,24 @@ class TeamDataResolver {
         }
 
         // ------------------------------------------------------
-        // MINIMO 3 PARTITE
+        // DIMENSIONE MINIMA DEL CAMPIONE
+        // ------------------------------------------------------
+        //
+        // Produzione:
+        //   stagione corrente >= 3 partite
+        //
+        // Backtest diagnostico:
+        //   può richiedere un minimo più alto per verificare
+        //   l'effetto del passaggio precoce alla stagione corrente.
+        //
+        // La stagione precedente mantiene il minimo storico di 3.
         // ------------------------------------------------------
 
-        if (historical.matchesPlayed < 3) {
+        final minimumMatches = season == referenceYear
+            ? minCurrentSeasonMatches
+            : 3;
+
+        if (historical.matchesPlayed < minimumMatches) {
           print(
             'Solo ${historical.matchesPlayed} '
             'partite di campionato concluse.',
@@ -359,8 +378,10 @@ class TeamDataResolver {
 
           print(
             'Campione troppo piccolo: '
-            'provo la stagione precedente.',
+            'minimo richiesto $minimumMatches.',
           );
+
+          print('Provo la stagione precedente.');
 
           continue;
         }

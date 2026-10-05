@@ -21,7 +21,11 @@ class MatchDossierBuilder {
   // COSTRUZIONE DOSSIER
   // ============================================================
 
-  Future<MatchDossier?> build(MatchModel match) async {
+  Future<MatchDossier?> build(
+    MatchModel match, {
+    bool backtestSafe = false,
+    int backtestCurrentSeasonMinMatches = 3,
+  }) async {
     print('');
     print('========================================');
     print('SMARTBET - MATCH DOSSIER BUILDER');
@@ -56,16 +60,22 @@ class MatchDossierBuilder {
       return null;
     }
 
+    final resolverMinCurrentSeasonMatches = backtestSafe
+        ? backtestCurrentSeasonMinMatches
+        : 3;
+
     final homeFuture = _resolver.resolveTeam(
       teamId: match.homeTeamId,
       teamName: match.homeTeam,
       referenceDate: referenceDate,
+      minCurrentSeasonMatches: resolverMinCurrentSeasonMatches,
     );
 
     final awayFuture = _resolver.resolveTeam(
       teamId: match.awayTeamId,
       teamName: match.awayTeam,
       referenceDate: referenceDate,
+      minCurrentSeasonMatches: resolverMinCurrentSeasonMatches,
     );
 
     final home = await homeFuture;
@@ -105,9 +115,18 @@ class MatchDossierBuilder {
     print('RECUPERO CONTESTO MULTI-SOURCE');
     print('========================================');
 
-    final contextFuture = _contextResearcher.research(match);
+    final contextFuture = _contextResearcher.research(
+      match,
+      backtestSafe: backtestSafe,
+    );
 
-    final secondaryFuture = _footballDataService.research(match);
+    final secondaryFuture = backtestSafe
+        ? Future<FootballDataContext>.value(
+            FootballDataContext.unavailable(
+              reason: 'Fonte secondaria disattivata nel backtest storico.',
+            ),
+          )
+        : _footballDataService.research(match);
 
     final context = await contextFuture;
 
@@ -266,7 +285,9 @@ class MatchDossierBuilder {
     // ma non può da sola ribaltare l'analisi.
     // ==========================================================
 
-    final dossierConfidence = secondary.available
+    final dossierConfidence = backtestSafe
+        ? statisticsConfidence
+        : secondary.available
         ? ((statisticsConfidence * 0.60) +
                   (contextConfidence * 0.25) +
                   (secondary.confidence * 0.15))
