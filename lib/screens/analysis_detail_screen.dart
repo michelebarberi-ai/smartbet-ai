@@ -669,7 +669,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
               crossAxisCount: 3,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 1.65,
+              mainAxisExtent: 76,
             ),
             itemBuilder: (context, index) {
               final combo = combos[index];
@@ -689,6 +689,8 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                     Text(
                       combo.label,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,

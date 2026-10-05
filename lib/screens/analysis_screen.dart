@@ -2,6 +2,8 @@ import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_coupon_service.dart';
 import '../services/review_coupon_store.dart';
 import 'coupon_screen.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
@@ -19,6 +21,8 @@ class AnalysisScreen extends StatefulWidget {
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
   late Future<List<MatchModel>> _matches;
+
+  Timer? _matchExpiryTimer;
 
   final Set<String> _expandedCountries = {};
   final Set<String> _expandedLeagues = {};
@@ -47,7 +51,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     super.initState();
 
     _selectedDate = _dateOnly(DateTime.now());
-    _matches = MatchRepository.getTodayMatches();
+    _matches = _loadAnalyzableMatches(_selectedDate);
+
+    _matchExpiryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _selectedMatches.removeWhere((_, match) => !_isStillAnalyzable(match));
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _matchExpiryTimer?.cancel();
+    super.dispose();
   }
 
   // ============================================================
@@ -95,11 +115,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     setState(() {
       _analysisFutures.clear();
 
-      if (_isTodaySelected) {
-        _matches = MatchRepository.getTodayMatches();
-      } else {
-        _matches = MatchRepository.getMatchesByDate(_selectedDate);
-      }
+      _matches = _loadAnalyzableMatches(_selectedDate);
     });
   }
 
@@ -125,6 +141,27 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return _isSameDate(_selectedDate, _dateOnly(DateTime.now()));
   }
 
+  bool _isStillAnalyzable(MatchModel match) {
+    final kickoff = DateTime.tryParse(match.date)?.toLocal();
+
+    if (kickoff == null) {
+      return false;
+    }
+
+    return kickoff.isAfter(DateTime.now());
+  }
+
+  Future<List<MatchModel>> _loadAnalyzableMatches(DateTime date) async {
+    final normalized = _dateOnly(date);
+    final today = _dateOnly(DateTime.now());
+
+    final matches = _isSameDate(normalized, today)
+        ? await MatchRepository.getTodayMatches()
+        : await MatchRepository.getMatchesByDate(normalized);
+
+    return matches.where(_isStillAnalyzable).toList();
+  }
+
   Future<void> _selectDate(DateTime date) async {
     final normalized = _dateOnly(date);
 
@@ -140,11 +177,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _expandedCountries.clear();
       _expandedLeagues.clear();
 
-      if (_isSameDate(normalized, _dateOnly(DateTime.now()))) {
-        _matches = MatchRepository.getTodayMatches();
-      } else {
-        _matches = MatchRepository.getMatchesByDate(normalized);
-      }
+      _matches = _loadAnalyzableMatches(normalized);
     });
   }
 
@@ -575,6 +608,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final grouped = <String, List<MatchModel>>{};
 
     for (final match in matches) {
+      if (!_isStillAnalyzable(match)) {
+        continue;
+      }
+
       if (!_matchesSearch(match)) {
         continue;
       }

@@ -285,9 +285,29 @@ class SmartBetAiService {
     final dossier = await _dossierBuilder.build(match);
 
     if (dossier == null) {
-      return _errorResult(
-        'Impossibile costruire '
-        'il Match Dossier.',
+      return AnalysisResult(
+        smartScore: baseResult.smartScore,
+        homeProbability: baseResult.homeProbability,
+        drawProbability: baseResult.drawProbability,
+        awayProbability: baseResult.awayProbability,
+        over15Probability: baseResult.over15Probability,
+        under15Probability: baseResult.under15Probability,
+        over25Probability: baseResult.over25Probability,
+        under25Probability: baseResult.under25Probability,
+        goalProbability: baseResult.goalProbability,
+        noGoalProbability: baseResult.noGoalProbability,
+        expectedHomeGoals: baseResult.expectedHomeGoals,
+        expectedAwayGoals: baseResult.expectedAwayGoals,
+        prediction: baseResult.prediction,
+        valueBet: baseResult.valueBet,
+        risk: baseResult.risk,
+        shouldBet: false,
+        stakeRecommendation: 'Analisi avanzata non disponibile.',
+        explanation:
+            'SMARTBET AI\n\n'
+            'ANALISI NON DISPONIBILE\n\n'
+            'Impossibile costruire il Match Dossier.\n\n'
+            'Le probabilità mostrate derivano dalla pre-analisi GoalVdLine.',
       );
     }
 
