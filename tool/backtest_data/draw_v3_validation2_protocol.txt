@@ -1,0 +1,126 @@
+GOALVDLINE DRAW V3 - PROSPECTIVE VALIDATION 2
+=============================================
+
+STATUS
+------
+Protocollo congelato PRIMA della raccolta prospettica.
+
+START DATE
+----------
+2026-10-06
+
+MODEL
+-----
+V3 resta IDENTICA alla formula congelata in:
+
+tool/backtest_data/draw_v3_spec.txt
+
+Frozen V3 spec SHA-256:
+ea378e0c7b809658bad111eb3bbe8ec9eeac5d5b5bf8f90feea756275d9cf5a1
+
+Frozen validation evidence commit:
+a6a379d
+
+Nessuna modifica ammessa durante Validation 2 a:
+- formula V3;
+- pesi;
+- shrinkage;
+- prior;
+- MIN3 / MIN10;
+- filtri candidati;
+- competizioni;
+- soglie.
+
+DESIGN
+------
+Validazione prospettica su partite mai utilizzate in:
+- development;
+- V1/V2 validation;
+- primo holdout V3.
+
+Sono ammesse esclusivamente partite con data >= 2026-10-06.
+
+Le partite devono essere concluse prima della raccolta.
+
+Per ogni data vengono raccolte due versioni:
+
+MIN3
+- stagione corrente utilizzabile da 3 partite.
+
+MIN10
+- stagione corrente utilizzabile da 10 partite.
+
+La valutazione primaria usa solo fixture presenti
+sia in MIN3 sia in MIN10.
+
+TARGET
+------
+Target minimo per apertura valutazione:
+50 fixture comuni.
+
+Target preferibile:
+100 fixture comuni.
+
+La raccolta può continuare oltre 100.
+
+ANTI-PEEKING
+------------
+Durante la raccolta NON calcolare:
+- AUC V1;
+- AUC V2;
+- AUC V3;
+- Top25 precision;
+- lift;
+- soglie;
+- ranking dei pareggi.
+
+Durante la raccolta sono ammessi soltanto:
+- numero fixture raccolte;
+- numero fixture comuni MIN3/MIN10;
+- copertura;
+- date presenti;
+- errori tecnici.
+
+Il numero di pareggi e le performance predittive
+non devono guidare quando fermare la raccolta.
+
+PRIMARY EVALUATION
+------------------
+Una volta raggiunto il target:
+
+1. ROC AUC V1
+2. ROC AUC V2
+3. ROC AUC V3 frozen
+
+Confronto principale:
+V3 vs V1.
+
+SECONDARY EVALUATION
+--------------------
+Top 25%:
+- N;
+- pareggi;
+- precision;
+- lift rispetto al base rate.
+
+Saranno inoltre riportati:
+- copertura MIN3/MIN10;
+- distribuzione temporale;
+- performance per blocchi temporali solo se
+  numericamente sufficienti.
+
+STOP RULE
+---------
+Prima apertura consentita:
+>= 50 fixture comuni.
+
+Valutazione preferita:
+>= 100 fixture comuni.
+
+Nessun nuovo tuning sarà effettuato sulla Validation 2.
+
+INTERPRETATION
+--------------
+Validation 2 serve a verificare se il vantaggio osservato
+nel primo holdout V3 si replica su dati prospettici
+completamente nuovi.
