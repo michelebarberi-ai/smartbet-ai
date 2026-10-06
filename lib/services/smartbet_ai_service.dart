@@ -7,6 +7,7 @@ import '../models/match_model.dart';
 import '../ai/smartcore.dart';
 import '../ai/decision_engine.dart';
 
+import 'goalvdline_shadow_service.dart';
 import 'match_dossier_builder.dart';
 import 'odds_service.dart';
 import 'stake_engine.dart';
@@ -283,6 +284,16 @@ class SmartBetAiService {
     print('========================================');
 
     final dossier = await _dossierBuilder.build(match);
+
+    // ==========================================================
+    // GOALVDLINE SHADOW MODE
+    // ==========================================================
+    //
+    // Calcolo diagnostico indipendente.
+    // Non modifica l'output SmartBet.
+    // ==========================================================
+
+    GoalVdLineShadowService.capture(match: match, dossier: dossier);
 
     if (dossier == null) {
       return AnalysisResult(
