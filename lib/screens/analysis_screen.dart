@@ -11,6 +11,7 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import 'analysis_detail_screen.dart';
 import 'smart_score_filtered_screen.dart';
+import '../services/goalvdline_comparison_sync_service.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -49,6 +50,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void initState() {
     super.initState();
+
+    unawaited(GoalVdLineComparisonSyncService.instance.resolveIfDue());
 
     _selectedDate = _dateOnly(DateTime.now());
     _matches = _loadAnalyzableMatches(_selectedDate);
