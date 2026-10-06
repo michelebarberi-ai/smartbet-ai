@@ -3,7 +3,6 @@
 import '../lib/ai/goalvdline_match_engine.dart';
 import '../lib/ai/goalvdline_match_input_adapter.dart';
 import '../lib/models/goalvdline_match_engine_models.dart';
-import '../lib/models/match_dossier.dart';
 import '../lib/models/match_model.dart';
 import '../lib/repositories/match_repository.dart';
 import '../lib/services/match_dossier_builder.dart';
@@ -38,7 +37,7 @@ Future<void> main() async {
 
   print('');
   print('${match.homeTeam} - ${match.awayTeam}');
-  print('${match.league}');
+  print(match.league);
   print(match.date);
 
   final builder = MatchDossierBuilder();
