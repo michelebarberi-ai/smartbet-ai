@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'goalvdline_comparison_result_resolver.dart';
+import 'goalvdline_comparison_report_service.dart';
 
 class GoalVdLineComparisonSyncService {
   final GoalVdLineComparisonResultResolver _resolver;
@@ -82,6 +83,8 @@ class GoalVdLineComparisonSyncService {
         'dates=${summary.datesQueried}, '
         'apiErrors=${summary.apiErrors}',
       );
+
+      await GoalVdLineComparisonReportService.instance.printReport();
 
       return summary;
     } catch (error, stackTrace) {
