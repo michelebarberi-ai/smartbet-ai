@@ -7,6 +7,7 @@ import '../models/match_model.dart';
 import '../ai/smartcore.dart';
 import '../ai/decision_engine.dart';
 
+import 'goalvdline_comparison_store.dart';
 import 'goalvdline_shadow_service.dart';
 import 'match_dossier_builder.dart';
 import 'odds_service.dart';
@@ -933,6 +934,11 @@ class SmartBetAiService {
     );
 
     PredictionStore.instance.register(match: match, result: predictionResult);
+
+    GoalVdLineComparisonStore.instance.registerSmartBet(
+      match: match,
+      result: predictionResult,
+    );
 
     // ==========================================================
     // MATCH

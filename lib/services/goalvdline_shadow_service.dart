@@ -5,6 +5,8 @@ import '../ai/goalvdline_match_input_adapter.dart';
 import '../models/match_dossier.dart';
 import '../models/match_model.dart';
 
+import 'goalvdline_comparison_store.dart';
+
 class GoalVdLineShadowSnapshot {
   final int fixtureId;
 
@@ -168,6 +170,11 @@ class GoalVdLineShadowService {
         );
 
         _snapshots[match.fixtureId] = snapshot;
+
+        GoalVdLineComparisonStore.instance.registerShadow(
+          match: match,
+          shadow: snapshot.toJson(),
+        );
 
         print('');
         print('========================================');
