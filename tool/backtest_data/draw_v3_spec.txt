@@ -1,0 +1,126 @@
+GOALVDLINE DRAW SUITABILITY V3 - FROZEN SPEC
+=============================================
+
+STATUS
+------
+Formula congelata PRIMA dell'apertura dell'holdout.
+
+Development:
+N = 150
+X = 31
+Base rate X = 20.7%
+
+Nessun ulteriore tuning dei pesi o degli shrinkage
+prima della valutazione holdout.
+
+FORMULA
+-------
+
+1. VenueShrink4
+
+Per ogni lato:
+
+shrunkVenueRate =
+    (venueDraws + 0.25 * 4)
+    /
+    (venueMatches + 4)
+
+VenueShrink4 =
+    media(
+        home shrunkVenueRate,
+        away shrunkVenueRate
+    )
+
+2. VenueHybrid50
+
+VenueHybrid50 =
+    0.50 * VenueShrink4(MIN3)
+    +
+    0.50 * VenueShrink4(MIN10)
+
+3. SeasonShrink8 MIN10
+
+Per ogni squadra:
+
+shrunkSeasonRate =
+    (seasonDraws + 0.25 * 8)
+    /
+    (seasonMatches + 8)
+
+SeasonMIN10 =
+    media(
+        home shrunkSeasonRate,
+        away shrunkSeasonRate
+    )
+
+4. History Core
+
+HistoryCore =
+    0.50 * VenueHybrid50
+    +
+    0.50 * SeasonMIN10
+
+5. V3 Score
+
+V3Score = HistoryCore * 100
+
+NESSUNA SOGLIA FISSATA.
+La prima valutazione holdout userà il ranking continuo.
+
+DEVELOPMENT RESULTS AT FREEZE
+-----------------------------
+
+EARLY:
+AUC = 0.619
+Top25 precision = 30.0%
+Top25 lift = 1.23x
+
+MID:
+AUC = 0.597
+Top25 precision = 25.0%
+Top25 lift = 1.14x
+
+LATE:
+AUC = 0.640
+Top25 precision = 20.0%
+Top25 lift = 1.60x
+
+ALL:
+AUC = 0.616
+Top25 precision = 26.3%
+Top25 lift = 1.27x
+
+Temporal minimum AUC = 0.597
+Temporal range = 0.043
+
+PREDECLARED DEVELOPMENT ACCEPTANCE RULE
+---------------------------------------
+AUC ALL >= 0.60
+AND
+minimum temporal-block AUC >= 0.53
+
+Result: PASSED.
+
+HOLDOUT
+-------
+NON ancora osservato alla data del freeze.
+
+Holdout dates:
+2026-09-18
+2026-09-21
+2026-09-22
+2026-09-23
+2026-09-24
+2026-09-25
+2026-09-28
+2026-09-29
+2026-09-30
+2026-10-01
+2026-10-02
+
+Dopo l'apertura dell'holdout:
+- nessuna modifica retroattiva a V3;
+- confronto V1 vs V2 vs V3;
+- AUC;
+- top-25 precision/lift;
+- stabilità per data/blocco quando numericamente sensata.

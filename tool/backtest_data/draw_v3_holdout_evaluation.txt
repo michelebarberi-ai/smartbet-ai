@@ -1,0 +1,70 @@
+======================================================================================
+GOALVDLINE DRAW V3 - HOLDOUT FROZEN
+======================================================================================
+MIN3:       22
+MIN10:      22
+Comuni:     22
+Solo MIN3:  0
+Solo MIN10: 0
+
+======================================================================================
+RISULTATO PRIMARIO - HOLDOUT COMPLETO
+======================================================================================
+N=22 | X=6 | Non-X=16 | Base X=27.3%
+
+Metodo       | AUC   | Top25 N | X | Precision | Lift
+----------------------------------------------------------------------
+V1           | 0.677 |       6 | 2 |     33.3% | 1.22x
+V2           | 0.661 |       6 | 2 |     33.3% | 1.22x
+V3 FROZEN    | 0.740 |       6 | 3 |     50.0% | 1.83x
+
+DELTA AUC:
+V3 - V1 = +0.062
+V3 - V2 = +0.078
+
+======================================================================================
+BLOCCHI TEMPORALI PREDEFINITI
+======================================================================================
+
+HOLDOUT A: N=20 | X=6 | Non-X=14
+  V1          : AUC=0.702
+  V2          : AUC=0.637
+  V3 FROZEN   : AUC=0.726
+
+HOLDOUT B: N=2 | X=0 | Non-X=2
+AUC N/D: manca una delle due classi.
+
+======================================================================================
+RANKING V3 HOLDOUT
+======================================================================================
+#  | Data       | Partita                                   | V3     | Esito
+--------------------------------------------------------------------------------------
+ 1 | 2026-09-18 | Grenoble - Clermont Foot                  |  35.12 | X
+ 2 | 2026-09-18 | Laval - Sochaux                           |  34.33 | X
+ 3 | 2026-09-18 | Annecy - Dijon                            |  33.33 | NO-X
+ 4 | 2026-09-18 | Rodez - Nancy                             |  32.90 | NO-X
+ 5 | 2026-09-18 | VfL Wolfsburg - SV Darmstadt 98           |  32.28 | NO-X
+ 6 | 2026-09-18 | Juve Stabia - Cesena                      |  30.68 | X
+ 7 | 2026-09-18 | Kasımpaşa - Konyaspor                     |  30.36 | X
+ 8 | 2026-09-18 | Reims - Montpellier                       |  30.36 | X
+ 9 | 2026-09-25 | Girona - Albacete                         |  30.14 | NO-X
+10 | 2026-09-18 | Espanyol - Elche                          |  30.12 | NO-X
+11 | 2026-09-18 | Brentford - Chelsea                       |  27.99 | NO-X
+12 | 2026-09-18 | PAU - Dunkerque                           |  27.38 | NO-X
+13 | 2026-10-02 | Eldense - Oviedo                          |  26.71 | NO-X
+14 | 2026-09-28 | Leganes - Castellón                       |  26.41 | NO-X
+15 | 2026-09-18 | Groningen - PEC Zwolle                    |  26.08 | NO-X
+16 | 2026-09-18 | Bristol City - Watford                    |  25.73 | NO-X
+17 | 2026-09-18 | Gent - Standard Liege                     |  24.30 | NO-X
+18 | 2026-09-18 | Monza - Sassuolo                          |  23.82 | NO-X
+19 | 2026-09-18 | Albacete - Cordoba                        |  22.17 | NO-X
+20 | 2026-09-18 | Monaco - Lens                             |  19.76 | NO-X
+21 | 2026-09-18 | Bayern München - Union Berlin             |  19.29 | NO-X
+22 | 2026-09-18 | SpVgg Greuther Fürth - 1. FC Magdeburg    |  16.86 | X
+
+======================================================================================
+INTERPRETAZIONE PREDEFINITA
+======================================================================================
+Questo holdout è indipendente ma piccolo (N=22, 6 pareggi).
+Il risultato non modifica la formula V3 e non autorizza nuovo tuning sull'holdout.
+======================================================================================

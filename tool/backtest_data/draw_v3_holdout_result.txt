@@ -1,0 +1,86 @@
+GOALVDLINE DRAW V3 - FIRST FROZEN HOLDOUT RESULT
+================================================
+
+Formula:
+V3 definita e congelata PRIMA dell'apertura dell'holdout.
+Nessun tuning effettuato dopo l'apertura.
+
+HOLDOUT
+-------
+N = 22
+Draws = 6
+Non-draws = 16
+Base draw rate = 27.3%
+
+PRIMARY RESULTS
+---------------
+
+V1
+AUC = 0.677
+Top25 N = 6
+Top25 draws = 2
+Precision = 33.3%
+Lift = 1.22x
+
+V2
+AUC = 0.661
+Top25 N = 6
+Top25 draws = 2
+Precision = 33.3%
+Lift = 1.22x
+
+V3 FROZEN
+AUC = 0.740
+Top25 N = 6
+Top25 draws = 3
+Precision = 50.0%
+Lift = 1.83x
+
+AUC DELTAS
+----------
+V3 - V1 = +0.062
+V3 - V2 = +0.078
+
+PREDEFINED TEMPORAL BLOCK A
+---------------------------
+N = 20
+Draws = 6
+Non-draws = 14
+
+V1 AUC = 0.702
+V2 AUC = 0.637
+V3 AUC = 0.726
+
+PREDEFINED TEMPORAL BLOCK B
+---------------------------
+N = 2
+Draws = 0
+Non-draws = 2
+
+AUC not defined because only one outcome class is present.
+
+INTERPRETATION
+--------------
+V3 passed the first independent frozen holdout
+and outperformed V1 and V2 on both primary AUC
+and Top25 precision/lift.
+
+The result is promising but preliminary because:
+- total sample is only 22 matches;
+- only 6 draws are present;
+- 19 of 22 matches come from 2026-09-18;
+- temporal block B cannot provide an AUC.
+
+No thresholds, weights, shrinkage strengths, filters,
+competitions or formula components will be changed
+using this holdout.
+
+STATUS
+------
+V3 = PRIMARY EXPERIMENTAL CANDIDATE
+
+NOT YET APPROVED FOR FINAL PRODUCTION REPLACEMENT.
+
+Next step:
+prospective independent Validation 2 on new,
+previously unseen matches using exactly the frozen V3 formula.

@@ -1,0 +1,138 @@
+date,match,actual,homeGoals,awayGoals,scoreV1,scoreV2,drawProbability,xgDifference,xgBalance
+2026-09-13,Arouca - Santa Clara,2,1,2,73,77,32.0,0.27,81.0
+2026-09-13,Real Sociedad - Atletico Madrid,2,0,3,68,76,26.9,0.09,94.0
+2026-09-13,Le Mans - Lens,X,2,2,71,75,25.5,0.14,90.0
+2026-09-13,Lecce - Monza,1,3,2,64,72,28.3,0.2,86.0
+2026-09-13,Sassuolo - Juventus,1,3,2,65,69,31.0,0.37,74.0
+2026-09-13,Stade Brestois 29 - Paris Saint Germain,2,0,1,66,63,25.3,0.42,71.0
+2026-09-13,Manchester United - Manchester City,2,0,1,54,62,25.3,0.28,80.0
+2026-09-13,Celta Vigo - Malaga,X,1,1,67,55,34.1,0.47,67.0
+2026-09-13,Napoli - Bologna,1,1,0,49,49,27.6,0.65,54.0
+2026-09-13,Heerenveen - Telstar,X,0,0,50,49,24.1,0.63,56.0
+2026-09-13,RB Leipzig - Hamburger SV,1,5,0,51,47,25.3,0.7,51.0
+2026-09-13,SV Elversberg - Bayern München,2,1,2,48,46,22.1,0.63,56.0
+2026-09-13,Lille - Estac Troyes,1,2,0,59,42,25.9,0.75,47.0
+2026-09-13,Getafe - Deportivo La Coruna,X,1,1,65,42,29.9,0.69,52.0
+2026-09-13,Coventry - Brighton,2,0,5,41,35,24.6,0.92,35.0
+2026-09-13,PEC Zwolle - Feyenoord,2,0,7,39,27,21.7,1.09,23.0
+2026-09-13,Benfica - GIL Vicente,1,3,1,36,15,17.8,1.79,0.0
+2026-09-13,PSV Eindhoven - Sparta Rotterdam,1,4,1,34,12,17.7,1.48,0.0
+2026-09-13,Levante - Barcelona,2,2,4,27,11,18.2,1.66,0.0
+2026-09-13,Excelsior - Utrecht,2,1,2,28,9,14.6,1.95,0.0
+2026-09-19,Toulouse - Le Havre,1,3,2,86,91,34.3,0.1,93.0
+2026-09-19,Bologna - Torino,X,1,1,76,87,34.5,0.06,96.0
+2026-09-19,Tottenham - Aston Villa,2,2,3,84,86,37.1,0.23,84.0
+2026-09-19,Le Mans - Lorient,1,2,1,79,84,28.5,0.06,96.0
+2026-09-19,Sparta Rotterdam - Heerenveen,2,0,4,75,80,25.6,0.04,97.0
+2026-09-19,Newcastle - Hull City,1,2,1,78,80,30.1,0.19,87.0
+2026-09-19,Lyon - Rennes,1,4,0,73,77,28.8,0.16,89.0
+2026-09-19,Athletic Club - Alaves,X,0,0,70,76,29.9,0.21,85.0
+2026-09-19,Celta Vigo - Racing Santander,1,5,0,70,74,28.1,0.22,85.0
+2026-09-19,Udinese - Cagliari,2,0,1,65,72,28.5,0.2,86.0
+2026-09-19,ADO Den Haag - Cambuur,X,1,1,59,65,23.7,0.2,86.0
+2026-09-19,Angers - Estac Troyes,1,2,0,59,63,28.7,0.39,73.0
+2026-09-19,Brighton - Arsenal,1,3,0,53,56,24.5,0.45,69.0
+2026-09-19,Everton - Ipswich,1,1,0,60,55,26.2,0.57,60.0
+2026-09-19,Paris FC - Strasbourg,1,2,1,58,53,24.9,0.62,57.0
+2026-09-19,AS Roma - Inter,X,2,2,41,48,22.2,0.45,68.0
+2026-09-19,Ajax - Excelsior,X,2,2,50,47,22.0,0.63,56.0
+2026-09-19,Willem II - Fortuna Sittard,2,0,1,50,43,21.8,0.76,47.0
+2026-09-19,Nottingham Forest - Coventry,2,0,1,50,39,27.9,0.98,31.0
+2026-09-19,Venezia - Lazio,2,0,2,35,26,23.2,1.09,24.0
+2026-09-26,Celta de Vigo II - Sabadell,X,1,1,73,78,31.6,0.23,84.0
+2026-09-26,Tenerife - Cadiz,X,1,1,64,55,28.9,0.52,64.0
+2026-09-26,Granada CF - FC Andorra,2,2,3,54,52,26.7,0.62,56.0
+2026-09-26,AD Ceuta FC - Real Sociedad II,1,3,1,55,42,27.2,0.83,42.0
+2026-09-27,Oviedo - Sporting Gijon,1,2,0,83,89,37.4,0.12,91.0
+2026-09-27,Valladolid - Cordoba,1,3,1,64,75,29.6,0.12,91.0
+2026-09-27,Mallorca - Almeria,2,0,1,63,74,32.8,0.22,85.0
+2026-09-27,Burgos - Eldense,1,1,0,57,42,29.3,0.77,46.0
+2026-09-27,Eibar - Las Palmas,1,3,2,41,37,25.5,0.86,40.0
+2026-10-03,Cadiz - Leganes,1,4,0,85,90,34.0,0.12,92.0
+2026-10-03,Almeria - Burgos,1,2,1,61,64,31.1,0.46,68.0
+2026-10-03,Sabadell - FC Andorra,X,0,0,52,53,27.0,0.58,60.0
+2026-10-03,Albacete - Eibar,2,1,3,30,18,23.1,1.33,7.0
+2026-10-04,Sporting Gijon - Celta de Vigo II,1,3,2,76,85,32.9,0.12,92.0
+2026-10-04,Real Sociedad II - Granada CF,2,2,3,74,82,28.8,0.04,98.0
+2026-10-04,Girona - Mallorca,X,0,0,70,79,31.0,0.15,90.0
+2026-10-04,Las Palmas - Valladolid,X,2,2,69,73,30.4,0.31,78.0
+2026-10-04,Castellón - AD Ceuta FC,X,1,1,31,13,19.2,1.67,0.0
+2026-09-12,Atalanta - Cagliari,2,1,2,66,77,36.9,0.21,86.0
+2026-09-12,Paris FC - Lyon,X,0,0,67,75,28.6,0.13,91.0
+2026-09-12,Le Havre - Angers,X,0,0,63,73,31.0,0.22,85.0
+2026-09-12,Bournemouth - Brentford,X,2,2,71,71,27.2,0.32,77.0
+2026-09-12,Auxerre - Nice,1,1,0,64,70,28.1,0.26,82.0
+2026-09-12,Crystal Palace - Ipswich,2,2,3,54,69,24.7,0.02,99.0
+2026-09-12,Chelsea - Hull City,X,2,2,58,68,27.5,0.2,86.0
+2026-09-12,Lazio - AC Milan,X,2,2,62,65,29.6,0.42,71.0
+2026-09-12,Fortuna Sittard - Ajax,2,1,5,53,59,23.5,0.3,79.0
+2026-09-12,Lorient - Toulouse,X,2,2,74,55,33.7,0.45,68.0
+2026-09-12,Aston Villa - Nottingham Forest,2,1,2,76,55,35.4,0.48,66.0
+2026-09-12,Sunderland - Arsenal,2,0,2,55,55,30.5,0.57,60.0
+2026-09-12,Strasbourg - Monaco,X,1,1,45,53,24.4,0.4,72.0
+2026-09-12,Tottenham - Everton,X,0,0,62,42,29.7,0.84,42.0
+2026-09-12,GO Ahead Eagles - Groningen,X,1,1,44,40,20.0,0.7,51.0
+2026-09-12,Liverpool - Fulham,X,0,0,53,40,23.1,0.91,36.0
+2026-09-12,Athletic Club - Elche,X,1,1,41,32,23.4,0.99,30.0
+2026-09-12,Cambuur - NEC Nijmegen,1,3,0,33,22,20.1,1.13,21.0
+2026-09-12,Twente - ADO Den Haag,1,2,0,31,14,19.4,1.37,4.0
+2026-09-12,Genoa - Frosinone,X,1,1,25,13,21.6,1.41,2.0
+2026-09-05,Nottingham Forest - Tottenham,X,0,0,78,87,30.3,0.01,100.0
+2026-09-05,Le Havre - Stade Brestois 29,2,1,2,77,82,31.1,0.16,88.0
+2026-09-05,Newcastle - Bournemouth,X,2,2,72,78,27.7,0.1,93.0
+2026-09-05,Nice - Le Mans,X,1,1,75,76,30.3,0.28,80.0
+2026-09-05,Manchester City - Coventry,1,1,0,67,75,26.9,0.1,93.0
+2026-09-05,Villarreal - Deportivo La Coruna,2,2,3,75,75,29.7,0.29,80.0
+2026-09-05,Fiorentina - Torino,2,1,2,72,73,29.9,0.32,78.0
+2026-09-05,Ajax - PSV Eindhoven,2,1,3,66,73,21.9,0.0,100.0
+2026-09-05,Brighton - Leeds,X,1,1,71,72,29.3,0.33,77.0
+2026-09-05,1899 Hoffenheim - Borussia Dortmund,2,2,3,64,71,26.3,0.15,89.0
+2026-09-05,AS Roma - Atalanta,1,2,1,67,70,30.3,0.35,76.0
+2026-09-05,Fulham - Crystal Palace,2,2,3,65,70,30.3,0.34,76.0
+2026-09-05,NEC Nijmegen - Feyenoord,2,1,3,58,69,23.5,0.08,94.0
+2026-09-05,Brentford - Sunderland,X,1,1,68,68,28.6,0.38,74.0
+2026-09-05,Hull City - Aston Villa,X,0,0,64,68,28.8,0.35,75.0
+2026-09-05,Rayo Vallecano - Racing Santander,1,3,2,66,67,25.6,0.33,77.0
+2026-09-05,Inter - Napoli,1,3,2,54,55,26.8,0.54,62.0
+2026-09-05,Lens - Lorient,2,0,1,52,42,26.2,0.69,52.0
+2026-09-05,Athletic Club - Atletico Madrid,1,3,0,43,41,25.2,0.79,45.0
+2026-09-05,Willem II - Excelsior,2,0,3,32,13,19.3,1.45,0.0
+2026-09-06,Everton - Manchester United,X,2,2,73,81,29.1,0.08,95.0
+2026-09-06,Bologna - Sassuolo,X,2,2,71,80,31.1,0.12,92.0
+2026-09-06,Angers - Rennes,2,1,2,70,77,27.6,0.11,93.0
+2026-09-06,Frosinone - Venezia,1,3,2,71,75,27.2,0.16,88.0
+2026-09-06,Juventus - AC Milan,X,1,1,70,72,30.7,0.35,76.0
+2026-09-06,Espanyol - Sevilla,X,1,1,57,71,27.1,0.08,95.0
+2026-09-06,Marseille - Paris FC,2,2,3,63,65,28.1,0.41,71.0
+2026-09-06,Parma - Monza,X,1,1,69,55,32.0,0.46,68.0
+2026-09-06,Alaves - Osasuna,1,5,2,65,55,34.5,0.5,65.0
+2026-09-06,Hamburger SV - FSV Mainz 05,2,0,5,61,55,26.0,0.52,64.0
+2026-09-06,ADO Den Haag - Fortuna Sittard,2,2,3,55,54,23.5,0.5,65.0
+2026-09-06,Arsenal - Chelsea,1,2,1,54,53,25.8,0.57,60.0
+2026-09-06,Eintracht Frankfurt - FC Augsburg,2,1,4,50,48,22.5,0.6,58.0
+2026-09-06,Groningen - Twente,X,2,2,39,42,22.8,0.64,56.0
+2026-09-06,Malaga - Levante,X,0,0,59,42,26.3,0.73,49.0
+2026-09-06,GIL Vicente - Academico Viseu,2,0,1,63,42,30.7,0.85,41.0
+2026-09-06,Estac Troyes - Strasbourg,2,2,6,46,40,24.2,0.85,40.0
+2026-09-06,Telstar - Cambuur,X,2,2,35,34,22.2,0.82,43.0
+2026-09-06,Heerenveen - AZ Alkmaar,2,2,3,34,20,20.8,1.24,13.0
+2026-09-06,Valencia - Barcelona,2,0,5,29,9,15.5,2.04,0.0
+2026-09-11,Clermont Foot - Boulogne,X,0,0,94,95,42.9,0.06,96.0
+2026-09-11,Montpellier - PAU,1,1,0,79,79,34.3,0.36,75.0
+2026-09-11,Nancy - Reims,2,1,2,70,70,31.0,0.42,71.0
+2026-09-11,Union Berlin - FC Schalke 04,2,1,3,63,64,27.0,0.39,72.0
+2026-09-11,SV Darmstadt 98 - Arminia Bielefeld,1,2,1,58,57,26.0,0.5,65.0
+2026-09-11,Rennes - Marseille,1,1,0,54,56,23.5,0.43,70.0
+2026-09-11,Dijon - Laval,1,3,2,64,55,28.3,0.53,63.0
+2026-09-11,KV Mechelen - Anderlecht,2,0,1,64,55,30.1,0.5,65.0
+2026-09-11,West Ham - Wrexham,1,6,0,63,55,27.0,0.63,56.0
+2026-09-11,Venezia - Fiorentina,2,2,4,44,49,25.6,0.57,60.0
+2026-09-11,Benevento - Hellas Verona,1,3,1,56,42,26.0,0.86,40.0
+2026-09-11,Rodez - Grenoble,2,0,1,46,40,22.4,0.8,44.0
+2026-09-11,Empoli - Arezzo,2,0,1,39,39,25.6,0.8,44.0
+2026-09-11,Pisa - Virtus Entella,2,1,4,43,37,27.1,0.93,35.0
+2026-09-11,Burgos - AD Ceuta FC,1,3,1,40,25,23.5,1.3,9.0
+2026-09-11,Sevilla - Valencia,1,1,0,37,24,23.8,1.23,14.0
+2026-09-11,Beşiktaş - Erzurumspor FK,1,3,0,33,16,20.5,1.52,0.0
+2026-09-11,1. FC Nürnberg - Hannover 96,1,2,1,29,10,18.5,1.43,0.0
+2026-09-11,AZ Alkmaar - Willem II,X,1,1,16,4,11.5,2.52,0.0

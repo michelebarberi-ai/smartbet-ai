@@ -1,0 +1,95 @@
+GOALVDLINE DRAW V3 - HOLDOUT PROTOCOL
+=====================================
+
+Formula:
+usa ESCLUSIVAMENTE la V3 congelata in draw_v3_spec.txt.
+
+Nessun tuning dopo l'apertura dell'holdout.
+
+HOLDOUT DATES
+-------------
+2026-09-18
+2026-09-21
+2026-09-22
+2026-09-23
+2026-09-24
+2026-09-25
+2026-09-28
+2026-09-29
+2026-09-30
+2026-10-01
+2026-10-02
+
+RACCOLTA
+--------
+Massimo 25 candidati per data.
+
+Raccogliere due versioni degli stessi fixture:
+
+MIN3:
+resolver stagione corrente minimo 3 partite.
+
+MIN10:
+resolver stagione corrente minimo 10 partite.
+
+V3 richiede entrambe.
+
+CAMPIONE PRIMARIO
+-----------------
+La valutazione primaria usa SOLO i fixture presenti
+sia nel dataset MIN3 sia nel dataset MIN10.
+
+V1 e V2 vengono confrontati con V3 sulle STESSE partite.
+
+La copertura MIN3/MIN10 deve essere sempre riportata.
+
+METRICHE PRIMARIE
+-----------------
+1. ROC AUC V1
+2. ROC AUC V2
+3. ROC AUC V3
+
+Confronto principale:
+V3 vs V1.
+
+METRICHE SECONDARIE
+-------------------
+Top 25%:
+- numero selezioni;
+- pareggi;
+- precision;
+- lift rispetto al base rate.
+
+Nessuna soglia V3 verrà scelta usando l'holdout.
+
+STABILITA TEMPORALE
+-------------------
+Blocchi predefiniti:
+
+HOLDOUT A:
+2026-09-18
+2026-09-21
+2026-09-22
+2026-09-23
+2026-09-24
+2026-09-25
+
+HOLDOUT B:
+2026-09-28
+2026-09-29
+2026-09-30
+2026-10-01
+2026-10-02
+
+AUC per blocco solo quando sono presenti
+sia pareggi sia non-pareggi.
+
+REGOLE
+------
+- Nessuna modifica retroattiva alla formula V3.
+- Nessuna modifica dei pesi.
+- Nessuna ricerca di shrinkage alternativi.
+- Nessuna esclusione di partite basata sul risultato.
+- Nessuna selezione di competizioni dopo aver visto l'holdout.
+- Eventuali problemi di copertura vengono riportati,
+  non corretti tramite tuning.
