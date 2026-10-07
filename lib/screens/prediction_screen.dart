@@ -9,6 +9,7 @@ import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/odds_service.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_market_probability_service.dart';
 
@@ -22,6 +23,7 @@ class PredictionScreen extends StatefulWidget {
 class _PredictionScreenState extends State<PredictionScreen> {
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
+  final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
 
   bool _loading = false;
   String? _error;
@@ -692,11 +694,33 @@ class _PredictionScreenState extends State<PredictionScreen> {
         final seed = aiPool[index];
 
         try {
-          final advancedResult = await _aiService.analyzeMatch(
-            seed.match,
-            runAudit: false,
-            automaticMode: true,
-          );
+          final cachedResult = await _analysisCache.read(seed.match.fixtureId);
+
+          final AnalysisResult advancedResult;
+
+          if (cachedResult != null) {
+            debugPrint(
+              'SMARTBET DAILY CACHE HIT: '
+              '${seed.match.fixtureId}',
+            );
+
+            advancedResult = cachedResult;
+          } else {
+            debugPrint(
+              'SMARTBET DAILY CACHE MISS: '
+              '${seed.match.fixtureId}',
+            );
+
+            advancedResult = await _aiService.analyzeMatch(
+              seed.match,
+              runAudit: false,
+              automaticMode: true,
+            );
+
+            if (advancedResult.smartScore > 0) {
+              await _analysisCache.write(seed.match.fixtureId, advancedResult);
+            }
+          }
 
           if (advancedResult.smartScore <= 0) {
             continue;
