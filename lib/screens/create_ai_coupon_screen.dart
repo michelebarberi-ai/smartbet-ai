@@ -11,6 +11,7 @@ import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../widgets/competition_filter_sheet.dart';
 
@@ -68,6 +69,7 @@ class _CouponPick {
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
+  final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
 
   // PATCH 02 — AUDITED SCHEDINA
 
@@ -802,11 +804,35 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         final advanced = await Future.wait(
           batch.map((candidate) async {
             try {
-              final result = await _aiService.analyzeMatch(
-                candidate.match,
-                runAudit: false,
-                automaticMode: true,
+              final cachedResult = await _analysisCache.read(
+                candidate.match.fixtureId,
               );
+
+              final AnalysisResult result;
+
+              if (cachedResult != null) {
+                debugPrint(
+                  'SMARTBET COUPON CACHE HIT: '
+                  '${candidate.match.fixtureId}',
+                );
+
+                result = cachedResult;
+              } else {
+                debugPrint(
+                  'SMARTBET COUPON CACHE MISS: '
+                  '${candidate.match.fixtureId}',
+                );
+
+                result = await _aiService.analyzeMatch(
+                  candidate.match,
+                  runAudit: false,
+                  automaticMode: true,
+                );
+
+                if (result.smartScore > 0) {
+                  await _analysisCache.write(candidate.match.fixtureId, result);
+                }
+              }
 
               if (result.smartScore <= 0) {
                 _errors++;
@@ -925,11 +951,38 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               }
 
               try {
-                final result = await _aiService.analyzeMatch(
-                  candidate.match,
-                  runAudit: false,
-                  automaticMode: true,
+                final cachedResult = await _analysisCache.read(
+                  candidate.match.fixtureId,
                 );
+
+                final AnalysisResult result;
+
+                if (cachedResult != null) {
+                  debugPrint(
+                    'SMARTBET COUPON RECOVERY CACHE HIT: '
+                    '${candidate.match.fixtureId}',
+                  );
+
+                  result = cachedResult;
+                } else {
+                  debugPrint(
+                    'SMARTBET COUPON RECOVERY CACHE MISS: '
+                    '${candidate.match.fixtureId}',
+                  );
+
+                  result = await _aiService.analyzeMatch(
+                    candidate.match,
+                    runAudit: false,
+                    automaticMode: true,
+                  );
+
+                  if (result.smartScore > 0) {
+                    await _analysisCache.write(
+                      candidate.match.fixtureId,
+                      result,
+                    );
+                  }
+                }
 
                 if (result.smartScore <= 0) return null;
 

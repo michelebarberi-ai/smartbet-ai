@@ -10,6 +10,7 @@ import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
+import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../widgets/competition_filter_sheet.dart';
 
@@ -65,6 +66,8 @@ class _CombinationCandidate {
 
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
+  final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
+
   String _selectedMarket = 'X';
   int _topCount = 5;
   int _minimumSmartScore = 0;
@@ -824,11 +827,38 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           final analyzedBatch = await Future.wait(
             batch.map((candidate) async {
               try {
-                final advancedResult = await _aiService.analyzeMatch(
-                  candidate.match,
-                  runAudit: false,
-                  automaticMode: true,
+                final cachedResult = await _analysisCache.read(
+                  candidate.match.fixtureId,
                 );
+
+                final AnalysisResult advancedResult;
+
+                if (cachedResult != null) {
+                  debugPrint(
+                    'SMARTBET COMBINATIONS CACHE HIT: '
+                    '${candidate.match.fixtureId}',
+                  );
+
+                  advancedResult = cachedResult;
+                } else {
+                  debugPrint(
+                    'SMARTBET COMBINATIONS CACHE MISS: '
+                    '${candidate.match.fixtureId}',
+                  );
+
+                  advancedResult = await _aiService.analyzeMatch(
+                    candidate.match,
+                    runAudit: false,
+                    automaticMode: true,
+                  );
+
+                  if (advancedResult.smartScore > 0) {
+                    await _analysisCache.write(
+                      candidate.match.fixtureId,
+                      advancedResult,
+                    );
+                  }
+                }
 
                 if (advancedResult.smartScore <= 0) {
                   return null;
