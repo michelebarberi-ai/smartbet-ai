@@ -2,7 +2,7 @@ name: smartbet_ai_new
 description: "SmartBet AI"
 publish_to: 'none'
 
-version: 1.1.1+11
+version: 1.2.0+12
 environment:
   sdk: ^3.12.2
 
