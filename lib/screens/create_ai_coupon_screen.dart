@@ -15,6 +15,7 @@ import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
@@ -3113,6 +3114,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             const SizedBox(height: 12),
             DualEngineSummary(analysis: item.dualAnalysis!),
           ],
+
+          TeamStatsExpansion(match: item.match),
 
           const SizedBox(height: 10),
           Text(

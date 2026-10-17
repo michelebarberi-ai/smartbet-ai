@@ -9,6 +9,7 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/team_stats_expansion.dart';
 
 class ReviewCouponScreen extends StatefulWidget {
   const ReviewCouponScreen({super.key});
@@ -1047,8 +1048,10 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
             },
           ),
 
-          if (_reviewResults[match.fixtureId] != null)
+          if (_reviewResults[match.fixtureId] != null) ...[
             _decisionBox(_reviewResults[match.fixtureId]!),
+            TeamStatsExpansion(match: match),
+          ],
         ],
       ),
     );

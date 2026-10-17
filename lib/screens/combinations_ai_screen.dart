@@ -14,6 +14,7 @@ import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 
 enum _CombinationPeriod { today, next2Days, next3Days, custom }
@@ -1968,6 +1969,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 12),
             DualEngineSummary(analysis: item.dualAnalysis!),
           ],
+
+          TeamStatsExpansion(match: item.match),
 
           if (isComboChance) _comboChanceSection(result, match.fixtureId),
 
