@@ -7,6 +7,8 @@ import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
+import '../services/dual_engine_analysis_service.dart';
+import '../widgets/dual_engine_summary.dart';
 
 class ReviewCouponScreen extends StatefulWidget {
   const ReviewCouponScreen({super.key});
@@ -23,6 +25,7 @@ class _ReviewDecision {
   final int suggestedProbability;
   final int smartScore;
   final String reason;
+  final DualEngineAnalysis? dualAnalysis;
 
   const _ReviewDecision({
     required this.action,
@@ -32,6 +35,7 @@ class _ReviewDecision {
     required this.suggestedProbability,
     required this.smartScore,
     required this.reason,
+    this.dualAnalysis,
   });
 }
 
@@ -42,6 +46,7 @@ class _AnalyzedSelection {
   final String suggestedMarket;
   final int suggestedProbability;
   final double reliability;
+  final DualEngineAnalysis? dualAnalysis;
 
   const _AnalyzedSelection({
     required this.selection,
@@ -50,6 +55,7 @@ class _AnalyzedSelection {
     required this.suggestedMarket,
     required this.suggestedProbability,
     required this.reliability,
+    this.dualAnalysis,
   });
 }
 
@@ -61,7 +67,7 @@ class _ReviewSelection {
 }
 
 class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
-  static const int _maximumSelections = 12;
+  static const int _maximumSelections = 15;
   static const String _storageKey = 'review_coupon_selections_v1';
 
   static const List<String> _markets = [
@@ -89,11 +95,19 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
   int _targetKeepCount = 0;
 
   final Map<int, _ReviewDecision> _reviewResults = {};
+  final DualEngineAnalysisService _dualEngineService =
+      DualEngineAnalysisService();
 
   @override
   void initState() {
     super.initState();
     _loadSelections();
+  }
+
+  @override
+  void dispose() {
+    _dualEngineService.dispose();
+    super.dispose();
   }
 
   int _probabilityFor(AnalysisResult result, String market) {
@@ -185,6 +199,11 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
         try {
           final analysis = await SmartCore.analyze(selection.match);
 
+          final dualAnalysis = await _dualEngineService.attachDiego(
+            match: selection.match,
+            smartBet: analysis,
+          );
+
           final selectedProbability = _probabilityFor(
             analysis,
             selection.market,
@@ -203,6 +222,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
               suggestedMarket: alternative.market,
               suggestedProbability: alternative.probability,
               reliability: reliability,
+              dualAnalysis: dualAnalysis,
             ),
           );
         } catch (_) {
@@ -255,6 +275,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
             suggestedMarket: item.suggestedMarket,
             suggestedProbability: item.suggestedProbability,
             smartScore: item.analysis.smartScore,
+            dualAnalysis: item.dualAnalysis,
             reason:
                 'È tra le selezioni meno affidabili rispetto alle altre della schedina.',
           );
@@ -277,6 +298,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
             suggestedMarket: item.suggestedMarket,
             suggestedProbability: item.suggestedProbability,
             smartScore: item.analysis.smartScore,
+            dualAnalysis: item.dualAnalysis,
             reason:
                 'Esiste un mercato statisticamente più solido per questa partita.',
           );
@@ -288,6 +310,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
             suggestedMarket: selectedMarket,
             suggestedProbability: item.selectedProbability,
             smartScore: item.analysis.smartScore,
+            dualAnalysis: item.dualAnalysis,
             reason:
                 'La tua selezione è coerente con l’analisi e rientra tra quelle da mantenere.',
           );
@@ -485,6 +508,11 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
               height: 1.35,
             ),
           ),
+
+          if (decision.dualAnalysis != null) ...[
+            const SizedBox(height: 11),
+            DualEngineSummary(analysis: decision.dualAnalysis!),
+          ],
         ],
       ),
     );
@@ -647,7 +675,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
   Future<void> _addMatch() async {
     if (_selections.length >= _maximumSelections) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Puoi inserire al massimo 12 partite.')),
+        const SnackBar(content: Text('Puoi inserire al massimo 15 partite.')),
       );
       return;
     }
@@ -778,7 +806,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
                               )
                             : ListView.separated(
                                 itemCount: filteredMatches.length,
-                                separatorBuilder: (_, __) => const Divider(
+                                separatorBuilder: (_, _) => const Divider(
                                   color: Colors.white10,
                                   height: 1,
                                 ),
@@ -977,7 +1005,8 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
           ),
           const SizedBox(height: 7),
           DropdownButtonFormField<String>(
-            value: item.market,
+            key: ValueKey('${match.fixtureId}-${item.market}'),
+            initialValue: item.market,
             dropdownColor: const Color(0xFF1F2937),
             decoration: InputDecoration(
               filled: true,
@@ -1076,7 +1105,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Inserisci fino a 12 partite e indica il pronostico '
+                  'Inserisci fino a 15 partite e indica il pronostico '
                   'che hai scelto per ciascuna.',
                   style: TextStyle(color: Colors.white60, height: 1.45),
                 ),

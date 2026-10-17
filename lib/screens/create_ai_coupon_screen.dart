@@ -13,6 +13,8 @@ import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
+import '../services/dual_engine_analysis_service.dart';
+import '../widgets/dual_engine_summary.dart';
 import '../widgets/competition_filter_sheet.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
@@ -23,6 +25,8 @@ class CreateAiCouponScreen extends StatefulWidget {
 }
 
 enum _CouponProfile { complete, balanced, rapid }
+
+enum _CouponMode { automatic, manual }
 
 enum _CouponPeriod { today, weekend, next3Days, custom }
 
@@ -50,6 +54,7 @@ class _CouponPick {
   final double rankScore;
   final bool adaptive;
   final String auditorStatus;
+  final DualEngineAnalysis? dualAnalysis;
 
   const _CouponPick({
     required this.match,
@@ -63,16 +68,37 @@ class _CouponPick {
     required this.rankScore,
     required this.adaptive,
     this.auditorStatus = 'NON VERIFICATO',
+    this.dualAnalysis,
   });
+
+  _CouponPick withDualAnalysis(DualEngineAnalysis value) {
+    return _CouponPick(
+      match: match,
+      analysis: analysis,
+      market: market,
+      probability: probability,
+      odd: odd,
+      bookmaker: bookmaker,
+      edge: edge,
+      expectedValue: expectedValue,
+      rankScore: rankScore,
+      adaptive: adaptive,
+      auditorStatus: auditorStatus,
+      dualAnalysis: value,
+    );
+  }
 }
 
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
+  final DualEngineAnalysisService _dualEngineService =
+      DualEngineAnalysisService();
 
   // PATCH 02 — AUDITED SCHEDINA
 
+  _CouponMode _mode = _CouponMode.automatic;
   _CouponProfile _profile = _CouponProfile.complete;
 
   _CouponPeriod _period = _CouponPeriod.today;
@@ -94,6 +120,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   String? _notice;
 
   final List<_CouponPick> _results = [];
+
+  final Map<int, MatchModel> _manualSelectedMatches = <int, MatchModel>{};
 
   static const double _minimumOdd = 1.25;
   // PATCH 02F-A — CAMPIONATI + RECOVERY RAPIDA
@@ -125,6 +153,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   void dispose() {
     _oddsService.dispose();
     _aiService.dispose();
+    _dualEngineService.dispose();
     super.dispose();
   }
 
@@ -388,6 +417,137 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return null;
   }
 
+  _CouponPick? _manualPickForMatch({
+    required MatchModel match,
+    required AnalysisResult analysis,
+    required FixtureMarketOdds? odds,
+  }) {
+    final preliminary = _PreCandidate(
+      match: match,
+      analysis: analysis,
+      bestProbability: _bestStatisticalProbability(analysis),
+    );
+
+    // Se la partita supera i normali criteri GoalVdLine,
+    // manteniamo la stessa scelta usata dalla modalità automatica.
+    final qualified = _bestPickForMatch(preliminary: preliminary, odds: odds);
+
+    if (qualified != null) {
+      return qualified;
+    }
+
+    // In modalità manuale la partita è stata scelta dall'utente:
+    // se non supera i criteri automatici NON viene nascosta.
+    final probabilities = _markets(analysis);
+
+    String? strongestMarket;
+    var strongestProbability = 0;
+
+    String? strongestQuotedMarket;
+    var strongestQuotedProbability = 0;
+
+    for (final market in _marketOrder) {
+      final probability = probabilities[market] ?? 0;
+
+      if (probability > strongestProbability) {
+        strongestProbability = probability;
+        strongestMarket = market;
+      }
+
+      final quote = odds?.oddFor(market);
+
+      if (quote != null &&
+          quote.odd >= _minimumOdd &&
+          probability > strongestQuotedProbability) {
+        strongestQuotedProbability = probability;
+        strongestQuotedMarket = market;
+      }
+    }
+
+    final bestMarket = strongestQuotedMarket ?? strongestMarket;
+
+    if (bestMarket == null) {
+      return null;
+    }
+
+    final bestProbability = strongestQuotedMarket != null
+        ? strongestQuotedProbability
+        : strongestProbability;
+
+    if (bestProbability <= 0) {
+      return null;
+    }
+
+    final quote = odds?.oddFor(bestMarket);
+    final odd = quote?.odd;
+
+    final edge = odd == null || odd <= 0
+        ? 0.0
+        : (bestProbability / 100.0) - (1.0 / odd);
+
+    final expectedValue = odd == null || odd <= 0
+        ? 0.0
+        : ((bestProbability / 100.0) * odd) - 1.0;
+
+    return _CouponPick(
+      match: match,
+      analysis: analysis,
+      market: bestMarket,
+      probability: bestProbability,
+      odd: odd,
+      bookmaker: quote?.bookmakerName ?? 'Quota non disponibile',
+      edge: edge,
+      expectedValue: expectedValue,
+      rankScore: _rankScore(
+        probability: bestProbability,
+        smartScore: analysis.smartScore,
+        odd: odd ?? 0.0,
+        edge: edge,
+        expectedValue: expectedValue,
+      ),
+      adaptive: false,
+      auditorStatus: 'NON VERIFICATO',
+    );
+  }
+
+  _CouponPick _manualAuditedPick(_CouponPick pick) {
+    var status = 'NON VERIFICATO';
+
+    final odd = pick.odd;
+
+    if (odd != null && odd > 0) {
+      final audit = SmartBetLocalAuditor.evaluate(
+        analysis: pick.analysis,
+        market: pick.market,
+        probability: pick.probability,
+        odd: odd,
+      );
+
+      if (audit.isBlocked || audit.blocksMarket(pick.market)) {
+        status = 'SCONSIGLIATA';
+      } else if (audit.isDoubt) {
+        status = 'CON RISERVA';
+      } else {
+        status = 'CONFERMATA';
+      }
+    }
+
+    return _CouponPick(
+      match: pick.match,
+      analysis: pick.analysis,
+      market: pick.market,
+      probability: pick.probability,
+      odd: pick.odd,
+      bookmaker: pick.bookmaker,
+      edge: pick.edge,
+      expectedValue: pick.expectedValue,
+      rankScore: pick.rankScore,
+      adaptive: pick.adaptive,
+      auditorStatus: status,
+      dualAnalysis: pick.dualAnalysis,
+    );
+  }
+
   bool _hasRealQuotedMarket(FixtureMarketOdds? odds) {
     if (odds == null) return false;
 
@@ -571,6 +731,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _period = _CouponPeriod.custom;
       _customPeriod = selected;
       _selectedCompetitionKeys.clear();
+      _manualSelectedMatches.clear();
       _results.clear();
       _error = null;
       _notice = null;
@@ -592,6 +753,212 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
   // CREA SCHEDINA
   // ============================================================
+
+  Future<void> _analyzeManualCoupon() async {
+    if (_loading) return;
+
+    final matches = _manualSelectedMatches.values.toList();
+
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seleziona almeno una partita da analizzare.'),
+        ),
+      );
+      return;
+    }
+
+    matches.sort((a, b) {
+      final dateA = DateTime.tryParse(a.date);
+      final dateB = DateTime.tryParse(b.date);
+
+      if (dateA != null && dateB != null) {
+        return dateA.compareTo(dateB);
+      }
+
+      return a.homeTeam.compareTo(b.homeTeam);
+    });
+
+    setState(() {
+      _loading = true;
+      _phase = 'manual';
+      _processed = 0;
+      _total = matches.length;
+      _oddsProcessed = 0;
+      _oddsTotal = 0;
+      _errors = 0;
+      _error = null;
+      _notice = null;
+      _results.clear();
+    });
+
+    try {
+      final analyzed = <_CouponPick>[];
+
+      // SmartBet viene eseguito a piccoli batch.
+      // DiegoAI viene poi aggiunto in sequenza.
+      const batchSize = 3;
+
+      for (var start = 0; start < matches.length; start += batchSize) {
+        final end = math.min(start + batchSize, matches.length);
+
+        final batch = matches.sublist(start, end);
+
+        final smartBetBatch = await Future.wait(
+          batch.map((match) async {
+            try {
+              final cachedResult = await _analysisCache.read(match.fixtureId);
+
+              final AnalysisResult smartBet;
+
+              if (cachedResult != null) {
+                debugPrint(
+                  'SMARTBET MANUAL COUPON CACHE HIT: '
+                  '${match.fixtureId}',
+                );
+
+                smartBet = cachedResult;
+              } else {
+                debugPrint(
+                  'SMARTBET MANUAL COUPON CACHE MISS: '
+                  '${match.fixtureId}',
+                );
+
+                smartBet = await _aiService.analyzeMatch(
+                  match,
+                  runAudit: false,
+                  automaticMode: true,
+                );
+
+                if (smartBet.smartScore > 0) {
+                  await _analysisCache.write(match.fixtureId, smartBet);
+                }
+              }
+
+              if (smartBet.smartScore <= 0) {
+                return null;
+              }
+
+              FixtureMarketOdds? odds;
+
+              try {
+                odds = await _oddsService.getFixtureMarketOdds(
+                  fixtureId: match.fixtureId,
+                );
+              } catch (_) {
+                odds = null;
+              }
+
+              final pick = _manualPickForMatch(
+                match: match,
+                analysis: smartBet,
+                odds: odds,
+              );
+
+              if (pick == null) {
+                return null;
+              }
+
+              return _manualAuditedPick(pick);
+            } catch (e) {
+              debugPrint(
+                'SMARTBET MANUAL COUPON ERROR '
+                '${match.fixtureId}: $e',
+              );
+              return null;
+            }
+          }),
+        );
+
+        final successful = smartBetBatch.whereType<_CouponPick>().toList();
+
+        _errors += batch.length - successful.length;
+
+        // DiegoAI: una partita alla volta sul servizio condiviso.
+        for (final pick in successful) {
+          try {
+            final dual = await _dualEngineService.attachDiego(
+              match: pick.match,
+              smartBet: pick.analysis,
+              smartBetMarket: pick.market,
+              smartBetProbability: pick.probability,
+            );
+
+            analyzed.add(pick.withDualAnalysis(dual));
+          } catch (_) {
+            // Anche se Diego non fosse disponibile,
+            // conserviamo comunque il risultato SmartBet.
+            analyzed.add(pick);
+          }
+        }
+
+        final live = List<_CouponPick>.from(analyzed)
+          ..sort(_presentationCompare);
+
+        if (!mounted) return;
+
+        setState(() {
+          _processed = end;
+          _results
+            ..clear()
+            ..addAll(live);
+        });
+      }
+
+      analyzed.sort(_presentationCompare);
+
+      if (!mounted) return;
+
+      final discouraged = analyzed
+          .where((item) => item.auditorStatus == 'SCONSIGLIATA')
+          .length;
+
+      final reserved = analyzed
+          .where((item) => item.auditorStatus == 'CON RISERVA')
+          .length;
+
+      setState(() {
+        _results
+          ..clear()
+          ..addAll(analyzed);
+
+        _loading = false;
+        _phase = '';
+
+        if (_results.isEmpty) {
+          _error = 'Non è stato possibile analizzare le partite selezionate.';
+          return;
+        }
+
+        final notes = <String>[];
+
+        if (_errors > 0) {
+          notes.add('$_errors partite non hanno prodotto dati sufficienti');
+        }
+
+        if (discouraged > 0) {
+          notes.add('$discouraged selezioni sono sconsigliate dall’Auditor');
+        }
+
+        if (reserved > 0) {
+          notes.add('$reserved selezioni sono con riserva');
+        }
+
+        if (notes.isNotEmpty) {
+          _notice = '${notes.join(' • ')}.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _phase = '';
+        _error = _friendlyError(e);
+      });
+    }
+  }
+
   Future<void> _createCoupon() async {
     if (_loading) return;
 
@@ -1140,11 +1507,26 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // l'ordine di visualizzazione, per rendere più facile riportare la schedina.
       selected.sort(_presentationCompare);
 
+      // DiegoAI viene aggiunto soltanto alle selezioni definitive.
+      // Non modifica ranking, quote o Auditor SmartBet.
+      final enrichedSelected = <_CouponPick>[];
+
+      for (final item in selected) {
+        final dual = await _dualEngineService.attachDiego(
+          match: item.match,
+          smartBet: item.analysis,
+          smartBetMarket: item.market,
+          smartBetProbability: item.probability,
+        );
+
+        enrichedSelected.add(item.withDualAnalysis(dual));
+      }
+
       if (!mounted) return;
       setState(() {
         _results
           ..clear()
-          ..addAll(selected);
+          ..addAll(enrichedSelected);
         _loading = false;
         _phase = '';
 
@@ -1445,6 +1827,485 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     );
   }
 
+  Widget _modeSelector() {
+    Widget chip(_CouponMode mode, String label, IconData icon) {
+      final selected = _mode == mode;
+
+      return ChoiceChip(
+        avatar: Icon(
+          icon,
+          size: 17,
+          color: selected ? Colors.white : Colors.white54,
+        ),
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+        ),
+        onSelected: _loading
+            ? null
+            : (enabled) {
+                if (!enabled) return;
+
+                setState(() {
+                  _mode = mode;
+                  _results.clear();
+                  _error = null;
+                  _notice = null;
+                });
+              },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Modalità',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 9,
+          runSpacing: 9,
+          children: [
+            chip(_CouponMode.automatic, 'AUTOMATICA', Icons.auto_awesome),
+            chip(_CouponMode.manual, 'MANUALE', Icons.touch_app_outlined),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          _mode == _CouponMode.automatic
+              ? 'GoalVdLine sceglie autonomamente le partite migliori.'
+              : 'Scegli tu fino a 15 partite ufficiali. '
+                    'SmartBet e DiegoAI le analizzano senza sostituirle.',
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _manualMatchDate(MatchModel match) {
+    final date = DateTime.tryParse(match.date)?.toLocal();
+
+    if (date == null) {
+      return match.league;
+    }
+
+    final day = date.day.toString().padLeft(2, '0');
+
+    final month = date.month.toString().padLeft(2, '0');
+
+    final hour = date.hour.toString().padLeft(2, '0');
+
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$day/$month • $hour:$minute • ${match.league}';
+  }
+
+  List<MatchModel> _manualSelectedList() {
+    final matches = _manualSelectedMatches.values.toList();
+
+    matches.sort((a, b) {
+      final dateA = DateTime.tryParse(a.date);
+      final dateB = DateTime.tryParse(b.date);
+
+      if (dateA != null && dateB != null) {
+        return dateA.compareTo(dateB);
+      }
+
+      return a.homeTeam.compareTo(b.homeTeam);
+    });
+
+    return matches;
+  }
+
+  Future<List<MatchModel>> _manualAvailableMatches() async {
+    final all = await _loadMatchesForSelectedPeriod();
+
+    final matches = all
+        .where(
+          (match) =>
+              match.fixtureId > 0 &&
+              match.hasTeamIds &&
+              _isUpcoming(match) &&
+              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
+              (_selectedCompetitionKeys.isEmpty ||
+                  _selectedCompetitionKeys.contains(
+                    CompetitionFilterSheet.keyFor(match),
+                  )),
+        )
+        .toList();
+
+    matches.sort((a, b) {
+      final dateA = DateTime.tryParse(a.date);
+      final dateB = DateTime.tryParse(b.date);
+
+      if (dateA != null && dateB != null) {
+        return dateA.compareTo(dateB);
+      }
+
+      return a.homeTeam.compareTo(b.homeTeam);
+    });
+
+    return matches;
+  }
+
+  Future<void> _openManualMatchSelector() async {
+    if (_loading) return;
+
+    List<MatchModel> matches;
+
+    try {
+      matches = await _manualAvailableMatches();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossibile caricare le partite disponibili.'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nessuna partita disponibile con i filtri attuali.'),
+        ),
+      );
+      return;
+    }
+
+    var query = '';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF111827),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, setSheetState) {
+            final normalized = query.trim().toLowerCase();
+
+            final filtered = normalized.isEmpty
+                ? matches
+                : matches.where((match) {
+                    final source =
+                        '${match.homeTeam} '
+                                '${match.awayTeam} '
+                                '${match.league} '
+                                '${match.country}'
+                            .toLowerCase();
+
+                    return source.contains(normalized);
+                  }).toList();
+
+            return SizedBox(
+              height: MediaQuery.of(modalContext).size.height * 0.84,
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Seleziona partite',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${_manualSelectedMatches.length}/15',
+                          style: const TextStyle(
+                            color: Color(0xFF00C853),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: TextField(
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Cerca squadra o campionato',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.white54,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFF1F2937),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(13),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setSheetState(() {
+                          query = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Nessuna partita trovata',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(color: Colors.white10, height: 1),
+                            itemBuilder: (context, index) {
+                              final match = filtered[index];
+
+                              final selected = _manualSelectedMatches
+                                  .containsKey(match.fixtureId);
+
+                              return CheckboxListTile(
+                                value: selected,
+                                activeColor: const Color(0xFF00C853),
+                                checkColor: Colors.white,
+                                title: Text(
+                                  '${match.homeTeam} - ${match.awayTeam}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${match.country} • '
+                                  '${_manualMatchDate(match)}',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                onChanged: (_) {
+                                  if (selected) {
+                                    setState(() {
+                                      _manualSelectedMatches.remove(
+                                        match.fixtureId,
+                                      );
+                                      _results.clear();
+                                      _error = null;
+                                      _notice = null;
+                                    });
+
+                                    setSheetState(() {});
+                                    return;
+                                  }
+
+                                  if (_manualSelectedMatches.length >= 15) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Puoi selezionare al massimo 15 partite.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  setState(() {
+                                    _manualSelectedMatches[match.fixtureId] =
+                                        match;
+
+                                    _results.clear();
+                                    _error = null;
+                                    _notice = null;
+                                  });
+
+                                  setSheetState(() {});
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C853),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('FATTO'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _manualSelectionPanel() {
+    final matches = _manualSelectedList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Partite scelte',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '${matches.length}/15',
+                style: const TextStyle(
+                  color: Color(0xFF00C853),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'GoalVdLine analizzerà esattamente '
+            'le partite che scegli.',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : _openManualMatchSelector,
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('SELEZIONA PARTITE'),
+            ),
+          ),
+          if (matches.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...matches.map(
+              (match) => Container(
+                margin: const EdgeInsets.only(bottom: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${match.homeTeam} - ${match.awayTeam}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _manualMatchDate(match),
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 9.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _loading
+                          ? null
+                          : () {
+                              setState(() {
+                                _manualSelectedMatches.remove(match.fixtureId);
+
+                                _results.clear();
+                                _error = null;
+                                _notice = null;
+                              });
+                            },
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.redAccent,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _periodSelector() {
     Widget chip(_CouponPeriod period, String label) {
       final selected = _period == period;
@@ -1474,6 +2335,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 setState(() {
                   _period = period;
                   _selectedCompetitionKeys.clear();
+                  _manualSelectedMatches.clear();
                   _results.clear();
                   _error = null;
                   _notice = null;
@@ -1543,6 +2405,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
+
+        _manualSelectedMatches.clear();
         _results.clear();
         _error = null;
         _notice = null;
@@ -1646,7 +2510,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     String title;
     String subtitle;
 
-    if (_phase == 'advanced') {
+    if (_phase == 'manual') {
+      title = 'Analisi manuale: $current / $total';
+      subtitle =
+          'SmartBet + DiegoAI stanno analizzando '
+          'soltanto le partite che hai selezionato.';
+    } else if (_phase == 'advanced') {
       title = 'Analisi GoalVdLine: $current / $total';
       final remaining = math.max(0, total - current);
       subtitle = current == 0
@@ -1744,6 +2613,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
           const SizedBox(height: 22),
+          _modeSelector(),
+
+          const SizedBox(height: 22),
+
           const Text(
             'Profilo schedina',
             style: TextStyle(
@@ -1821,6 +2694,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
+                        _manualSelectedMatches.clear();
                         _results.clear();
                         _error = null;
                         _notice = null;
@@ -1830,54 +2704,81 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
 
           const SizedBox(height: 22),
-          const Text(
-            'Quante partite?',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+
+          if (_mode == _CouponMode.automatic) ...[
+            const Text(
+              'Quante partite?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$_count partite',
-            style: const TextStyle(
-              color: Color(0xFF00C853),
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 6),
+            Text(
+              '$_count partite',
+              style: const TextStyle(
+                color: Color(0xFF00C853),
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          Slider(
-            value: _count.toDouble(),
-            min: 3,
-            max: 15,
-            divisions: 12,
-            label: '$_count',
-            onChanged: _loading
-                ? null
-                : (value) {
-                    setState(() {
-                      _count = value.round();
-                      _results.clear();
-                      _error = null;
-                      _notice = null;
-                    });
-                  },
-          ),
-          const SizedBox(height: 6),
-          FilledButton.icon(
-            onPressed: _loading ? null : _createCoupon,
-            icon: const Icon(Icons.auto_awesome),
-            label: Text(
-              _loading
-                  ? 'ANALISI IN CORSO...'
-                  : 'CREA LA MIA SCHEDINA GOALVDLINE',
+            Slider(
+              value: _count.toDouble(),
+              min: 3,
+              max: 15,
+              divisions: 12,
+              label: '$_count',
+              onChanged: _loading
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _count = value.round();
+                        _results.clear();
+                        _error = null;
+                        _notice = null;
+                      });
+                    },
             ),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: const Color(0xFF00C853),
+            const SizedBox(height: 6),
+            FilledButton.icon(
+              onPressed: _loading ? null : _createCoupon,
+              icon: const Icon(Icons.auto_awesome),
+              label: Text(
+                _loading
+                    ? 'ANALISI IN CORSO...'
+                    : 'CREA LA MIA SCHEDINA GOALVDLINE',
+              ),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF00C853),
+              ),
             ),
-          ),
+          ] else ...[
+            _manualSelectionPanel(),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _loading || _manualSelectedMatches.isEmpty
+                    ? null
+                    : _analyzeManualCoupon,
+                icon: const Icon(Icons.analytics_outlined),
+                label: Text(
+                  _loading
+                      ? 'ANALISI IN CORSO...'
+                      : 'ANALIZZA '
+                            '${_manualSelectedMatches.length} '
+                            'PARTITE',
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: const Color(0xFF00C853),
+                ),
+              ),
+            ),
+          ],
+
           _progress(),
           if (_error != null) ...[
             const SizedBox(height: 20),
@@ -1920,7 +2821,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             const SizedBox(height: 28),
             Text(
               _loading
-                  ? 'Selezioni provvisorie • ${_results.length}/$_count'
+                  ? 'Selezioni provvisorie • '
+                        '${_results.length}/'
+                        '${_mode == _CouponMode.manual ? _manualSelectedMatches.length : _count}'
+                  : _mode == _CouponMode.manual
+                  ? 'Analisi manuale'
                   : 'Schedina $_profileName',
               style: const TextStyle(
                 color: Colors.white,
@@ -2204,6 +3109,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ],
             ),
           ),
+          if (item.dualAnalysis != null) ...[
+            const SizedBox(height: 12),
+            DualEngineSummary(analysis: item.dualAnalysis!),
+          ],
+
           const SizedBox(height: 10),
           Text(
             'Smart Score: ${item.analysis.smartScore}',
@@ -2211,6 +3121,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               color: Colors.white54,
               fontSize: 11,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Auditor: ${item.auditorStatus}',
+            style: TextStyle(
+              color: item.auditorStatus == 'SCONSIGLIATA'
+                  ? Colors.redAccent
+                  : item.auditorStatus == 'CON RISERVA'
+                  ? Colors.orangeAccent
+                  : item.auditorStatus == 'CONFERMATA'
+                  ? const Color(0xFF00C853)
+                  : Colors.white38,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],

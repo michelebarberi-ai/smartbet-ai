@@ -12,7 +12,11 @@ import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
+import '../services/dual_engine_analysis_service.dart';
+import '../widgets/dual_engine_summary.dart';
 import '../widgets/competition_filter_sheet.dart';
+
+enum _CombinationPeriod { today, next2Days, next3Days, custom }
 
 class CombinationsAiScreen extends StatefulWidget {
   const CombinationsAiScreen({super.key});
@@ -51,6 +55,7 @@ class _CombinationCandidate {
   final String? bookmaker;
   final String auditorStatus;
   final List<_FamilyOptionDetail> familyOptions;
+  final DualEngineAnalysis? dualAnalysis;
 
   const _CombinationCandidate({
     required this.match,
@@ -61,12 +66,29 @@ class _CombinationCandidate {
     this.bookmaker,
     this.auditorStatus = 'NON VERIFICATO',
     this.familyOptions = const [],
+    this.dualAnalysis,
   });
+
+  _CombinationCandidate withDualAnalysis(DualEngineAnalysis value) {
+    return _CombinationCandidate(
+      match: match,
+      analysis: analysis,
+      market: market,
+      probability: probability,
+      odd: odd,
+      bookmaker: bookmaker,
+      auditorStatus: auditorStatus,
+      familyOptions: familyOptions,
+      dualAnalysis: value,
+    );
+  }
 }
 
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
+  final DualEngineAnalysisService _dualEngineService =
+      DualEngineAnalysisService();
 
   String _selectedMarket = 'X';
   int _topCount = 5;
@@ -74,6 +96,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
+
+  _CombinationPeriod _period = _CombinationPeriod.today;
+  DateTimeRange? _customPeriod;
+
   final Set<String> _selectedCompetitionKeys = <String>{};
   bool _checkingOdds = false;
   int _processed = 0;
@@ -108,6 +134,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   @override
   void dispose() {
     _aiService.dispose();
+    _dualEngineService.dispose();
     super.dispose();
   }
 
@@ -583,6 +610,166 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   }
 
   // ============================================================
+  // PERIODO PARTITE
+  // ============================================================
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _shortDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month';
+  }
+
+  String get _periodLabel {
+    switch (_period) {
+      case _CombinationPeriod.today:
+        return 'Oggi';
+
+      case _CombinationPeriod.next2Days:
+        return '2 giorni';
+
+      case _CombinationPeriod.next3Days:
+        return 'Prossimi 3 giorni';
+
+      case _CombinationPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return 'Personalizzato';
+        }
+
+        return '${_shortDate(range.start)} - '
+            '${_shortDate(range.end)}';
+    }
+  }
+
+  List<DateTime> _selectedDates() {
+    final today = _dateOnly(DateTime.now());
+
+    switch (_period) {
+      case _CombinationPeriod.today:
+        return [today];
+
+      case _CombinationPeriod.next2Days:
+        return [today, today.add(const Duration(days: 1))];
+
+      case _CombinationPeriod.next3Days:
+        return List<DateTime>.generate(
+          3,
+          (index) => today.add(Duration(days: index)),
+        );
+
+      case _CombinationPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return [today];
+        }
+
+        final start = _dateOnly(range.start);
+        final end = _dateOnly(range.end);
+
+        final days = end.difference(start).inDays + 1;
+
+        return List<DateTime>.generate(
+          days,
+          (index) => start.add(Duration(days: index)),
+        );
+    }
+  }
+
+  Future<List<MatchModel>> _loadMatchesForSelectedPeriod() async {
+    final dates = _selectedDates();
+    final today = _dateOnly(DateTime.now());
+
+    final batches = await Future.wait(
+      dates.map((date) {
+        if (_dateOnly(date) == today) {
+          return MatchRepository.getTodayMatches();
+        }
+
+        return MatchRepository.getMatchesByDate(date);
+      }),
+    );
+
+    final unique = <int, MatchModel>{};
+
+    for (final batch in batches) {
+      for (final match in batch) {
+        unique[match.fixtureId] = match;
+      }
+    }
+
+    final matches = unique.values.toList();
+
+    matches.sort((a, b) {
+      try {
+        return DateTime.parse(a.date).compareTo(DateTime.parse(b.date));
+      } catch (_) {
+        return 0;
+      }
+    });
+
+    return matches;
+  }
+
+  Future<void> _selectCustomPeriod() async {
+    final today = _dateOnly(DateTime.now());
+
+    final initialRange =
+        _customPeriod ??
+        DateTimeRange(start: today, end: today.add(const Duration(days: 2)));
+
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 60)),
+      initialDateRange: initialRange,
+      helpText: 'Periodo combinazioni GoalVdLine',
+      saveText: 'CONFERMA',
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    final length =
+        _dateOnly(selected.end).difference(_dateOnly(selected.start)).inDays +
+        1;
+
+    if (length > 7) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Per ora puoi selezionare '
+            'un massimo di 7 giorni.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _period = _CombinationPeriod.custom;
+      _customPeriod = selected;
+
+      _selectedCompetitionKeys.clear();
+      _expandedComboFixtures.clear();
+      _results.clear();
+
+      _errorMessage = null;
+      _processed = 0;
+      _total = 0;
+      _errors = 0;
+    });
+  }
+
+  // ============================================================
   // PARTITA NON INIZIATA
   // ============================================================
 
@@ -614,7 +801,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
 
     try {
-      final allMatches = await MatchRepository.getTodayMatches();
+      final allMatches = await _loadMatchesForSelectedPeriod();
 
       final scheduleMatches = _italyScheduleOnly
           ? allMatches.where(ItalyScheduleFilter.allows).toList()
@@ -1066,6 +1253,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         validCandidates.removeRange(_topCount, validCandidates.length);
       }
 
+      // SmartBet ha già completato selezione, quote e Auditor.
+      // DiegoAI viene aggiunto solo alle candidate definitive.
+      final enrichedCandidates = <_CombinationCandidate>[];
+
+      for (final item in validCandidates) {
+        final dual = await _dualEngineService.attachDiego(
+          match: item.match,
+          smartBet: item.analysis,
+          smartBetMarket: item.market,
+          smartBetProbability: item.probability,
+        );
+
+        enrichedCandidates.add(item.withDualAnalysis(dual));
+      }
+
       if (!mounted) {
         return;
       }
@@ -1073,7 +1275,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       setState(() {
         _results
           ..clear()
-          ..addAll(validCandidates);
+          ..addAll(enrichedCandidates);
         _checkingOdds = false;
         _loading = false;
       });
@@ -1165,7 +1367,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // ============================================================
   Future<void> _openCompetitionFilter() async {
     try {
-      final allMatches = await MatchRepository.getTodayMatches();
+      final allMatches = await _loadMatchesForSelectedPeriod();
 
       final available = _italyScheduleOnly
           ? allMatches.where(ItalyScheduleFilter.allows).toList()
@@ -1197,6 +1399,85 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         ),
       );
     }
+  }
+
+  Widget _periodSelector() {
+    Widget chip(_CombinationPeriod period, String label) {
+      final selected = _period == period;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        onSelected: _loading
+            ? null
+            : (_) async {
+                if (period == _CombinationPeriod.custom) {
+                  await _selectCustomPeriod();
+                  return;
+                }
+
+                setState(() {
+                  _period = period;
+
+                  _selectedCompetitionKeys.clear();
+                  _expandedComboFixtures.clear();
+                  _results.clear();
+
+                  _errorMessage = null;
+                  _processed = 0;
+                  _total = 0;
+                  _errors = 0;
+                });
+              },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PERIODO PARTITE',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(_CombinationPeriod.today, 'OGGI'),
+            chip(_CombinationPeriod.next2Days, '2 GIORNI'),
+            chip(_CombinationPeriod.next3Days, '3 GIORNI'),
+            chip(_CombinationPeriod.custom, 'PERSONALIZZATO'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Periodo selezionato: '
+          '$_periodLabel',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _competitionSelector() {
@@ -1683,6 +1964,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ],
           ),
 
+          if (item.dualAnalysis != null) ...[
+            const SizedBox(height: 12),
+            DualEngineSummary(analysis: item.dualAnalysis!),
+          ],
+
           if (isComboChance) _comboChanceSection(result, match.fixtureId),
 
           if (isFamilyMarket) ...[
@@ -1789,9 +2075,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const Text(
             'Scegli un mercato e GoalVdLine '
-            'scansionerà le partite di oggi, '
-            'mostrando quelle con la probabilità '
-            'più alta nella pre-analisi.',
+            'scansionerà le partite del periodo '
+            'selezionato, mostrando quelle con '
+            'la probabilità più alta '
+            'nella pre-analisi.',
             style: TextStyle(color: Colors.white54, height: 1.4),
           ),
 
@@ -1808,7 +2095,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
+
+          _periodSelector(),
+
+          const SizedBox(height: 18),
 
           Container(
             decoration: BoxDecoration(

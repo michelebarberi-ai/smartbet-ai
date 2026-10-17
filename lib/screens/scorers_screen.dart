@@ -7,6 +7,8 @@ import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/scorer_candidate_service.dart';
 
+enum _ScorerPeriod { today, next2Days, next3Days, custom }
+
 class ScorersScreen extends StatefulWidget {
   const ScorersScreen({super.key});
 
@@ -26,6 +28,9 @@ class _ScorersScreenState extends State<ScorersScreen> {
 
   bool _loading = false;
   String? _error;
+
+  _ScorerPeriod _period = _ScorerPeriod.today;
+  DateTimeRange? _customPeriod;
   String _phase = 'idle';
   int _processed = 0;
   int _total = 0;
@@ -64,6 +69,166 @@ class _ScorersScreenState extends State<ScorersScreen> {
     }
   }
 
+  // ============================================================
+  // PERIODO PARTITE
+  // ============================================================
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _shortDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month';
+  }
+
+  String get _periodLabel {
+    switch (_period) {
+      case _ScorerPeriod.today:
+        return 'Oggi';
+
+      case _ScorerPeriod.next2Days:
+        return '2 giorni';
+
+      case _ScorerPeriod.next3Days:
+        return 'Prossimi 3 giorni';
+
+      case _ScorerPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return 'Personalizzato';
+        }
+
+        return '${_shortDate(range.start)} - '
+            '${_shortDate(range.end)}';
+    }
+  }
+
+  List<DateTime> _selectedDates() {
+    final today = _dateOnly(DateTime.now());
+
+    switch (_period) {
+      case _ScorerPeriod.today:
+        return [today];
+
+      case _ScorerPeriod.next2Days:
+        return [today, today.add(const Duration(days: 1))];
+
+      case _ScorerPeriod.next3Days:
+        return List<DateTime>.generate(
+          3,
+          (index) => today.add(Duration(days: index)),
+        );
+
+      case _ScorerPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return [today];
+        }
+
+        final start = _dateOnly(range.start);
+        final end = _dateOnly(range.end);
+
+        final days = end.difference(start).inDays + 1;
+
+        return List<DateTime>.generate(
+          days,
+          (index) => start.add(Duration(days: index)),
+        );
+    }
+  }
+
+  Future<List<MatchModel>> _loadMatchesForSelectedPeriod() async {
+    final dates = _selectedDates();
+
+    final today = _dateOnly(DateTime.now());
+
+    final batches = await Future.wait(
+      dates.map((date) {
+        if (_dateOnly(date) == today) {
+          return MatchRepository.getTodayMatches();
+        }
+
+        return MatchRepository.getMatchesByDate(date);
+      }),
+    );
+
+    final unique = <int, MatchModel>{};
+
+    for (final batch in batches) {
+      for (final match in batch) {
+        unique[match.fixtureId] = match;
+      }
+    }
+
+    final matches = unique.values.toList();
+
+    matches.sort((a, b) {
+      try {
+        return DateTime.parse(a.date).compareTo(DateTime.parse(b.date));
+      } catch (_) {
+        return 0;
+      }
+    });
+
+    return matches;
+  }
+
+  Future<void> _selectCustomPeriod() async {
+    final today = _dateOnly(DateTime.now());
+
+    final initialRange =
+        _customPeriod ??
+        DateTimeRange(start: today, end: today.add(const Duration(days: 2)));
+
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 60)),
+      initialDateRange: initialRange,
+      helpText: 'Periodo marcatori GoalVdLine',
+      saveText: 'CONFERMA',
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    final length =
+        _dateOnly(selected.end).difference(_dateOnly(selected.start)).inDays +
+        1;
+
+    if (length > 7) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Per ora puoi selezionare '
+            'un massimo di 7 giorni.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _period = _ScorerPeriod.custom;
+      _customPeriod = selected;
+
+      _results.clear();
+      _error = null;
+      _phase = 'idle';
+      _processed = 0;
+      _total = 0;
+    });
+
+    await _generate();
+  }
+
   Future<void> _generate() async {
     if (_loading) return;
 
@@ -77,7 +242,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
     });
 
     try {
-      final allMatches = await MatchRepository.getTodayMatches();
+      final allMatches = await _loadMatchesForSelectedPeriod();
 
       final matches =
           allMatches
@@ -219,7 +384,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
 
         if (_results.isEmpty) {
           _error =
-              'Oggi GoalVdLine non ha trovato marcatori con dati '
+              'GoalVdLine non ha trovato marcatori con dati '
               'sufficientemente solidi. Nessun nome viene forzato.';
         }
       });
@@ -304,7 +469,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
   String get _progressTitle {
     switch (_phase) {
       case 'matches':
-        return 'Caricamento partite di oggi…';
+        return 'Caricamento partite: $_periodLabel…';
       case 'scan':
         return 'Scansione partite: $_processed / $_total';
       case 'players':
@@ -325,6 +490,88 @@ class _ScorersScreenState extends State<ScorersScreen> {
     }
   }
 
+  Widget _periodSelector() {
+    Widget chip(_ScorerPeriod period, String label) {
+      final selected = _period == period;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        onSelected: _loading
+            ? null
+            : (_) async {
+                if (period == _ScorerPeriod.custom) {
+                  await _selectCustomPeriod();
+                  return;
+                }
+
+                if (_period == period) {
+                  return;
+                }
+
+                setState(() {
+                  _period = period;
+
+                  _results.clear();
+                  _error = null;
+                  _phase = 'idle';
+                  _processed = 0;
+                  _total = 0;
+                });
+
+                await _generate();
+              },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PERIODO PARTITE',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(_ScorerPeriod.today, 'OGGI'),
+            chip(_ScorerPeriod.next2Days, '2 GIORNI'),
+            chip(_ScorerPeriod.next3Days, '3 GIORNI'),
+            chip(_ScorerPeriod.custom, 'PERSONALIZZATO'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Periodo selezionato: '
+          '$_periodLabel',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _hero() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -334,7 +581,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -342,7 +589,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
               Icon(Icons.sports_soccer, color: Colors.white),
               SizedBox(width: 10),
               Text(
-                'MARCATORI DEL GIORNO',
+                'MARCATORI • ${_periodLabel.toUpperCase()}',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 19,
@@ -354,7 +601,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
           SizedBox(height: 11),
           Text(
             'GoalVdLine cerca fino a 5 giocatori con il profilo più '
-            'interessante nelle partite di oggi. Nessun marcatore '
+            'interessante nelle partite del periodo selezionato. Nessun marcatore '
             'viene inserito solo per raggiungere il numero richiesto.',
             style: TextStyle(color: Colors.white, fontSize: 13, height: 1.45),
           ),
@@ -775,13 +1022,19 @@ class _ScorersScreenState extends State<ScorersScreen> {
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
         children: [
           _hero(),
+
+          const SizedBox(height: 16),
+
+          _periodSelector(),
+
           if (_loading) _progressCard(),
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 22),
             Text(
               _loading
                   ? 'MARCATORI PROVVISORI • ${_results.length}/$_wantedScorers'
-                  : 'I MIGLIORI ${_results.length} DI OGGI',
+                  : 'I MIGLIORI ${_results.length} • '
+                        '${_periodLabel.toUpperCase()}',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,

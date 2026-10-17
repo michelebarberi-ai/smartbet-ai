@@ -4,7 +4,7 @@ import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
-import '../services/smartbet_ai_service.dart';
+import '../services/dual_engine_analysis_service.dart';
 import 'analysis_detail_screen.dart';
 
 class SmartScoreFilteredScreen extends StatefulWidget {
@@ -293,7 +293,17 @@ class _SmartScoreFilteredScreenState extends State<SmartScoreFilteredScreen> {
     );
 
     try {
-      final advancedResult = await SmartBetAiService().analyzeMatch(match);
+      final dualService = DualEngineAnalysisService();
+
+      late final DualEngineAnalysis dualAnalysis;
+
+      try {
+        dualAnalysis = await dualService.analyze(match);
+      } finally {
+        dualService.dispose();
+      }
+
+      final advancedResult = dualAnalysis.smartBet;
 
       if (!mounted) {
         return;
@@ -308,8 +318,12 @@ class _SmartScoreFilteredScreenState extends State<SmartScoreFilteredScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              AnalysisDetailScreen(match: match, result: advancedResult),
+          builder: (_) => AnalysisDetailScreen(
+            match: match,
+            result: advancedResult,
+            diegoAnalysis: dualAnalysis.diego,
+            engineComparison: dualAnalysis.comparison,
+          ),
         ),
       );
     } catch (e) {

@@ -1,4 +1,4 @@
-import '../services/smartbet_ai_service.dart';
+import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_coupon_service.dart';
 import '../services/review_coupon_store.dart';
 import 'coupon_screen.dart';
@@ -39,7 +39,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // viene ridisegnata o si apre/chiude una sezione.
   final Map<int, Future<AnalysisResult>> _analysisFutures = {};
 
-  static const int _maximumCouponMatches = 12;
+  static const int _maximumCouponMatches = 15;
 
   bool _creatingCoupon = false;
 
@@ -359,7 +359,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Puoi selezionare al massimo 12 partite per la schedina GoalVdLine.',
+              'Puoi selezionare al massimo 15 partite per la schedina GoalVdLine.',
             ),
           ),
         );
@@ -1392,7 +1392,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Hai già raggiunto il limite di 12 partite nella Revisione Schedina GoalVdLine.',
+                              'Hai già raggiunto il limite di 15 partite nella Revisione Schedina GoalVdLine.',
                             ),
                           ),
                         );
@@ -1462,7 +1462,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 SizedBox(height: 20),
 
                                 Text(
-                                  'GOALVDLINE',
+                                  'SMARTBET + DIEGOAI',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -1473,7 +1473,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 SizedBox(height: 10),
 
                                 Text(
-                                  'Analisi avanzata della partita in corso...',
+                                  'Doppia analisi della partita in corso...',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.white70),
                                 ),
@@ -1481,7 +1481,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 SizedBox(height: 6),
 
                                 Text(
-                                  'Dossier • Quote • AI • Value Bet',
+                                  'SmartBet • DiegoAI • Quote • Value Bet',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white54,
@@ -1499,8 +1499,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       // ========================================================
 
                       try {
-                        final advancedResult = await SmartBetAiService()
-                            .analyzeMatch(match);
+                        final dualService = DualEngineAnalysisService();
+
+                        late final DualEngineAnalysis dualAnalysis;
+
+                        try {
+                          dualAnalysis = await dualService.analyze(match);
+                        } finally {
+                          dualService.dispose();
+                        }
+
+                        final advancedResult = dualAnalysis.smartBet;
+                        final diegoAnalysis = dualAnalysis.diego;
 
                         if (!context.mounted) {
                           return;
@@ -1518,6 +1528,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             builder: (_) => AnalysisDetailScreen(
                               match: match,
                               result: advancedResult,
+                              diegoAnalysis: diegoAnalysis,
+                              engineComparison: dualAnalysis.comparison,
                             ),
                           ),
                         );

@@ -6,6 +6,9 @@ import 'package:share_plus/share_plus.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../services/bankroll_store.dart';
+import '../services/diego_ai_service.dart';
+import '../services/dual_engine_analysis_service.dart';
+import '../services/diego_ai_analysis_result_adapter.dart';
 import '../services/bet_execution_service.dart';
 import '../services/odds_service.dart';
 
@@ -431,11 +434,15 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
 class AnalysisDetailScreen extends StatefulWidget {
   final MatchModel match;
   final AnalysisResult result;
+  final DiegoAiAnalysis? diegoAnalysis;
+  final DualEngineComparison? engineComparison;
 
   const AnalysisDetailScreen({
     super.key,
     required this.match,
     required this.result,
+    this.diegoAnalysis,
+    this.engineComparison,
   });
 
   @override
@@ -790,6 +797,339 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   }
 
   // ============================================================
+  // CONFRONTO MOTORI
+  // ============================================================
+
+  Widget _engineComparisonSection(DualEngineComparison comparison) {
+    Color color;
+    IconData icon;
+
+    switch (comparison.status) {
+      case DualEngineAgreement.agree:
+        color = Colors.greenAccent;
+        icon = Icons.check_circle_outline;
+        break;
+
+      case DualEngineAgreement.partial:
+        color = Colors.amberAccent;
+        icon = Icons.compare_arrows;
+        break;
+
+      case DualEngineAgreement.diverge:
+        color = Colors.redAccent;
+        icon = Icons.call_split;
+        break;
+
+      case DualEngineAgreement.noSelection:
+        color = Colors.blueGrey;
+        icon = Icons.remove_circle_outline;
+        break;
+
+      case DualEngineAgreement.unavailable:
+        color = Colors.white54;
+        icon = Icons.info_outline;
+        break;
+    }
+
+    return _sectionCard(
+      title: 'CONFRONTO MOTORI',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  comparison.label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Text(
+            comparison.description,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'SMARTBET',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        comparison.smartBetMarket,
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 23,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'DIEGO AI',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        comparison.diegoMarket,
+                        style: const TextStyle(
+                          color: Colors.cyanAccent,
+                          fontSize: 23,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          const Text(
+            'I due motori restano indipendenti: il confronto non modifica '
+            'le rispettive probabilità.',
+            style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // DIEGO AI
+  // ============================================================
+
+  Widget _diegoAiSection(DiegoAiAnalysis analysis) {
+    final result = DiegoAiAnalysisResultAdapter.convert(analysis);
+
+    return _sectionCard(
+      title: 'DIEGO AI • ANALISI INDIPENDENTE',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.psychology_alt, color: Colors.cyanAccent, size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Motore GoalVdLine separato dall’analisi SmartBet',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          Center(
+            child: Text(
+              result.prediction,
+              style: const TextStyle(
+                color: Colors.cyanAccent,
+                fontSize: 38,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Row(
+            children: [
+              Expanded(child: _probabilityBox('1', result.homeProbability)),
+              const SizedBox(width: 8),
+              Expanded(child: _probabilityBox('X', result.drawProbability)),
+              const SizedBox(width: 8),
+              Expanded(child: _probabilityBox('2', result.awayProbability)),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.cyanAccent.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.cyanAccent.withValues(alpha: 0.20),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Prediction Confidence: ${analysis.predictionConfidence}/100',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Data Confidence: ${analysis.dataConfidence}/100',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'xG: '
+                  '${analysis.expectedHomeGoals.toStringAsFixed(2)} - '
+                  '${analysis.expectedAwayGoals.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          const Text(
+            'MERCATI GOL',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              Expanded(
+                child: _probabilityBox('OVER 2.5', result.over25Probability),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _probabilityBox('UNDER 2.5', result.under25Probability),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(child: _probabilityBox('GOAL', result.goalProbability)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _probabilityBox('NO GOAL', result.noGoalProbability),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          const Divider(color: Colors.white12),
+
+          const SizedBox(height: 12),
+
+          const Text(
+            'VALUE DIEGO AI',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            result.valueBet,
+            style: const TextStyle(
+              color: Colors.cyanAccent,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _diegoAiUnavailableSection() {
+    return _sectionCard(
+      title: 'DIEGO AI',
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.orangeAccent, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Analisi DiegoAI non disponibile per questa partita. '
+              'L’analisi SmartBet resta comunque valida e utilizzabile.',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
@@ -802,7 +1142,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
-        title: const Text('Analisi GoalVdLine'),
+        title: const Text('SmartBet + DiegoAI'),
       ),
       body: AnimatedBuilder(
         animation: _bankroll,
@@ -848,7 +1188,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
               // PRONOSTICO
               // =================================================
               _sectionCard(
-                title: 'PRONOSTICO',
+                title: 'SMARTBET AI • PRONOSTICO',
                 child: Column(
                   children: [
                     Text(
@@ -880,6 +1220,19 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
               ),
 
               const SizedBox(height: 16),
+
+              if (widget.diegoAnalysis != null) ...[
+                _diegoAiSection(widget.diegoAnalysis!),
+                const SizedBox(height: 16),
+              ] else ...[
+                _diegoAiUnavailableSection(),
+                const SizedBox(height: 16),
+              ],
+
+              if (widget.engineComparison != null) ...[
+                _engineComparisonSection(widget.engineComparison!),
+                const SizedBox(height: 16),
+              ],
 
               // =================================================
               // QUOTE GOL

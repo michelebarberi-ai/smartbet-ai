@@ -12,6 +12,10 @@ import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_market_probability_service.dart';
+import '../services/dual_engine_analysis_service.dart';
+import '../widgets/dual_engine_summary.dart';
+
+enum _PredictionPeriod { today, next2Days, next3Days, custom }
 
 class PredictionScreen extends StatefulWidget {
   const PredictionScreen({super.key});
@@ -24,9 +28,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
+  final DualEngineAnalysisService _dualEngineService =
+      DualEngineAnalysisService();
 
   bool _loading = false;
   String? _error;
+
+  _PredictionPeriod _period = _PredictionPeriod.today;
+  DateTimeRange? _customPeriod;
 
   String _phase = '';
   int _processed = 0;
@@ -76,6 +85,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
   void dispose() {
     _oddsService.dispose();
     _aiService.dispose();
+    _dualEngineService.dispose();
     super.dispose();
   }
 
@@ -466,6 +476,165 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   // ============================================================
+  // PERIODO PARTITE
+  // ============================================================
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _shortDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month';
+  }
+
+  String get _periodLabel {
+    switch (_period) {
+      case _PredictionPeriod.today:
+        return 'Oggi';
+
+      case _PredictionPeriod.next2Days:
+        return '2 giorni';
+
+      case _PredictionPeriod.next3Days:
+        return 'Prossimi 3 giorni';
+
+      case _PredictionPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return 'Personalizzato';
+        }
+
+        return '${_shortDate(range.start)} - '
+            '${_shortDate(range.end)}';
+    }
+  }
+
+  List<DateTime> _selectedDates() {
+    final today = _dateOnly(DateTime.now());
+
+    switch (_period) {
+      case _PredictionPeriod.today:
+        return [today];
+
+      case _PredictionPeriod.next2Days:
+        return [today, today.add(const Duration(days: 1))];
+
+      case _PredictionPeriod.next3Days:
+        return List<DateTime>.generate(
+          3,
+          (index) => today.add(Duration(days: index)),
+        );
+
+      case _PredictionPeriod.custom:
+        final range = _customPeriod;
+
+        if (range == null) {
+          return [today];
+        }
+
+        final start = _dateOnly(range.start);
+        final end = _dateOnly(range.end);
+
+        final days = end.difference(start).inDays + 1;
+
+        return List<DateTime>.generate(
+          days,
+          (index) => start.add(Duration(days: index)),
+        );
+    }
+  }
+
+  Future<List<MatchModel>> _loadMatchesForSelectedPeriod() async {
+    final dates = _selectedDates();
+    final today = _dateOnly(DateTime.now());
+
+    final batches = await Future.wait(
+      dates.map((date) {
+        if (_dateOnly(date) == today) {
+          return MatchRepository.getTodayMatches();
+        }
+
+        return MatchRepository.getMatchesByDate(date);
+      }),
+    );
+
+    final unique = <int, MatchModel>{};
+
+    for (final batch in batches) {
+      for (final match in batch) {
+        unique[match.fixtureId] = match;
+      }
+    }
+
+    final matches = unique.values.toList();
+
+    matches.sort((a, b) {
+      try {
+        return DateTime.parse(a.date).compareTo(DateTime.parse(b.date));
+      } catch (_) {
+        return 0;
+      }
+    });
+
+    return matches;
+  }
+
+  Future<void> _selectCustomPeriod() async {
+    final today = _dateOnly(DateTime.now());
+
+    final initialRange =
+        _customPeriod ??
+        DateTimeRange(start: today, end: today.add(const Duration(days: 2)));
+
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 60)),
+      initialDateRange: initialRange,
+      helpText: 'Periodo risultati GoalVdLine',
+      saveText: 'CONFERMA',
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    final length =
+        _dateOnly(selected.end).difference(_dateOnly(selected.start)).inDays +
+        1;
+
+    if (length > 7) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Per ora puoi selezionare '
+            'un massimo di 7 giorni.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _period = _PredictionPeriod.custom;
+      _customPeriod = selected;
+
+      _results.clear();
+      _error = null;
+      _phase = '';
+      _processed = 0;
+      _total = 0;
+    });
+
+    await _generate();
+  }
+
+  // ============================================================
   // GENERAZIONE
   // ============================================================
 
@@ -484,7 +653,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     });
 
     try {
-      final allMatches = await MatchRepository.getTodayMatches();
+      final allMatches = await _loadMatchesForSelectedPeriod();
 
       final matches = allMatches
           .where(
@@ -798,6 +967,20 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
       final finalResults = _topSnapshot(qualified);
 
+      // DiegoAI viene eseguito solo sulle selezioni finali.
+      final enrichedFinalResults = <_DailyPick>[];
+
+      for (final item in finalResults) {
+        final dual = await _dualEngineService.attachDiego(
+          match: item.match,
+          smartBet: item.analysis,
+          smartBetMarket: item.market,
+          smartBetProbability: item.probability,
+        );
+
+        enrichedFinalResults.add(item.withDualAnalysis(dual));
+      }
+
       if (!mounted) {
         return;
       }
@@ -805,13 +988,13 @@ class _PredictionScreenState extends State<PredictionScreen> {
       setState(() {
         _results
           ..clear()
-          ..addAll(finalResults);
+          ..addAll(enrichedFinalResults);
         _loading = false;
         _phase = '';
 
         if (_results.isEmpty) {
           _error =
-              'GoalVdLine non ha trovato selezioni del giorno con qualità, '
+              'GoalVdLine non ha trovato selezioni nel periodo selezionato con qualità, '
               'Auditor e quota reale sufficienti.';
         }
       });
@@ -824,7 +1007,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
         _loading = false;
         _phase = '';
         _error =
-            'Non è stato possibile generare i risultati del giorno. '
+            'Non è stato possibile generare i risultati del periodo selezionato. '
             'Riprova tra poco.';
       });
     }
@@ -1060,6 +1243,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
               ),
             ],
           ),
+          if (item.dualAnalysis != null) ...[
+            const SizedBox(height: 12),
+            DualEngineSummary(analysis: item.dualAnalysis!),
+          ],
+
           const SizedBox(height: 14),
           const Row(
             children: [
@@ -1242,6 +1430,88 @@ class _PredictionScreenState extends State<PredictionScreen> {
     );
   }
 
+  Widget _periodSelector() {
+    Widget chip(_PredictionPeriod period, String label) {
+      final selected = _period == period;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        onSelected: _loading
+            ? null
+            : (_) async {
+                if (period == _PredictionPeriod.custom) {
+                  await _selectCustomPeriod();
+                  return;
+                }
+
+                if (_period == period) {
+                  return;
+                }
+
+                setState(() {
+                  _period = period;
+
+                  _results.clear();
+                  _error = null;
+                  _phase = '';
+                  _processed = 0;
+                  _total = 0;
+                });
+
+                await _generate();
+              },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PERIODO PARTITE',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(_PredictionPeriod.today, 'OGGI'),
+            chip(_PredictionPeriod.next2Days, '2 GIORNI'),
+            chip(_PredictionPeriod.next3Days, '3 GIORNI'),
+            chip(_PredictionPeriod.custom, 'PERSONALIZZATO'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Periodo selezionato: '
+          '$_periodLabel',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ============================================================
   // PROGRESS
   // ============================================================
@@ -1272,7 +1542,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
         break;
       default:
         title = 'Caricamento partite…';
-        subtitle = 'Preparazione del palinsesto di oggi.';
+        subtitle = 'Preparazione del palinsesto: $_periodLabel.';
     }
 
     final progress = _total > 0 ? (_processed / _total).clamp(0.0, 1.0) : null;
@@ -1342,7 +1612,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text(
-          'Risultati del Giorno GoalVdLine',
+          'Risultati GoalVdLine',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -1381,7 +1651,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -1389,7 +1659,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                       Icon(Icons.auto_awesome, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        'TOP 3 DEL GIORNO',
+                        'TOP 3 • ${_periodLabel.toUpperCase()}',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 17,
@@ -1400,7 +1670,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'GoalVdLine cerca le 3 selezioni più solide del giorno '
+                    'GoalVdLine cerca le 3 selezioni più solide nel periodo selezionato '
                     'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
                     'e quota bookmaker reale almeno 1.25.',
                     style: TextStyle(color: Colors.white, height: 1.35),
@@ -1408,6 +1678,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            _periodSelector(),
+
             if (_loading) ...[const SizedBox(height: 16), _progressCard()],
             if (_error != null && _results.isEmpty) ...[
               const SizedBox(height: 18),
@@ -1450,7 +1724,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   Text(
                     _loading
                         ? 'SELEZIONI PROVVISORIE • ${_results.length}/$_wantedResults'
-                        : 'LE 3 SELEZIONI DI OGGI',
+                        : 'LE 3 SELEZIONI • ${_periodLabel.toUpperCase()}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -1521,6 +1795,7 @@ class _DailyPick {
   final _ExactScoreEstimate exactPrimary;
   final _ExactScoreEstimate exactAlternative;
   final _ExactScoreEstimate exactThird;
+  final DualEngineAnalysis? dualAnalysis;
 
   const _DailyPick({
     required this.match,
@@ -1536,7 +1811,27 @@ class _DailyPick {
     required this.exactPrimary,
     required this.exactAlternative,
     required this.exactThird,
+    this.dualAnalysis,
   });
+
+  _DailyPick withDualAnalysis(DualEngineAnalysis value) {
+    return _DailyPick(
+      match: match,
+      analysis: analysis,
+      market: market,
+      probability: probability,
+      odd: odd,
+      bookmaker: bookmaker,
+      edge: edge,
+      expectedValue: expectedValue,
+      rankScore: rankScore,
+      auditStatus: auditStatus,
+      exactPrimary: exactPrimary,
+      exactAlternative: exactAlternative,
+      exactThird: exactThird,
+      dualAnalysis: value,
+    );
+  }
 }
 
 class _ExactScoreEstimate {
