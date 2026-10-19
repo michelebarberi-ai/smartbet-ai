@@ -243,115 +243,120 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
   // FILTRI PROFILO
   // ============================================================
-  bool _passesPrimary({
-    required int probability,
-    required int smartScore,
-    required double odd,
-    required double edge,
-    required double expectedValue,
-  }) {
+  bool _passesPrimary({required int probability, required int smartScore}) {
     final p = probability / 100.0;
 
     switch (_profile) {
       case _CouponProfile.complete:
-        return p >= 0.65 && smartScore >= 50 && odd >= 1.20 && odd <= 2.40;
+        return p >= 0.65 && smartScore >= 50;
+
       case _CouponProfile.balanced:
-        return p >= 0.55 &&
-            smartScore >= 45 &&
-            odd >= 1.25 &&
-            odd <= 3.50 &&
-            expectedValue >= -0.08;
       case _CouponProfile.rapid:
-        return p >= 0.55 &&
-            smartScore >= 45 &&
-            odd >= 1.20 &&
-            odd <= 3.50 &&
-            expectedValue >= -0.08;
+        return p >= 0.55 && smartScore >= 45;
     }
   }
 
-  bool _passesAdaptive({
-    required int probability,
-    required int smartScore,
-    required double odd,
-    required double edge,
-    required double expectedValue,
-  }) {
+  bool _passesAdaptive({required int probability, required int smartScore}) {
     final p = probability / 100.0;
 
     switch (_profile) {
       case _CouponProfile.complete:
-        return p >= 0.55 && smartScore >= 40 && odd >= 1.20 && odd <= 3.00;
+        return p >= 0.55 && smartScore >= 40;
+
       case _CouponProfile.balanced:
-        return p >= 0.45 &&
-            smartScore >= 35 &&
-            odd >= 1.20 &&
-            odd <= 4.00 &&
-            expectedValue >= -0.15;
       case _CouponProfile.rapid:
-        return p >= 0.45 &&
-            smartScore >= 35 &&
-            odd >= 1.20 &&
-            odd <= 4.00 &&
-            expectedValue >= -0.15;
+        return p >= 0.45 && smartScore >= 35;
     }
   }
 
-  double _rankScore({
-    required int probability,
-    required int smartScore,
-    required double odd,
-    required double edge,
-    required double expectedValue,
-  }) {
-    final probabilityScore = probability.toDouble();
-    final smartScoreValue = smartScore.toDouble();
-    final edgePoints = edge * 100.0;
-    final evPoints = expectedValue * 100.0;
+  double _rankScore({required int probability, required int smartScore}) {
+    // Ranking sportivo puro.
+    //
+    // Nessuna quota, probabilità implicita, edge o expected value
+    // può modificare la classifica delle selezioni.
+    return (probability * 0.55) + (smartScore * 0.45);
+  }
 
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return probabilityScore * 0.68 +
-            smartScoreValue * 0.22 +
-            evPoints.clamp(-10.0, 15.0).toDouble() * 0.10;
-      case _CouponProfile.balanced:
-      case _CouponProfile.rapid:
-        return probabilityScore * 0.50 +
-            smartScoreValue * 0.18 +
-            edgePoints.clamp(-10.0, 20.0).toDouble() * 0.12 +
-            evPoints.clamp(-15.0, 30.0).toDouble() * 0.20;
+  List<({String market, int probability})> _sportsMarketCandidates(
+    AnalysisResult analysis,
+  ) {
+    final probabilities = _markets(analysis);
+    final candidates = <({String market, int probability, int order})>[];
+
+    for (var index = 0; index < _marketOrder.length; index++) {
+      final market = _marketOrder[index];
+      final probability = probabilities[market] ?? 0;
+
+      if (probability <= 0) continue;
+
+      candidates.add((market: market, probability: probability, order: index));
     }
+
+    // Classifica puramente sportiva.
+    //
+    // Prima la probabilità stimata dal modello.
+    // _marketOrder interviene soltanto come spareggio deterministico.
+    candidates.sort((a, b) {
+      final probability = b.probability.compareTo(a.probability);
+      if (probability != 0) return probability;
+
+      return a.order.compareTo(b.order);
+    });
+
+    return candidates
+        .map(
+          (candidate) =>
+              (market: candidate.market, probability: candidate.probability),
+        )
+        .toList();
   }
 
   _CouponPick? _bestPickForMatch({
     required _PreCandidate preliminary,
     required FixtureMarketOdds? odds,
   }) {
-    final probabilities = _markets(preliminary.analysis);
-    final primary = <_CouponPick>[];
-    final adaptive = <_CouponPick>[];
+    // Ordine dei mercati deciso ESCLUSIVAMENTE dai dati sportivi.
+    final sportsCandidates = _sportsMarketCandidates(preliminary.analysis);
 
-    for (final market in _marketOrder) {
-      final probability = probabilities[market] ?? 0;
-      final bestOdd = odds?.oddFor(market);
+    if (sportsCandidates.isEmpty) {
+      return null;
+    }
 
-      if (probability <= 0 || bestOdd == null || bestOdd.odd < _minimumOdd) {
+    final smartScore = preliminary.analysis.smartScore;
+
+    for (final candidate in sportsCandidates) {
+      final market = candidate.market;
+      final probability = candidate.probability;
+
+      final primary = _passesPrimary(
+        probability: probability,
+        smartScore: smartScore,
+      );
+
+      final adaptive =
+          !primary &&
+          _passesAdaptive(probability: probability, smartScore: smartScore);
+
+      if (!primary && !adaptive) {
         continue;
       }
 
+      // Soltanto ora controlliamo se QUEL mercato, già ordinato
+      // sportivamente, è utilizzabile nella schedina.
+      final bestOdd = odds?.oddFor(market);
+
+      if (bestOdd == null || bestOdd.odd < _minimumOdd) {
+        continue;
+      }
+
+      // Value layer informativo.
+      // Edge ed EV NON cambiano mercato né ranking.
       final p = probability / 100.0;
       final impliedProbability = 1.0 / bestOdd.odd;
       final edge = p - impliedProbability;
       final expectedValue = (p * bestOdd.odd) - 1.0;
-      final score = _rankScore(
-        probability: probability,
-        smartScore: preliminary.analysis.smartScore,
-        odd: bestOdd.odd,
-        edge: edge,
-        expectedValue: expectedValue,
-      );
 
-      final pick = _CouponPick(
+      return _CouponPick(
         match: preliminary.match,
         analysis: preliminary.analysis,
         market: market,
@@ -360,60 +365,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         bookmaker: bestOdd.bookmakerName,
         edge: edge,
         expectedValue: expectedValue,
-        rankScore: score,
-        adaptive: false,
+        rankScore: _rankScore(probability: probability, smartScore: smartScore),
+        adaptive: adaptive,
       );
-
-      if (_passesPrimary(
-        probability: probability,
-        smartScore: preliminary.analysis.smartScore,
-        odd: bestOdd.odd,
-        edge: edge,
-        expectedValue: expectedValue,
-      )) {
-        primary.add(pick);
-        continue;
-      }
-
-      if (_passesAdaptive(
-        probability: probability,
-        smartScore: preliminary.analysis.smartScore,
-        odd: bestOdd.odd,
-        edge: edge,
-        expectedValue: expectedValue,
-      )) {
-        adaptive.add(
-          _CouponPick(
-            match: preliminary.match,
-            analysis: preliminary.analysis,
-            market: market,
-            probability: probability,
-            odd: bestOdd.odd,
-            bookmaker: bestOdd.bookmakerName,
-            edge: edge,
-            expectedValue: expectedValue,
-            rankScore: score,
-            adaptive: true,
-          ),
-        );
-      }
     }
-
-    int compare(_CouponPick a, _CouponPick b) {
-      final score = b.rankScore.compareTo(a.rankScore);
-      if (score != 0) return score;
-
-      final probability = b.probability.compareTo(a.probability);
-      if (probability != 0) return probability;
-
-      return (b.odd ?? 0).compareTo(a.odd ?? 0);
-    }
-
-    primary.sort(compare);
-    adaptive.sort(compare);
-
-    if (primary.isNotEmpty) return primary.first;
-    if (adaptive.isNotEmpty) return adaptive.first;
 
     return null;
   }
@@ -423,88 +378,43 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
   }) {
-    final preliminary = _PreCandidate(
-      match: match,
-      analysis: analysis,
-      bestProbability: _bestStatisticalProbability(analysis),
-    );
+    // In modalità manuale la partita è scelta dall'utente.
+    //
+    // Mostriamo quindi sempre il mercato statisticamente migliore,
+    // indipendentemente dalla disponibilità o dal livello della quota.
+    final sportsCandidates = _sportsMarketCandidates(analysis);
 
-    // Se la partita supera i normali criteri GoalVdLine,
-    // manteniamo la stessa scelta usata dalla modalità automatica.
-    final qualified = _bestPickForMatch(preliminary: preliminary, odds: odds);
-
-    if (qualified != null) {
-      return qualified;
-    }
-
-    // In modalità manuale la partita è stata scelta dall'utente:
-    // se non supera i criteri automatici NON viene nascosta.
-    final probabilities = _markets(analysis);
-
-    String? strongestMarket;
-    var strongestProbability = 0;
-
-    String? strongestQuotedMarket;
-    var strongestQuotedProbability = 0;
-
-    for (final market in _marketOrder) {
-      final probability = probabilities[market] ?? 0;
-
-      if (probability > strongestProbability) {
-        strongestProbability = probability;
-        strongestMarket = market;
-      }
-
-      final quote = odds?.oddFor(market);
-
-      if (quote != null &&
-          quote.odd >= _minimumOdd &&
-          probability > strongestQuotedProbability) {
-        strongestQuotedProbability = probability;
-        strongestQuotedMarket = market;
-      }
-    }
-
-    final bestMarket = strongestQuotedMarket ?? strongestMarket;
-
-    if (bestMarket == null) {
+    if (sportsCandidates.isEmpty) {
       return null;
     }
 
-    final bestProbability = strongestQuotedMarket != null
-        ? strongestQuotedProbability
-        : strongestProbability;
+    final sportsChoice = sportsCandidates.first;
+    final market = sportsChoice.market;
+    final probability = sportsChoice.probability;
 
-    if (bestProbability <= 0) {
-      return null;
-    }
-
-    final quote = odds?.oddFor(bestMarket);
+    final quote = odds?.oddFor(market);
     final odd = quote?.odd;
 
     final edge = odd == null || odd <= 0
         ? 0.0
-        : (bestProbability / 100.0) - (1.0 / odd);
+        : (probability / 100.0) - (1.0 / odd);
 
     final expectedValue = odd == null || odd <= 0
         ? 0.0
-        : ((bestProbability / 100.0) * odd) - 1.0;
+        : ((probability / 100.0) * odd) - 1.0;
 
     return _CouponPick(
       match: match,
       analysis: analysis,
-      market: bestMarket,
-      probability: bestProbability,
+      market: market,
+      probability: probability,
       odd: odd,
       bookmaker: quote?.bookmakerName ?? 'Quota non disponibile',
       edge: edge,
       expectedValue: expectedValue,
       rankScore: _rankScore(
-        probability: bestProbability,
+        probability: probability,
         smartScore: analysis.smartScore,
-        odd: odd ?? 0.0,
-        edge: edge,
-        expectedValue: expectedValue,
       ),
       adaptive: false,
       auditorStatus: 'NON VERIFICATO',
@@ -562,16 +472,49 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return false;
   }
 
-  int _advancedShortlistSize(int available) {
-    // PATCH 02V — COST CONTROL
+  double _preliminaryRankScore(_PreCandidate candidate) {
+    // Screening puramente sportivo.
     //
-    // 5 risultati  -> max 6 analisi AI
-    // 10 risultati -> max 12 analisi AI
-    // 15 risultati -> max 17 analisi AI
-    final reserve = _count >= 10 ? 2 : 1;
-    final desired = _count + reserve;
+    // Le quote NON devono influenzare l'accesso all'analisi avanzata.
+    // Combiniamo la probabilità del mercato statistico migliore con
+    // l'affidabilità generale del quadro espressa dallo Smart Score.
+    return (candidate.bestProbability * 0.55) +
+        (candidate.analysis.smartScore * 0.45);
+  }
 
-    return math.min(available, desired);
+  int _advancedShortlistSize(int available) {
+    // v1.2.1 RELIABILITY
+    //
+    // La vecchia shortlist era troppo stretta:
+    // 5 risultati  -> 6 analisi avanzate
+    // 10 risultati -> 12
+    // 15 risultati -> 17
+    //
+    // Manteniamo un limite per controllare i costi, ma lasciamo
+    // all'analisi avanzata un vero pool tra cui scegliere.
+
+    int desired;
+    int hardCap;
+
+    switch (_profile) {
+      case _CouponProfile.complete:
+        desired = math.max(18, (_count * 2) + 6);
+        hardCap = 40;
+        break;
+
+      case _CouponProfile.balanced:
+        desired = math.max(14, (_count * 2) + 2);
+        hardCap = 32;
+        break;
+
+      case _CouponProfile.rapid:
+        desired = math.max(10, _count + 5);
+        hardCap = 20;
+        break;
+    }
+
+    final capped = math.min(desired, hardCap);
+    return math.min(available, capped);
   }
 
   int _presentationCompare(_CouponPick a, _CouponPick b) {
@@ -991,8 +934,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           )
           .toList();
 
-      matches.sort((a, b) => b.aiWeight.compareTo(a.aiWeight));
-
       if (!mounted) return;
 
       if (matches.isEmpty) {
@@ -1006,9 +947,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
 
       // Fase 1: pre-analisi locale economica. Nessuna analisi SmartBet avanzata qui.
-      final maximumToScan = _profile == _CouponProfile.rapid
-          ? math.min(matches.length, math.max(60, _count * 6))
-          : math.min(matches.length, 120);
+      final maximumToScan = matches.length;
       final preliminaryBatchSize = _profile == _CouponProfile.rapid ? 10 : 6;
       final preliminary = <_PreCandidate>[];
 
@@ -1055,12 +994,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
 
       preliminary.sort((a, b) {
+        final rank = _preliminaryRankScore(
+          b,
+        ).compareTo(_preliminaryRankScore(a));
+
+        if (rank != 0) return rank;
+
         final probability = b.bestProbability.compareTo(a.bestProbability);
         if (probability != 0) return probability;
 
         final smart = b.analysis.smartScore.compareTo(a.analysis.smartScore);
         if (smart != 0) return smart;
 
+        // Il peso del campionato resta soltanto un ultimo spareggio.
+        // Non decide più quali partite vengono analizzate.
         return b.match.aiWeight.compareTo(a.match.aiWeight);
       });
 
@@ -1075,76 +1022,23 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return;
       }
 
-      // Fase 2: QUOTE REALI PRIMA di OpenAI.
+      // Fase 2: shortlist sportiva PRIMA delle quote.
+      //
+      // Le candidate che accedono all'analisi avanzata vengono scelte
+      // esclusivamente dal ranking statistico preliminare.
+      // La disponibilità o il valore della quota NON può più impedirne
+      // l'accesso all'analisi AI.
       final advancedCount = _advancedShortlistSize(preliminary.length);
-      // 02V: nessuna coda AI nascosta oltre il limite previsto.
-      final quoteTarget = math.min(preliminary.length, advancedCount);
 
-      final quoteQualified = <_PreCandidate>[];
-      final quoteCache = <int, FixtureMarketOdds?>{};
-
-      if (!mounted) return;
-
-      setState(() {
-        _phase = 'odds';
-        _oddsProcessed = 0;
-        _oddsTotal = preliminary.length;
-      });
-
-      final preQuoteBatchSize = _profile == _CouponProfile.rapid ? 8 : 6;
-
-      for (
-        var start = 0;
-        start < preliminary.length && quoteQualified.length < quoteTarget;
-        start += preQuoteBatchSize
-      ) {
-        final end = math.min(start + preQuoteBatchSize, preliminary.length);
-        final batch = preliminary.sublist(start, end);
-
-        final checked = await Future.wait(
-          batch.map((candidate) async {
-            try {
-              final odds = await _oddsService.getFixtureMarketOdds(
-                fixtureId: candidate.match.fixtureId,
-              );
-
-              if (!_hasRealQuotedMarket(odds)) return null;
-
-              quoteCache[candidate.match.fixtureId] = odds;
-              return candidate;
-            } catch (_) {
-              _errors++;
-              return null;
-            }
-          }),
-        );
-
-        quoteQualified.addAll(checked.whereType<_PreCandidate>());
-
-        if (!mounted) return;
-        setState(() {
-          _oddsProcessed = end;
-        });
-      }
-
-      if (quoteQualified.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _loading = false;
-          _phase = '';
-          _error =
-              'Nessuna candidata dispone di quote reali sufficienti per i mercati GoalVdLine.';
-        });
-        return;
-      }
-
-      final advancedShortlist = quoteQualified
-          .take(math.min(advancedCount, quoteQualified.length))
+      final advancedShortlist = preliminary
+          .take(math.min(advancedCount, preliminary.length))
           .toList();
 
-      final reserveQuoted = quoteQualified
+      final reservePreliminary = preliminary
           .skip(advancedShortlist.length)
           .toList();
+
+      final quoteCache = <int, FixtureMarketOdds?>{};
 
       final audited = <_PreCandidate>[];
       var auditRejected = 0;
@@ -1260,6 +1154,87 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         if (probability != 0) return probability;
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
+
+      // Fase 4: quote soltanto DOPO l'analisi avanzata.
+      //
+      // Controlliamo tutte le candidate avanzate e una riserva limitata.
+      // Le quote servono da questo punto in avanti per fattibilità/value,
+      // non per decidere chi merita l'analisi avanzata.
+      final reserveQuoteLimit = math.min(
+        reservePreliminary.length,
+        math.max(_count * 2, 10),
+      );
+
+      final reserveQuoteProbe = reservePreliminary
+          .take(reserveQuoteLimit)
+          .toList();
+
+      final quoteCandidates = <_PreCandidate>[...audited, ...reserveQuoteProbe];
+
+      final quoteBatchSize = _profile == _CouponProfile.rapid ? 8 : 6;
+
+      if (!mounted) return;
+
+      setState(() {
+        _phase = 'odds';
+        _oddsProcessed = 0;
+        _oddsTotal = quoteCandidates.length;
+      });
+
+      for (
+        var start = 0;
+        start < quoteCandidates.length;
+        start += quoteBatchSize
+      ) {
+        final end = math.min(start + quoteBatchSize, quoteCandidates.length);
+        final batch = quoteCandidates.sublist(start, end);
+
+        await Future.wait(
+          batch.map((candidate) async {
+            try {
+              final odds = await _oddsService.getFixtureMarketOdds(
+                fixtureId: candidate.match.fixtureId,
+              );
+
+              if (_hasRealQuotedMarket(odds)) {
+                quoteCache[candidate.match.fixtureId] = odds;
+              }
+            } catch (_) {
+              _errors++;
+            }
+          }),
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _oddsProcessed = end;
+        });
+      }
+
+      final reserveQuoted = reserveQuoteProbe
+          .where(
+            (candidate) => quoteCache.containsKey(candidate.match.fixtureId),
+          )
+          .toList();
+
+      final hasAdvancedQuotedCandidate = audited.any(
+        (candidate) => quoteCache.containsKey(candidate.match.fixtureId),
+      );
+
+      if (!hasAdvancedQuotedCandidate && reserveQuoted.isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          _loading = false;
+          _phase = '';
+          _error =
+              'Nessuna candidata dispone di quote reali sufficienti '
+              'per i mercati GoalVdLine.';
+        });
+
+        return;
+      }
 
       final qualified = <_CouponPick>[];
 
@@ -1393,10 +1368,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
 
       qualified.sort((a, b) {
-        if (a.adaptive != b.adaptive) {
-          return a.adaptive ? 1 : -1;
-        }
-
         final score = b.rankScore.compareTo(a.rankScore);
         if (score != 0) return score;
 
@@ -1593,10 +1564,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final ranked = List<_CouponPick>.of(source);
 
     ranked.sort((a, b) {
-      if (a.adaptive != b.adaptive) {
-        return a.adaptive ? 1 : -1;
-      }
-
       final score = b.rankScore.compareTo(a.rankScore);
       if (score != 0) return score;
 
