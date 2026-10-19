@@ -2,6 +2,20 @@ class AnalysisResult {
   final int smartScore;
 
   // ============================================================
+  // CONFIDENCE LAYERS
+  // ============================================================
+
+  /// Quanto il motore si fida della propria previsione.
+  ///
+  /// Non è la probabilità dell'evento.
+  final int predictionConfidence;
+
+  /// Qualità / completezza dei dati disponibili per l'analisi.
+  ///
+  /// Non dipende dalle quote.
+  final int dataConfidence;
+
+  // ============================================================
   // PROBABILITÀ 1X2
   // ============================================================
 
@@ -71,6 +85,9 @@ class AnalysisResult {
 
   const AnalysisResult({
     required this.smartScore,
+
+    this.predictionConfidence = 0,
+    this.dataConfidence = 0,
 
     required this.homeProbability,
     required this.drawProbability,

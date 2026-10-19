@@ -299,6 +299,10 @@ class SmartBetAiService {
     if (dossier == null) {
       return AnalysisResult(
         smartScore: baseResult.smartScore,
+        predictionConfidence: baseResult.predictionConfidence > 0
+            ? baseResult.predictionConfidence
+            : baseResult.smartScore,
+        dataConfidence: baseResult.dataConfidence,
         homeProbability: baseResult.homeProbability,
         drawProbability: baseResult.drawProbability,
         awayProbability: baseResult.awayProbability,
@@ -906,6 +910,8 @@ class SmartBetAiService {
 
     final predictionResult = AnalysisResult(
       smartScore: confidence,
+      predictionConfidence: confidence,
+      dataConfidence: dossierConfidence,
       homeProbability: homeProbability,
       drawProbability: drawProbability,
       awayProbability: awayProbability,
@@ -1185,6 +1191,8 @@ $finalVerdict
 
     return AnalysisResult(
       smartScore: confidence,
+      predictionConfidence: confidence,
+      dataConfidence: dossierConfidence,
 
       homeProbability: homeProbability,
 

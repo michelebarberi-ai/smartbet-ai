@@ -204,6 +204,8 @@ class _SmartBetCacheEntry {
 Map<String, dynamic> _resultToJson(AnalysisResult result) {
   return {
     'smartScore': result.smartScore,
+    'predictionConfidence': result.predictionConfidence,
+    'dataConfidence': result.dataConfidence,
     'homeProbability': result.homeProbability,
     'drawProbability': result.drawProbability,
     'awayProbability': result.awayProbability,
@@ -233,6 +235,10 @@ Map<String, dynamic> _resultToJson(AnalysisResult result) {
 AnalysisResult _resultFromJson(Map<String, dynamic> json) {
   return AnalysisResult(
     smartScore: _toInt(json['smartScore']),
+    predictionConfidence: json.containsKey('predictionConfidence')
+        ? _toInt(json['predictionConfidence'])
+        : _toInt(json['smartScore']),
+    dataConfidence: _toInt(json['dataConfidence']),
     homeProbability: _toInt(json['homeProbability']),
     drawProbability: _toInt(json['drawProbability']),
     awayProbability: _toInt(json['awayProbability']),
