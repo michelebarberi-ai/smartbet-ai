@@ -9,6 +9,7 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
+import '../services/smartbet_reliability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
@@ -71,6 +72,12 @@ class _CouponPick {
     this.auditorStatus = 'NON VERIFICATO',
     this.dualAnalysis,
   });
+
+  int? get reliabilityScore => SmartBetReliabilityService.score(
+    analysis: analysis,
+    market: market,
+    probability: probability,
+  );
 
   _CouponPick withDualAnalysis(DualEngineAnalysis value) {
     return _CouponPick(
@@ -687,10 +694,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
 
   bool _isUpcoming(MatchModel match) {
+    final status = match.statusShort.trim().toUpperCase();
+
+    // Se l'API conosce lo stato, accettiamo soltanto fixture
+    // non ancora iniziate.
+    //
+    // FT / LIVE / HT / 1H / 2H / PST / CANC / ABD ecc.
+    // non devono mai arrivare alla pipeline predittiva.
+    if (status.isNotEmpty && status != 'NS') {
+      return false;
+    }
+
     try {
-      return DateTime.parse(match.date).toLocal().isAfter(DateTime.now());
+      final kickoff = DateTime.parse(match.date).toLocal();
+      return kickoff.isAfter(DateTime.now());
     } catch (_) {
-      return true;
+      // Fail closed: una data non interpretabile non è sicura
+      // per un'analisi pre-match.
+      return false;
     }
   }
 
@@ -701,7 +722,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   Future<void> _analyzeManualCoupon() async {
     if (_loading) return;
 
-    final matches = _manualSelectedMatches.values.toList();
+    final matches = _manualSelectedMatches.values.where(_isUpcoming).toList();
 
     if (matches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1367,15 +1388,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
       }
 
-      qualified.sort((a, b) {
-        final score = b.rankScore.compareTo(a.rankScore);
-        if (score != 0) return score;
+      // v1.2.1 — Ranking sportivo Reliability-first.
+      //
+      // Nessuna quota, edge o EV entra in questo ordinamento.
+      // L'Auditor resta uno strato successivo di fattibilità.
+      qualified.sort(_reliabilityRankingCompare);
 
-        final probability = b.probability.compareTo(a.probability);
-        if (probability != 0) return probability;
-
-        return b.analysis.smartScore.compareTo(a.analysis.smartScore);
-      });
+      // v1.2.1 — confronto shadow:
+      // mostra cosa cambierebbe ordinando per Reliability,
+      // senza modificare la schedina reale.
+      _logReliabilityRankingShadow(qualified);
 
       // Verifica locale finale di fattibilità:
       // controlla prima SOLO le vere finaliste.
@@ -1473,6 +1495,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
 
       final selected = feasible.take(_count).toList();
+
+      // v1.2.1 — Reliability shadow:
+      // osserva i valori senza modificare mercato, ranking o schedina.
+      _logReliabilityShadow(selected);
+
       final adaptiveCount = selected.where((e) => e.adaptive).length;
 
       // La qualità decide CHI entra. Paese/competizione/orario decidono solo
@@ -1558,6 +1585,221 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     return 'Si è verificato un problema durante la creazione della schedina.';
+  }
+
+  int _reliabilityRankingCompare(_CouponPick a, _CouponPick b) {
+    final reliabilityA = a.reliabilityScore;
+    final reliabilityB = b.reliabilityScore;
+
+    // Quando entrambi hanno Reliability reale, questa è il
+    // criterio sportivo principale.
+    if (reliabilityA != null && reliabilityB != null) {
+      final reliability = reliabilityB.compareTo(reliabilityA);
+      if (reliability != 0) return reliability;
+
+      final probability = b.probability.compareTo(a.probability);
+      if (probability != 0) return probability;
+
+      final smartScore = b.analysis.smartScore.compareTo(a.analysis.smartScore);
+      if (smartScore != 0) return smartScore;
+
+      final oldScore = b.rankScore.compareTo(a.rankScore);
+      if (oldScore != 0) return oldScore;
+
+      return a.match.fixtureId.compareTo(b.match.fixtureId);
+    }
+
+    // Una Reliability misurata viene preferita a una candidata
+    // la cui affidabilità è N/D.
+    if (reliabilityA != null) return -1;
+    if (reliabilityB != null) return 1;
+
+    // Se Reliability non è disponibile per entrambe, manteniamo
+    // il comportamento precedente come fallback sicuro.
+    final oldScore = b.rankScore.compareTo(a.rankScore);
+    if (oldScore != 0) return oldScore;
+
+    final probability = b.probability.compareTo(a.probability);
+    if (probability != 0) return probability;
+
+    final smartScore = b.analysis.smartScore.compareTo(a.analysis.smartScore);
+    if (smartScore != 0) return smartScore;
+
+    return a.match.fixtureId.compareTo(b.match.fixtureId);
+  }
+
+  void _logReliabilityRankingShadow(List<_CouponPick> source) {
+    if (source.isEmpty) return;
+
+    final currentRanking = List<_CouponPick>.of(source);
+
+    currentRanking.sort((a, b) {
+      final score = b.rankScore.compareTo(a.rankScore);
+      if (score != 0) return score;
+
+      final probability = b.probability.compareTo(a.probability);
+      if (probability != 0) return probability;
+
+      return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+    });
+
+    final reliabilityRanking = List<_CouponPick>.of(source);
+
+    reliabilityRanking.sort(_reliabilityRankingCompare);
+
+    // Simuliamo anche l'Auditor su ENTRAMBI i ranking.
+    //
+    // È solo diagnostica: non modifica qualified, feasible
+    // né la schedina realmente generata.
+    List<_CouponPick> auditedTop(List<_CouponPick> ranking) {
+      final top = <_CouponPick>[];
+
+      for (final item in ranking) {
+        final audit = SmartBetLocalAuditor.evaluate(
+          analysis: item.analysis,
+          market: item.market,
+          probability: item.probability,
+          odd: item.odd ?? 0.0,
+        );
+
+        if (audit.isBlocked || audit.blocksMarket(item.market)) {
+          continue;
+        }
+
+        top.add(item);
+
+        if (top.length >= _count) {
+          break;
+        }
+      }
+
+      return top;
+    }
+
+    final currentTop = auditedTop(currentRanking);
+    final reliabilityTop = auditedTop(reliabilityRanking);
+
+    String keyOf(_CouponPick item) =>
+        '${item.match.fixtureId}|${item.market.trim().toUpperCase()}';
+
+    final currentIds = currentTop.map(keyOf).toSet();
+    final reliabilityIds = reliabilityTop.map(keyOf).toSet();
+
+    final overlap = currentIds.intersection(reliabilityIds).length;
+
+    debugPrint('');
+    debugPrint('========================================');
+    debugPrint('SMARTBET RELIABILITY RANKING SHADOW');
+    debugPrint('========================================');
+    debugPrint(
+      'Overlap POST-AUDITOR: $overlap/${currentTop.length} '
+      '| candidate: ${source.length}',
+    );
+
+    debugPrint('');
+    debugPrint('--- TOP ATTUALE ---');
+
+    for (var index = 0; index < currentTop.length; index++) {
+      final item = currentTop[index];
+
+      debugPrint(
+        '${index + 1}. ${item.match.homeTeam} - ${item.match.awayTeam} '
+        '| ${item.market} '
+        '| P ${item.probability} '
+        '| REL ${item.reliabilityScore ?? -1} '
+        '| OLD ${item.rankScore.toStringAsFixed(1)}',
+      );
+    }
+
+    debugPrint('');
+    debugPrint('--- TOP RELIABILITY ---');
+
+    for (var index = 0; index < reliabilityTop.length; index++) {
+      final item = reliabilityTop[index];
+
+      debugPrint(
+        '${index + 1}. ${item.match.homeTeam} - ${item.match.awayTeam} '
+        '| ${item.market} '
+        '| P ${item.probability} '
+        '| REL ${item.reliabilityScore ?? -1} '
+        '| OLD ${item.rankScore.toStringAsFixed(1)}',
+      );
+    }
+
+    final entering = reliabilityTop
+        .where((item) => !currentIds.contains(keyOf(item)))
+        .toList();
+
+    final leaving = currentTop
+        .where((item) => !reliabilityIds.contains(keyOf(item)))
+        .toList();
+
+    debugPrint('');
+    debugPrint('--- DIFFERENZE ---');
+
+    if (entering.isEmpty && leaving.isEmpty) {
+      debugPrint('Nessun cambio nelle partite selezionate.');
+    } else {
+      for (final item in entering) {
+        debugPrint(
+          'ENTRA: ${item.match.homeTeam} - ${item.match.awayTeam} '
+          '| ${item.market} '
+          '| P ${item.probability} '
+          '| REL ${item.reliabilityScore ?? -1}',
+        );
+      }
+
+      for (final item in leaving) {
+        debugPrint(
+          'ESCE: ${item.match.homeTeam} - ${item.match.awayTeam} '
+          '| ${item.market} '
+          '| P ${item.probability} '
+          '| REL ${item.reliabilityScore ?? -1}',
+        );
+      }
+    }
+
+    debugPrint('========================================');
+  }
+
+  void _logReliabilityShadow(List<_CouponPick> selected) {
+    if (selected.isEmpty) return;
+
+    debugPrint('');
+    debugPrint('========================================');
+    debugPrint('SMARTBET RELIABILITY SHADOW');
+    debugPrint('========================================');
+
+    for (final item in selected) {
+      debugPrint('');
+      debugPrint(
+        '${item.match.homeTeam} - ${item.match.awayTeam} '
+        '| DATA ${item.analysis.dataConfidence} '
+        '| PRED ${item.analysis.predictionConfidence}',
+      );
+
+      final candidates = _sportsMarketCandidates(item.analysis);
+
+      for (final candidate in candidates.take(6)) {
+        final reliability = SmartBetReliabilityService.score(
+          analysis: item.analysis,
+          market: candidate.market,
+          probability: candidate.probability,
+        );
+
+        final marker = candidate.market == item.market ? ' ★ SELEZIONATO' : '';
+
+        debugPrint(
+          '${candidate.market.padRight(22)} '
+          'P ${candidate.probability.toString().padLeft(3)} '
+          'REL ${(reliability?.toString() ?? 'N/D').padLeft(3)}'
+          '$marker',
+        );
+      }
+    }
+
+    debugPrint('');
+    debugPrint('========================================');
   }
 
   List<_CouponPick> _liveSelectionSnapshot(List<_CouponPick> source) {

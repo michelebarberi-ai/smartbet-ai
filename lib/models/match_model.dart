@@ -27,6 +27,11 @@ class MatchModel {
 
   final String date;
 
+  /// Stato reale della fixture restituito dall'API.
+  /// Esempi: NS, 1H, HT, 2H, FT, PST, CANC.
+  final String statusShort;
+  final String statusLong;
+
   final String leagueType;
 
   final bool isEuropeanCup;
@@ -67,6 +72,8 @@ class MatchModel {
     required this.country,
     required this.countryCode,
     required this.date,
+    this.statusShort = '',
+    this.statusLong = '',
     required this.leagueType,
     required this.isEuropeanCup,
     required this.isFriendly,
@@ -95,6 +102,7 @@ class MatchModel {
     double aiWeight = 0.70,
   }) {
     final fixture = json["fixture"] ?? {};
+    final status = fixture["status"] ?? {};
 
     final teams = json["teams"] ?? {};
 
@@ -142,6 +150,9 @@ class MatchModel {
       // DATA
       // ========================================================
       date: fixture["date"] ?? "",
+
+      statusShort: status["short"]?.toString().trim().toUpperCase() ?? "",
+      statusLong: status["long"]?.toString().trim() ?? "",
 
       // ========================================================
       // TIPO COMPETIZIONE
