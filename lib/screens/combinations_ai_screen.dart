@@ -12,6 +12,7 @@ import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
+import '../services/smartbet_reliability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
@@ -69,6 +70,12 @@ class _CombinationCandidate {
     this.familyOptions = const [],
     this.dualAnalysis,
   });
+
+  int? get reliabilityScore => SmartBetReliabilityService.score(
+    analysis: analysis,
+    market: market,
+    probability: probability,
+  );
 
   _CombinationCandidate withDualAnalysis(DualEngineAnalysis value) {
     return _CombinationCandidate(
@@ -294,56 +301,45 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
-  String _auditStatus(AnalysisResult analysis) {
-    final explanation = analysis.explanation.toUpperCase();
-    final risk = analysis.risk.toUpperCase();
-
-    if (explanation.contains('STATO: STRONG_CONTRADICTION') ||
-        risk.contains('FORTE DISCORDANZA')) {
-      return 'STRONG_CONTRADICTION';
-    }
-
-    if (explanation.contains('STATO: DOUBT') ||
-        risk.contains('AUDITOR: CON RISERVA')) {
-      return 'DOUBT';
-    }
-
-    return 'CONFIRM';
-  }
-
-  bool _auditStrongContradiction(AnalysisResult analysis) {
-    return _auditStatus(analysis) == 'STRONG_CONTRADICTION';
-  }
-
-  bool _auditDoubt(AnalysisResult analysis) {
-    return _auditStatus(analysis) == 'DOUBT';
-  }
-
-  double _auditPenalty(AnalysisResult analysis) {
-    if (_auditStrongContradiction(analysis)) return 14.0;
-    if (_auditDoubt(analysis)) return 6.0;
-    return 0.0;
-  }
-
   int _advancedShortlistSize(int available) {
-    final reserve = math.max(4, (_topCount * 0.50).ceil());
-    final desired = math.min(30, math.max(10, _topCount + reserve));
+    // v1.2.1 — la deep analysis deve vedere un pool abbastanza ampio
+    // da poter correggere il ranking preliminare di SmartCore.
+    //
+    // Top 5  -> fino a 20 candidate
+    // Top 10 -> fino a 30 candidate
+    // Top 15 -> massimo 30 candidate
+    final desired = math.min(30, math.max(18, (_topCount * 3) + 5));
     return math.min(available, desired);
   }
 
-  int _auditedCandidateCompare(
+  int _combinationSportsCompare(
     _CombinationCandidate a,
     _CombinationCandidate b,
   ) {
-    final adjustedProbabilityA = a.probability - _auditPenalty(a.analysis);
-    final adjustedProbabilityB = b.probability - _auditPenalty(b.analysis);
+    // Combinazioni AI: l'utente ha già scelto il mercato.
+    //
+    // La probabilità dell'evento richiesto resta quindi il criterio
+    // principale. Reliability serve a distinguere candidate con
+    // probabilità equivalente, senza far scavalcare una probabilità
+    // più alta da una più bassa.
+    final probability = b.probability.compareTo(a.probability);
+    if (probability != 0) return probability;
 
-    final probabilityCompare = adjustedProbabilityB.compareTo(
-      adjustedProbabilityA,
-    );
-    if (probabilityCompare != 0) return probabilityCompare;
+    final reliabilityA = a.reliabilityScore;
+    final reliabilityB = b.reliabilityScore;
 
-    return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+    if (reliabilityA != null && reliabilityB != null) {
+      final reliability = reliabilityB.compareTo(reliabilityA);
+      if (reliability != 0) return reliability;
+    } else {
+      if (reliabilityA != null) return -1;
+      if (reliabilityB != null) return 1;
+    }
+
+    final smartScore = b.analysis.smartScore.compareTo(a.analysis.smartScore);
+    if (smartScore != 0) return smartScore;
+
+    return a.match.fixtureId.compareTo(b.match.fixtureId);
   }
 
   // ============================================================
@@ -775,8 +771,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // ============================================================
 
   bool _isUpcoming(MatchModel match) {
+    final status = match.statusShort.trim().toUpperCase();
+
+    if (status.isNotEmpty && status != 'NS') {
+      return false;
+    }
+
     try {
-      return DateTime.parse(match.date).toLocal().isAfter(DateTime.now());
+      final kickoff = DateTime.parse(match.date).toLocal();
+      return kickoff.isAfter(DateTime.now());
     } catch (_) {
       return false;
     }
@@ -939,69 +942,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       } else {
         final isFamilyMarket = _isFamilyMarket(_selectedMarket);
 
-        List<_CombinationCandidate> advancedInput;
+        // v1.2.1 — admissione alla deep analysis esclusivamente sportiva.
+        //
+        // Anche OVER / UNDER / CASA SEGNA / OSPITE SEGNA vengono ammessi
+        // senza consultare quote o bookmaker.
+        final advancedCount = _advancedShortlistSize(allCandidates.length);
+        final advancedInput = allCandidates.take(advancedCount).toList();
 
-        if (isFamilyMarket) {
-          // Scorre le candidate finché trova abbastanza partite con almeno
-          // un sotto-mercato della famiglia realmente quotato >= 1.25.
-          final quoteScan = allCandidates;
-          final preQuoted = <_CombinationCandidate>[];
-          final targetQuoted = math.max(_topCount + 5, 10);
-
-          final preQuoteOddsService = OddsService();
-
-          try {
-            const quoteBatchSize = 6;
-
-            for (
-              var start = 0;
-              start < quoteScan.length && preQuoted.length < targetQuoted;
-              start += quoteBatchSize
-            ) {
-              final end = math.min(start + quoteBatchSize, quoteScan.length);
-              final batch = quoteScan.sublist(start, end);
-
-              final quotedBatch = await Future.wait(
-                batch.map((candidate) async {
-                  try {
-                    final marketOdds = await preQuoteOddsService
-                        .getFixtureMarketOdds(
-                          fixtureId: candidate.match.fixtureId,
-                        );
-
-                    return _bestFamilyQuotedCandidate(
-                      candidate: candidate,
-                      marketOdds: marketOdds,
-                      family: _selectedMarket,
-                    );
-                  } catch (_) {
-                    return null;
-                  }
-                }),
-              );
-
-              preQuoted.addAll(quotedBatch.whereType<_CombinationCandidate>());
-            }
-          } finally {
-            preQuoteOddsService.dispose();
-          }
-
-          advancedInput = preQuoted;
-        } else {
-          // Percorso originale per 1/X/2/1X/X2/12/GOAL/NO GOAL.
-          final advancedCount = _advancedShortlistSize(allCandidates.length);
-          advancedInput = allCandidates.take(advancedCount).toList();
-        }
-
-        // PATCH 02V — COST CONTROL
-        // Una sola AI principale su una shortlist molto piccola.
-        final smartAiReserve = _topCount >= 10 ? 2 : 1;
-        final smartAiLimit = math.min(
-          advancedInput.length,
-          _topCount + smartAiReserve,
-        );
-        advancedInput = advancedInput.take(smartAiLimit).toList();
-
+        // v1.2.1 — la shortlist definita sopra è già il limite di costo.
+        // Non applichiamo un secondo taglio basato sul numero finale richiesto:
+        // l'analisi avanzata deve poter rivalutare un pool realmente ampio.
         const advancedBatchSize = 4;
 
         for (
@@ -1052,30 +1002,29 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   return null;
                 }
 
-                final actualMarket = isFamilyMarket
-                    ? candidate.market
-                    : _selectedMarket;
+                // La deep analysis resta completamente odds-blind.
+                //
+                // Per un mercato-famiglia manteniamo la famiglia richiesta
+                // e ricalcoliamo tutte le sue varianti con il nuovo risultato.
+                final actualMarket = _selectedMarket;
 
                 final familyOptions = isFamilyMarket
-                    ? candidate.familyOptions
+                    ? _familyOptions(_selectedMarket)
                           .map(
                             (option) => _FamilyOptionDetail(
-                              market: option.market,
+                              market: option,
                               probability: _probabilityFor(
                                 advancedResult,
-                                option.market,
+                                option,
                               ),
-                              odd: option.odd,
-                              bookmaker: option.bookmaker,
                             ),
                           )
                           .toList(growable: false)
                     : const <_FamilyOptionDetail>[];
 
-                final probability = _probabilityFor(
-                  advancedResult,
-                  actualMarket,
-                );
+                final probability = isFamilyMarket
+                    ? _searchProbabilityFor(advancedResult, _selectedMarket)
+                    : _probabilityFor(advancedResult, actualMarket);
 
                 if (probability <= 0 ||
                     advancedResult.smartScore < _minimumSmartScore) {
@@ -1106,7 +1055,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           }
         }
 
-        candidatesForOdds.sort(_auditedCandidateCompare);
+        // v1.2.1 — Combinazioni: l'utente ha già scelto il mercato.
+        // Ordine sportivo: Probability -> Reliability -> Smart Score.
+        // Quote e Local Auditor restano strati successivi.
+        candidatesForOdds.sort(_combinationSportsCompare);
       }
 
       if (candidatesForOdds.isEmpty) {
@@ -1159,10 +1111,26 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             continue;
           }
 
-          if (item.odd != null &&
+          if (_isFamilyMarket(_selectedMarket)) {
+            // Le quote della famiglia entrano SOLO dopo la deep analysis.
+            final marketOdds = await oddsService.getFixtureMarketOdds(
+              fixtureId: item.match.fixtureId,
+            );
+
+            final executableFamilyCandidate = _bestFamilyQuotedCandidate(
+              candidate: item,
+              marketOdds: marketOdds,
+              family: _selectedMarket,
+            );
+
+            if (executableFamilyCandidate == null) {
+              continue;
+            }
+
+            validCandidates.add(executableFamilyCandidate);
+          } else if (item.odd != null &&
               item.odd! >= _minimumOdd &&
               item.bookmaker != null) {
-            // I mercati-famiglia sono già stati pre-quotati.
             validCandidates.add(item);
           } else {
             final marketOdds = await oddsService.getFixtureMarketOdds(
@@ -1184,6 +1152,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 probability: item.probability,
                 odd: bestOdd.odd,
                 bookmaker: bestOdd.bookmakerName,
+                familyOptions: item.familyOptions,
               ),
             );
           }
