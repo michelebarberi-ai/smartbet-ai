@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/user_profile_store.dart';
 import '../services/dashboard_store.dart';
+import '../services/smartbet_analysis_comparison_store.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
 import '../widgets/ai_card.dart';
@@ -70,6 +71,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final SmartBetAnalysisHistoryStore _analysisHistory =
       SmartBetAnalysisHistoryStore.instance;
 
+  final SmartBetAnalysisComparisonStore _comparisonStore =
+      SmartBetAnalysisComparisonStore.instance;
+
   late final SmartBetAnalysisResultResolver _analysisResolver;
 
   @override
@@ -84,7 +88,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshAnalysisHistory() async {
     try {
-      await _analysisHistory.initialize();
+      await Future.wait([
+        _analysisHistory.initialize(),
+        _comparisonStore.initialize(),
+      ]);
+
       await _analysisResolver.resolvePending();
     } catch (e) {
       debugPrint('ANALYSIS HISTORY REFRESH ERROR: $e');
@@ -241,6 +249,193 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _comparisonOutcome({
+    required String label,
+    required int value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.035),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style: TextStyle(
+                color: color,
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 10.5,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _directComparisonCard(SmartBetAnalysisComparisonStats stats) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.compare_arrows, color: Colors.purpleAccent, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'CONFRONTO DIRETTO',
+                style: TextStyle(
+                  color: Colors.purpleAccent,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'SmartBet e Diego vengono confrontati solo quando '
+            'le due previsioni appartengono alla stessa analisi '
+            'e sono entrambe verificabili.',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.35),
+          ),
+          const SizedBox(height: 17),
+
+          if (stats.linkedPairs == 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.035),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: const Text(
+                'Il confronto inizierà con le prossime analisi '
+                'SmartBet + Diego registrate insieme.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11.5,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                _analysisMetric(
+                  label: 'Coppie',
+                  value: '${stats.linkedPairs}',
+                  color: Colors.white,
+                ),
+                _analysisMetric(
+                  label: 'Confrontabili',
+                  value: '${stats.comparablePairs}',
+                  color: Colors.white70,
+                ),
+                _analysisMetric(
+                  label: 'In attesa',
+                  value: '${stats.pendingPairs}',
+                  color: stats.pendingPairs > 0
+                      ? Colors.orangeAccent
+                      : Colors.white54,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 17),
+
+            Row(
+              children: [
+                _comparisonOutcome(
+                  label: 'Entrambi\ncorretti',
+                  value: stats.bothCorrect,
+                  color: Colors.greenAccent,
+                ),
+                const SizedBox(width: 9),
+                _comparisonOutcome(
+                  label: 'Solo\nSmartBet',
+                  value: stats.smartBetOnlyCorrect,
+                  color: const Color(0xFF00C853),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 9),
+
+            Row(
+              children: [
+                _comparisonOutcome(
+                  label: 'Solo\nDiego',
+                  value: stats.diegoOnlyCorrect,
+                  color: Colors.lightBlueAccent,
+                ),
+                const SizedBox(width: 9),
+                _comparisonOutcome(
+                  label: 'Entrambi\nerrati',
+                  value: stats.bothWrong,
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 17),
+
+            Row(
+              children: [
+                _analysisMetric(
+                  label: 'Precisione SmartBet',
+                  value: '${stats.smartBetAccuracy.toStringAsFixed(1)}%',
+                  color: const Color(0xFF00C853),
+                ),
+                _analysisMetric(
+                  label: 'Precisione Diego',
+                  value: '${stats.diegoAccuracy.toStringAsFixed(1)}%',
+                  color: Colors.lightBlueAccent,
+                ),
+              ],
+            ),
+
+            if (stats.unsupportedPairs > 0) ...[
+              const SizedBox(height: 13),
+              Text(
+                '${stats.unsupportedPairs} coppie non verificabili '
+                'automaticamente sono escluse dalle percentuali.',
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 10.5,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -249,12 +444,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final dashboard = _dashboard;
     final analysisHistory = _analysisHistory;
+    final comparisonStore = _comparisonStore;
 
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: Listenable.merge([dashboard, analysisHistory]),
+          animation: Listenable.merge([
+            dashboard,
+            analysisHistory,
+            comparisonStore,
+          ]),
           builder: (context, child) {
             final smartBetStats = analysisHistory.statsFor(
               SmartBetAnalysisEngine.smartBet,
@@ -262,6 +462,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
             final diegoStats = analysisHistory.statsFor(
               SmartBetAnalysisEngine.diego,
+            );
+
+            final comparisonStats = comparisonStore.calculateStats(
+              analysisRecords: analysisHistory.records,
             );
 
             return RefreshIndicator(
@@ -322,6 +526,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     stats: diegoStats,
                     accent: Colors.lightBlueAccent,
                   ),
+
+                  const SizedBox(height: 14),
+
+                  _directComparisonCard(comparisonStats),
 
                   const SizedBox(height: 14),
 
