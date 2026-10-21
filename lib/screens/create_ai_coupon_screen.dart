@@ -1558,7 +1558,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       debugPrint('GOALVDLINE PORTFOLIO — DIEGO DEDUP');
       debugPrint('========================================');
       debugPrint(
-        '5 schedine | '
+        '${portfolio.length} schedine | '
         '${portfolio.expand((e) => e.picks).length} posti totali | '
         '${uniqueByFixture.length} fixture uniche da elaborare',
       );
@@ -2011,13 +2011,52 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       '(EV >= 0, edge >= 0)',
     );
 
-    return <_PortfolioShadow>[
+    // P4.1 — UNIQUE SYSTEM
+    //
+    // Il sistema non deve mostrare due schedine identiche solo
+    // per raggiungere artificialmente il numero massimo di varianti.
+    //
+    // La chiave viene costruita su fixture + mercato e ordinata:
+    // la stessa combinazione resta quindi identica anche se i pick
+    // arrivano in un ordine differente.
+    final rawPortfolio = <_PortfolioShadow>[
       _PortfolioShadow(name: 'CORE', picks: coreCoupon),
       _PortfolioShadow(name: 'PROBABILITÀ', picks: probabilityCoupon),
       _PortfolioShadow(name: 'EQUILIBRIO', picks: balanceCoupon),
       _PortfolioShadow(name: 'VALUE', picks: valueCoupon),
       _PortfolioShadow(name: 'DIVERSIFICATA', picks: diversifiedCoupon),
     ];
+
+    String combinationKey(_PortfolioShadow coupon) {
+      final keys =
+          coupon.picks
+              .map((item) => '${item.match.fixtureId}|${item.market}')
+              .toList()
+            ..sort();
+
+      return keys.join('||');
+    }
+
+    final seenCombinations = <String>{};
+    final uniquePortfolio = <_PortfolioShadow>[];
+
+    for (final coupon in rawPortfolio) {
+      final key = combinationKey(coupon);
+
+      if (seenCombinations.add(key)) {
+        uniquePortfolio.add(coupon);
+      } else {
+        debugPrint('SISTEMA DUPLICATO ESCLUSO: ${coupon.name}');
+      }
+    }
+
+    debugPrint(
+      'SISTEMA UNICO: '
+      '${uniquePortfolio.length}/${rawPortfolio.length} '
+      'combinazioni distinte',
+    );
+
+    return uniquePortfolio;
   }
 
   void _logPortfolioShadow(List<_PortfolioShadow> portfolios) {
@@ -3490,43 +3529,43 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [3, 5, 7, 10, 15].map((value) {
-                final selected = _count == value;
+            Slider(
+              value: _count.toDouble(),
+              min: 3,
+              max: 15,
+              divisions: 12,
+              label: '$_count',
+              activeColor: const Color(0xFF00C853),
+              inactiveColor: Colors.white12,
+              onChanged: _loading
+                  ? null
+                  : (value) {
+                      final newCount = value.round();
 
-                return ChoiceChip(
-                  label: Text('$value'),
-                  selected: selected,
-                  showCheckmark: false,
-                  selectedColor: const Color(0xFF00C853),
-                  backgroundColor: const Color(0xFF1F2937),
-                  side: BorderSide(
-                    color: selected ? const Color(0xFF00C853) : Colors.white12,
-                  ),
-                  labelStyle: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  onSelected: _loading
-                      ? null
-                      : (enabled) {
-                          if (!enabled) return;
+                      if (newCount == _count) return;
 
-                          setState(() {
-                            _count = value;
-                            _results.clear();
-                            _portfolioResults.clear();
-                            _selectedPortfolioIndex = 0;
-                            _error = null;
-                            _notice = null;
-                          });
-                        },
-                );
-              }).toList(),
+                      setState(() {
+                        _count = newCount;
+                        _results.clear();
+                        _portfolioResults.clear();
+                        _selectedPortfolioIndex = 0;
+                        _error = null;
+                        _notice = null;
+                      });
+                    },
             ),
-            const SizedBox(height: 6),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('3', style: TextStyle(color: Colors.white54)),
+                  Text('9', style: TextStyle(color: Colors.white38)),
+                  Text('15', style: TextStyle(color: Colors.white54)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: _loading ? null : _createCoupon,
               icon: const Icon(Icons.auto_awesome),
