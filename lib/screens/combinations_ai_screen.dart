@@ -2422,6 +2422,136 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
+  int _presentationCompare(_CombinationCandidate a, _CombinationCandidate b) {
+    final countryA = a.match.country.trim().isEmpty
+        ? 'Internazionale'
+        : a.match.country.trim();
+
+    final countryB = b.match.country.trim().isEmpty
+        ? 'Internazionale'
+        : b.match.country.trim();
+
+    final countryCompare = countryA.toLowerCase().compareTo(
+      countryB.toLowerCase(),
+    );
+
+    if (countryCompare != 0) {
+      return countryCompare;
+    }
+
+    final leagueA = a.match.league.trim().isEmpty
+        ? 'Competizione'
+        : a.match.league.trim();
+
+    final leagueB = b.match.league.trim().isEmpty
+        ? 'Competizione'
+        : b.match.league.trim();
+
+    final leagueCompare = leagueA.toLowerCase().compareTo(
+      leagueB.toLowerCase(),
+    );
+
+    if (leagueCompare != 0) {
+      return leagueCompare;
+    }
+
+    DateTime? dateA;
+    DateTime? dateB;
+
+    try {
+      dateA = DateTime.parse(a.match.date).toLocal();
+    } catch (_) {}
+
+    try {
+      dateB = DateTime.parse(b.match.date).toLocal();
+    } catch (_) {}
+
+    if (dateA != null && dateB != null) {
+      final dateCompare = dateA.compareTo(dateB);
+
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+    } else if (dateA != null) {
+      return -1;
+    } else if (dateB != null) {
+      return 1;
+    }
+
+    final homeCompare = a.match.homeTeam.toLowerCase().compareTo(
+      b.match.homeTeam.toLowerCase(),
+    );
+
+    if (homeCompare != 0) {
+      return homeCompare;
+    }
+
+    return a.match.awayTeam.toLowerCase().compareTo(
+      b.match.awayTeam.toLowerCase(),
+    );
+  }
+
+  List<Widget> _groupedResultWidgets() {
+    final ordered = List<_CombinationCandidate>.of(_results)
+      ..sort(_presentationCompare);
+
+    final widgets = <Widget>[];
+    String? currentGroup;
+    var position = 0;
+
+    for (final item in ordered) {
+      final country = item.match.country.trim().isEmpty
+          ? 'Internazionale'
+          : item.match.country.trim();
+
+      final league = item.match.league.trim().isEmpty
+          ? 'Competizione'
+          : item.match.league.trim();
+
+      final group = '$country • $league';
+
+      if (group != currentGroup) {
+        if (widgets.isNotEmpty) {
+          widgets.add(const SizedBox(height: 6));
+        }
+
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 9),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.emoji_events_outlined,
+                  color: Color(0xFF00C853),
+                  size: 15,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    group,
+                    style: const TextStyle(
+                      color: Color(0xFF00C853),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        currentGroup = group;
+      }
+
+      position++;
+
+      widgets.add(_resultCard(item, position));
+    }
+
+    return widgets;
+  }
+
   Widget _resultCard(_CombinationCandidate item, int rank) {
     final result = item.analysis;
     final match = item.match;
@@ -3013,10 +3143,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
             const SizedBox(height: 12),
 
-            ...List.generate(
-              _results.length,
-              (index) => _resultCard(_results[index], index + 1),
-            ),
+            ..._groupedResultWidgets(),
           ],
 
           if (!_loading &&
