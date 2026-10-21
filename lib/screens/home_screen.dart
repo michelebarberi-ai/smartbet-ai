@@ -5,6 +5,7 @@ import '../services/dashboard_store.dart';
 import '../services/smartbet_analysis_comparison_store.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
+import '../services/smartbet_learning_coordinator.dart';
 import '../widgets/ai_card.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
@@ -76,11 +77,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final SmartBetAnalysisResultResolver _analysisResolver;
 
+  late final SmartBetLearningCoordinator _learningCoordinator;
+
   @override
   void initState() {
     super.initState();
 
     _analysisResolver = SmartBetAnalysisResultResolver(store: _analysisHistory);
+
+    _learningCoordinator = SmartBetLearningCoordinator(
+      historyStore: _analysisHistory,
+      comparisonStore: _comparisonStore,
+    );
 
     _dashboard.initialize();
     _refreshAnalysisHistory();
@@ -94,6 +102,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ]);
 
       await _analysisResolver.resolvePending();
+
+      await _learningCoordinator.refresh();
     } catch (e) {
       debugPrint('ANALYSIS HISTORY REFRESH ERROR: $e');
     }
