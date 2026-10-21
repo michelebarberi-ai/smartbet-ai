@@ -20,6 +20,10 @@ import '../widgets/competition_filter_sheet.dart';
 
 enum _CombinationPeriod { today, next2Days, next3Days, custom }
 
+enum _CombinationOutputMode { single, system }
+
+enum _CombinationSystemRisk { prudent, balanced, aggressive }
+
 class CombinationsAiScreen extends StatefulWidget {
   const CombinationsAiScreen({super.key});
 
@@ -92,6 +96,13 @@ class _CombinationCandidate {
   }
 }
 
+class _CombinationSystemShadow {
+  final String name;
+  final List<_CombinationCandidate> picks;
+
+  const _CombinationSystemShadow({required this.name, required this.picks});
+}
+
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -101,6 +112,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String _selectedMarket = 'X';
   int _topCount = 5;
   int _minimumSmartScore = 0;
+
+  // P5A — Sistema GoalVdLine
+  _CombinationOutputMode _outputMode = _CombinationOutputMode.single;
+  _CombinationSystemRisk _systemRisk = _CombinationSystemRisk.balanced;
+  int _systemCombinationCount = 5;
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
@@ -117,6 +133,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String? _errorMessage;
 
   final List<_CombinationCandidate> _results = [];
+
+  // P5B — combinazioni coordinate realmente disponibili nella UI.
+  final List<_CombinationSystemShadow> _systemResults = [];
+  int _selectedSystemIndex = 0;
 
   final Set<int> _expandedComboFixtures = {};
 
@@ -785,6 +805,218 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     }
   }
 
+  String get _systemRiskName {
+    switch (_systemRisk) {
+      case _CombinationSystemRisk.prudent:
+        return 'PRUDENTE';
+      case _CombinationSystemRisk.balanced:
+        return 'EQUILIBRATO';
+      case _CombinationSystemRisk.aggressive:
+        return 'AGGRESSIVO';
+    }
+  }
+
+  double get _systemCoreRatio {
+    switch (_systemRisk) {
+      case _CombinationSystemRisk.prudent:
+        return 0.60;
+      case _CombinationSystemRisk.balanced:
+        return 0.40;
+      case _CombinationSystemRisk.aggressive:
+        return 0.20;
+    }
+  }
+
+  String _systemCandidateKey(_CombinationCandidate item) {
+    return '${item.match.fixtureId}|'
+        '${item.market.trim().toUpperCase()}';
+  }
+
+  int _systemReliability(_CombinationCandidate item) {
+    return item.reliabilityScore ??
+        ((item.probability * 0.60) + (item.analysis.smartScore * 0.40)).round();
+  }
+
+  int _systemCandidateCompare(
+    _CombinationCandidate a,
+    _CombinationCandidate b,
+  ) {
+    final reliability = _systemReliability(b).compareTo(_systemReliability(a));
+
+    if (reliability != 0) return reliability;
+
+    final probability = b.probability.compareTo(a.probability);
+    if (probability != 0) return probability;
+
+    return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+  }
+
+  List<_CombinationSystemShadow> _buildCombinationSystemShadow(
+    List<_CombinationCandidate> source,
+  ) {
+    if (source.isEmpty) {
+      return const <_CombinationSystemShadow>[];
+    }
+
+    final ranked = List<_CombinationCandidate>.of(source)
+      ..sort(_systemCandidateCompare);
+
+    // P5B.1 — non ridurre silenziosamente la dimensione richiesta.
+    //
+    // Se l'utente chiede, ad esempio, 5 eventi per combinazione
+    // ma ne esistono solo 4 realmente validi, il sistema non viene
+    // creato. Non aggiungiamo selezioni deboli e non produciamo
+    // una combinazione più corta di quella richiesta.
+    if (ranked.length < _topCount) {
+      debugPrint(
+        'SISTEMA INSUFFICIENTE | '
+        'richiesti $_topCount | '
+        'validi ${ranked.length}',
+      );
+
+      return const <_CombinationSystemShadow>[];
+    }
+
+    final targetSize = _topCount;
+
+    final sharedCoreCount = math.min(
+      targetSize,
+      math.max(1, (targetSize * _systemCoreRatio).ceil()),
+    );
+
+    final core = ranked.take(sharedCoreCount).toList();
+    final alternatives = ranked.skip(sharedCoreCount).toList();
+
+    final variableSlots = targetSize - core.length;
+    final raw = <_CombinationSystemShadow>[];
+
+    for (var index = 0; index < _systemCombinationCount; index++) {
+      final picks = <_CombinationCandidate>[...core];
+
+      if (variableSlots > 0 && alternatives.isNotEmpty) {
+        for (var slot = 0; slot < variableSlots; slot++) {
+          final alternativeIndex = (index + slot) % alternatives.length;
+
+          final candidate = alternatives[alternativeIndex];
+
+          if (!picks.any(
+            (item) => item.match.fixtureId == candidate.match.fixtureId,
+          )) {
+            picks.add(candidate);
+          }
+        }
+
+        // Se una rotazione incontra duplicati fixture,
+        // completa con le migliori alternative rimaste.
+        if (picks.length < targetSize) {
+          for (final candidate in alternatives) {
+            if (picks.length >= targetSize) break;
+
+            if (!picks.any(
+              (item) => item.match.fixtureId == candidate.match.fixtureId,
+            )) {
+              picks.add(candidate);
+            }
+          }
+        }
+      }
+
+      raw.add(
+        _CombinationSystemShadow(
+          name: 'COMBINAZIONE ${index + 1}',
+          picks: picks,
+        ),
+      );
+    }
+
+    // Mai mostrare due sistemi identici.
+    String keyFor(_CombinationSystemShadow coupon) {
+      final parts =
+          coupon.picks
+              .map((item) => '${item.match.fixtureId}|${item.market}')
+              .toList()
+            ..sort();
+
+      return parts.join('||');
+    }
+
+    final seen = <String>{};
+    final unique = <_CombinationSystemShadow>[];
+
+    for (final coupon in raw) {
+      final key = keyFor(coupon);
+
+      if (seen.add(key)) {
+        unique.add(coupon);
+      }
+    }
+
+    debugPrint('');
+    debugPrint('========================================');
+    debugPrint('COMBINAZIONI GOALVDLINE — SISTEMA P5A');
+    debugPrint('========================================');
+    debugPrint(
+      'Mercato: $_selectedMarket | '
+      'Profilo: $_systemRiskName | '
+      'Eventi: $targetSize | '
+      'CORE: $sharedCoreCount | '
+      'Pool: ${ranked.length}',
+    );
+    debugPrint(
+      'Richieste: $_systemCombinationCount | '
+      'Uniche: ${unique.length}',
+    );
+
+    for (final coupon in unique) {
+      debugPrint('');
+      debugPrint('${coupon.name} | ${coupon.picks.length}/$targetSize');
+
+      for (var i = 0; i < coupon.picks.length; i++) {
+        final item = coupon.picks[i];
+
+        debugPrint(
+          '${i + 1}. '
+          '${item.match.homeTeam} - ${item.match.awayTeam} | '
+          '${item.market} | '
+          'P ${item.probability} | '
+          'REL ${_systemReliability(item)} | '
+          'SCORE ${item.analysis.smartScore}',
+        );
+      }
+    }
+
+    if (unique.length > 1) {
+      debugPrint('');
+      debugPrint('--- OVERLAP ---');
+
+      for (var i = 0; i < unique.length; i++) {
+        final a = unique[i];
+
+        final aKeys = a.picks
+            .map((e) => '${e.match.fixtureId}|${e.market}')
+            .toSet();
+
+        for (var j = i + 1; j < unique.length; j++) {
+          final b = unique[j];
+
+          final overlap = b.picks
+              .where((e) => aKeys.contains('${e.match.fixtureId}|${e.market}'))
+              .length;
+
+          debugPrint(
+            '${a.name} ↔ ${b.name}: '
+            '$overlap/$targetSize',
+          );
+        }
+      }
+    }
+
+    debugPrint('========================================');
+    debugPrint('');
+
+    return unique;
+  }
+
   // ============================================================
   // SCANSIONE
   // ============================================================
@@ -802,6 +1034,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _errors = 0;
       _errorMessage = null;
       _results.clear();
+      _systemResults.clear();
+      _selectedSystemIndex = 0;
     });
 
     try {
@@ -1085,9 +1319,24 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final oddsService = OddsService();
       final validCandidates = <_CombinationCandidate>[];
       final reserveCount = math.max(2, (_topCount * 0.50).ceil());
-      final oddsTargetCount = _selectedMarket == 'COMBO CHANCE'
+
+      final systemPoolTarget = math.min(
+        candidatesForOdds.length,
+        math.max(_topCount + 8, _topCount * 2),
+      );
+
+      final oddsTargetCount = _outputMode == _CombinationOutputMode.system
+          ? systemPoolTarget
+          : _selectedMarket == 'COMBO CHANCE'
           ? _topCount
           : math.min(candidatesForOdds.length, _topCount + reserveCount);
+
+      debugPrint(
+        'COMBINATIONS POOL TARGET | '
+        'mode ${_outputMode.name} | '
+        'requested $_topCount | '
+        'odds target $oddsTargetCount',
+      );
 
       try {
         for (final item in candidatesForOdds) {
@@ -1172,13 +1421,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       }
 
       // Auditor finale di fattibilità: SmartBet ha già deciso tutto.
+      //
+      // In modalità SISTEMA conserviamo un pool più ampio:
+      // _topCount è il numero di eventi PER combinazione, non
+      // il numero massimo di candidate utilizzabili dal sistema.
+      final auditTargetCount = _outputMode == _CombinationOutputMode.system
+          ? oddsTargetCount
+          : _topCount;
+
       if (_selectedMarket != 'COMBO CHANCE' && validCandidates.isNotEmpty) {
         final checked = <_CombinationCandidate>[];
         const feasibilityBatchSize = 3;
 
         for (
           var start = 0;
-          start < validCandidates.length && checked.length < _topCount;
+          start < validCandidates.length && checked.length < auditTargetCount;
           start += feasibilityBatchSize
         ) {
           final end = math.min(
@@ -1218,13 +1475,116 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
         validCandidates
           ..clear()
-          ..addAll(checked.take(_topCount));
-      } else if (validCandidates.length > _topCount) {
-        validCandidates.removeRange(_topCount, validCandidates.length);
+          ..addAll(checked.take(auditTargetCount));
+      } else if (validCandidates.length > auditTargetCount) {
+        validCandidates.removeRange(auditTargetCount, validCandidates.length);
       }
 
-      // SmartBet ha già completato selezione, quote e Auditor.
-      // DiegoAI viene aggiunto solo alle candidate definitive.
+      // ============================================================
+      // P5B — SISTEMA GOALVDLINE REALE
+      // ============================================================
+
+      if (_outputMode == _CombinationOutputMode.system) {
+        final system = _buildCombinationSystemShadow(validCandidates);
+
+        if (system.isEmpty) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _systemResults.clear();
+            _selectedSystemIndex = 0;
+            _results.clear();
+
+            _checkingOdds = false;
+            _loading = false;
+
+            _errorMessage =
+                'Sistema non creato: sono state trovate '
+                '${validCandidates.length} selezioni valide '
+                'per $_selectedMarket, ma ne servono almeno '
+                '$_topCount per ogni combinazione.';
+          });
+
+          return;
+        }
+
+        // Diego viene eseguito una sola volta per ogni vera selezione
+        // fixture + mercato, anche se compare in più combinazioni.
+        final uniqueSelections = <String, _CombinationCandidate>{};
+
+        for (final coupon in system) {
+          for (final item in coupon.picks) {
+            uniqueSelections.putIfAbsent(_systemCandidateKey(item), () => item);
+          }
+        }
+
+        debugPrint('');
+        debugPrint(
+          'COMBINATIONS SYSTEM — DIEGO DEDUP | '
+          '${system.length} combinazioni | '
+          '${uniqueSelections.length} selezioni uniche',
+        );
+
+        final enrichedByKey = <String, _CombinationCandidate>{};
+
+        for (final entry in uniqueSelections.entries) {
+          final item = entry.value;
+
+          final dual = await _dualEngineService.attachDiego(
+            match: item.match,
+            smartBet: item.analysis,
+            smartBetMarket: item.market,
+            smartBetProbability: item.probability,
+          );
+
+          enrichedByKey[entry.key] = item.withDualAnalysis(dual);
+        }
+
+        final enrichedSystem = system
+            .map((coupon) {
+              return _CombinationSystemShadow(
+                name: coupon.name,
+                picks: coupon.picks
+                    .map((item) {
+                      return enrichedByKey[_systemCandidateKey(item)] ?? item;
+                    })
+                    .toList(growable: false),
+              );
+            })
+            .toList(growable: false);
+
+        if (!mounted) {
+          return;
+        }
+
+        final initialPicks = enrichedSystem.isEmpty
+            ? <_CombinationCandidate>[]
+            : enrichedSystem.first.picks;
+
+        setState(() {
+          _systemResults
+            ..clear()
+            ..addAll(enrichedSystem);
+
+          _selectedSystemIndex = 0;
+
+          _results
+            ..clear()
+            ..addAll(initialPicks);
+
+          _checkingOdds = false;
+          _loading = false;
+        });
+
+        return;
+      }
+
+      // ============================================================
+      // MODALITÀ SINGOLA — comportamento precedente invariato
+      // ============================================================
+
       final enrichedCandidates = <_CombinationCandidate>[];
 
       for (final item in validCandidates) {
@@ -1243,9 +1603,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       }
 
       setState(() {
+        _systemResults.clear();
+        _selectedSystemIndex = 0;
+
         _results
           ..clear()
           ..addAll(enrichedCandidates);
+
         _checkingOdds = false;
         _loading = false;
       });
@@ -1573,6 +1937,273 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  int get _systemSharedCoreCount {
+    if (_systemResults.isEmpty) {
+      return 0;
+    }
+
+    final common = _systemResults.first.picks.map(_systemCandidateKey).toSet();
+
+    for (final coupon in _systemResults.skip(1)) {
+      common.retainAll(coupon.picks.map(_systemCandidateKey).toSet());
+    }
+
+    return common.length;
+  }
+
+  Widget _systemResultSelector() {
+    if (_outputMode != _CombinationOutputMode.system ||
+        _systemResults.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF00C853).withValues(alpha: 0.28),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SISTEMA $_systemRiskName',
+            style: const TextStyle(
+              color: Color(0xFF00C853),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '${_systemResults.length} combinazioni uniche • '
+            '${_systemResults.first.picks.length} eventi • '
+            '$_systemSharedCoreCount CORE condivise',
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(_systemResults.length, (index) {
+                final selected = _selectedSystemIndex == index;
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index == _systemResults.length - 1 ? 0 : 7,
+                  ),
+                  child: ChoiceChip(
+                    label: Text('COMB. ${index + 1}'),
+                    selected: selected,
+                    showCheckmark: false,
+                    selectedColor: const Color(0xFF00C853),
+                    backgroundColor: const Color(0xFF111827),
+                    side: BorderSide(
+                      color: selected
+                          ? const Color(0xFF00C853)
+                          : Colors.white12,
+                    ),
+                    labelStyle: TextStyle(
+                      color: selected ? Colors.white : Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                    onSelected: (enabled) {
+                      if (!enabled) return;
+
+                      setState(() {
+                        _selectedSystemIndex = index;
+
+                        _results
+                          ..clear()
+                          ..addAll(_systemResults[index].picks);
+                      });
+                    },
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _outputModeSelector() {
+    Widget chip(_CombinationOutputMode mode, String label) {
+      final selected = _outputMode == mode;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+        ),
+        onSelected: _loading
+            ? null
+            : (enabled) {
+                if (!enabled) return;
+
+                setState(() {
+                  _outputMode = mode;
+                  _results.clear();
+                  _errorMessage = null;
+                });
+              },
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: chip(_CombinationOutputMode.single, 'SINGOLA')),
+        const SizedBox(width: 8),
+        Expanded(child: chip(_CombinationOutputMode.system, 'SISTEMA')),
+      ],
+    );
+  }
+
+  Widget _systemControls() {
+    if (_outputMode != _CombinationOutputMode.system) {
+      return const SizedBox.shrink();
+    }
+
+    Widget riskChip(_CombinationSystemRisk risk, String label) {
+      final selected = _systemRisk == risk;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+        ),
+        onSelected: _loading
+            ? null
+            : (enabled) {
+                if (!enabled) return;
+
+                setState(() {
+                  _systemRisk = risk;
+                  _results.clear();
+                  _errorMessage = null;
+                });
+              },
+      );
+    }
+
+    Widget countChip(int count) {
+      final selected = _systemCombinationCount == count;
+
+      return ChoiceChip(
+        label: Text('$count'),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+        ),
+        onSelected: _loading
+            ? null
+            : (enabled) {
+                if (!enabled) return;
+
+                setState(() {
+                  _systemCombinationCount = count;
+                  _results.clear();
+                  _errorMessage = null;
+                });
+              },
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SISTEMA GOALVDLINE',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'GoalVdLine cerca un pool più ampio del mercato scelto '
+            'e costruisce combinazioni coordinate senza ripetere '
+            'l’analisi delle stesse partite.',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Numero combinazioni',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 8,
+            children: [countChip(3), countChip(5), countChip(10)],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Profilo sistema',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              riskChip(_CombinationSystemRisk.prudent, 'PRUDENTE'),
+              riskChip(_CombinationSystemRisk.balanced, 'EQUILIBRATO'),
+              riskChip(_CombinationSystemRisk.aggressive, 'AGGRESSIVO'),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -2185,11 +2816,32 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 20),
 
+          const Text(
+            'MODALITÀ RISULTATO',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 9),
+          _outputModeSelector(),
+
+          if (_outputMode == _CombinationOutputMode.system) ...[
+            const SizedBox(height: 12),
+            _systemControls(),
+          ],
+
+          const SizedBox(height: 20),
+
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'NUMERO RISULTATI',
+                  _outputMode == _CombinationOutputMode.system
+                      ? 'EVENTI PER COMBINAZIONE'
+                      : 'NUMERO RISULTATI',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -2264,6 +2916,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               label: Text(
                 _loading
                     ? 'RICERCA IN CORSO...'
+                    : _outputMode == _CombinationOutputMode.system
+                    ? 'CREA SISTEMA $_selectedMarket'
                     : 'TROVA LE MIGLIORI '
                           '$_selectedMarket',
                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -2321,11 +2975,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 24),
 
+            if (_outputMode == _CombinationOutputMode.system &&
+                _systemResults.isNotEmpty) ...[
+              _systemResultSelector(),
+              const SizedBox(height: 18),
+            ],
+
             Row(
               children: [
                 Text(
-                  'TOP ${_results.length} '
-                  '$_selectedMarket',
+                  _outputMode == _CombinationOutputMode.system &&
+                          _systemResults.isNotEmpty
+                      ? '${_systemResults[_selectedSystemIndex].name} • '
+                            '$_selectedMarket'
+                      : 'TOP ${_results.length} '
+                            '$_selectedMarket',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -2334,9 +2998,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ),
                 const Spacer(),
                 if (!_loading)
-                  const Text(
-                    'PRE-ANALISI',
-                    style: TextStyle(
+                  Text(
+                    _outputMode == _CombinationOutputMode.system
+                        ? 'SISTEMA'
+                        : 'PRE-ANALISI',
+                    style: const TextStyle(
                       color: Colors.white38,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
