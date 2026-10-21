@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../services/bankroll_store.dart';
 import '../services/user_profile_store.dart';
 import '../services/dashboard_store.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_analysis_result_resolver.dart';
 import '../widgets/ai_card.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
-import 'bankroll_history_screen.dart';
 import 'settings_screen.dart';
 
 String _smartBetGreeting() {
@@ -67,87 +67,175 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final DashboardStore _dashboard = DashboardStore.instance;
 
+  final SmartBetAnalysisHistoryStore _analysisHistory =
+      SmartBetAnalysisHistoryStore.instance;
+
+  late final SmartBetAnalysisResultResolver _analysisResolver;
+
   @override
   void initState() {
     super.initState();
+
+    _analysisResolver = SmartBetAnalysisResultResolver(store: _analysisHistory);
+
     _dashboard.initialize();
+    _refreshAnalysisHistory();
+  }
+
+  Future<void> _refreshAnalysisHistory() async {
+    try {
+      await _analysisHistory.initialize();
+      await _analysisResolver.resolvePending();
+    } catch (e) {
+      debugPrint('ANALYSIS HISTORY REFRESH ERROR: $e');
+    }
+  }
+
+  Future<void> _refreshHome() async {
+    await Future.wait([_dashboard.refresh(), _refreshAnalysisHistory()]);
   }
 
   // ============================================================
   // STAT CARD
   // ============================================================
 
-  Widget _statCard(IconData icon, String value, String title, Color color) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F2937),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 30),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 5),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _smallInfo({
-    required String title,
+  Widget _analysisMetric({
+    required String label,
     required String value,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white10),
-      ),
+    return Expanded(
       child: Column(
         children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
-              textAlign: TextAlign.center,
               style: TextStyle(
                 color: color,
-                fontSize: 17,
+                fontSize: 21,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _enginePerformanceCard({
+    required String title,
+    required SmartBetAnalysisEngineStats stats,
+    required Color accent,
+  }) {
+    final accuracyColor = stats.settled > 0
+        ? Colors.greenAccent
+        : Colors.white54;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${stats.accuracy.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: accuracyColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Precisione sulle analisi concluse',
+            style: TextStyle(color: Colors.white38, fontSize: 10.5),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _analysisMetric(
+                label: 'Analizzate',
+                value: '${stats.analyzed}',
+                color: Colors.white,
+              ),
+              _analysisMetric(
+                label: 'Concluse',
+                value: '${stats.settled}',
+                color: Colors.white70,
+              ),
+              _analysisMetric(
+                label: 'In attesa',
+                value: '${stats.pending}',
+                color: stats.pending > 0 ? Colors.orangeAccent : Colors.white54,
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              _analysisMetric(
+                label: 'Corrette',
+                value: '${stats.correct}',
+                color: Colors.greenAccent,
+              ),
+              _analysisMetric(
+                label: 'Errate',
+                value: '${stats.wrong}',
+                color: Colors.redAccent,
+              ),
+              _analysisMetric(
+                label: 'Precisione',
+                value: '${stats.accuracy.toStringAsFixed(1)}%',
+                color: accuracyColor,
+              ),
+            ],
+          ),
+          if (stats.unsupported > 0) ...[
+            const SizedBox(height: 13),
+            Text(
+              '${stats.unsupported} analisi non verificabili automaticamente '
+              'sono escluse dal calcolo della precisione.',
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10.5,
+                height: 1.35,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -159,24 +247,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = BankrollStore.instance;
     final dashboard = _dashboard;
+    final analysisHistory = _analysisHistory;
 
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: Listenable.merge([store, dashboard]),
+          animation: Listenable.merge([dashboard, analysisHistory]),
           builder: (context, child) {
-            final snapshot = store.snapshot;
-            final settled = snapshot.wins + snapshot.losses;
+            final smartBetStats = analysisHistory.statsFor(
+              SmartBetAnalysisEngine.smartBet,
+            );
 
-            final successRate = settled > 0
-                ? (snapshot.wins / settled) * 100.0
-                : 0.0;
+            final diegoStats = analysisHistory.statsFor(
+              SmartBetAnalysisEngine.diego,
+            );
 
             return RefreshIndicator(
-              onRefresh: dashboard.refresh,
+              onRefresh: _refreshHome,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
@@ -196,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 18),
 
                   const Text(
-                    'Prestazioni GoalVdLine',
+                    'Prestazioni analisi',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 26,
@@ -207,8 +296,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
 
                   const Text(
-                    'Verifica nel tempo l’efficacia delle analisi GoalVdLine '
-                    'attraverso le giocate registrate.',
+                    'Misura nel tempo la precisione delle previsioni '
+                    'prodotte da SmartBet e Diego. Ogni selezione unica '
+                    'viene conteggiata una sola volta, indipendentemente '
+                    'da quante schermate la utilizzano.',
                     style: TextStyle(
                       color: Colors.white54,
                       fontSize: 13,
@@ -218,128 +309,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 18),
 
-                  SizedBox(
-                    height: 145,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _statCard(
-                          Icons.receipt_long_outlined,
-                          '${snapshot.bets}',
-                          'Giocate',
-                          Colors.white70,
-                        ),
-                        _statCard(
-                          Icons.check_circle_outline,
-                          '${snapshot.wins}',
-                          'Vinte',
-                          Colors.greenAccent,
-                        ),
-                        _statCard(
-                          Icons.cancel_outlined,
-                          '${snapshot.losses}',
-                          'Perse',
-                          Colors.redAccent,
-                        ),
-                      ],
-                    ),
+                  _enginePerformanceCard(
+                    title: 'SMARTBET',
+                    stats: smartBetStats,
+                    accent: const Color(0xFF00C853),
                   ),
 
                   const SizedBox(height: 14),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _smallInfo(
-                          title: 'Successo',
-                          value: '${successRate.toStringAsFixed(1)}%',
-                          color: settled > 0
-                              ? Colors.greenAccent
-                              : Colors.white54,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _smallInfo(
-                          title: 'In attesa',
-                          value: '${snapshot.pending}',
-                          color: snapshot.pending > 0
-                              ? Colors.orangeAccent
-                              : Colors.white54,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _smallInfo(
-                          title: 'Annullate',
-                          value: '${snapshot.voids}',
-                          color: Colors.blueGrey,
-                        ),
-                      ),
-                    ],
+                  _enginePerformanceCard(
+                    title: 'DIEGO',
+                    stats: diegoStats,
+                    accent: Colors.lightBlueAccent,
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  SizedBox(
+                  Container(
                     width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const BankrollHistoryScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.history),
-                      label: Text(
-                        snapshot.pending > 0
-                            ? 'LE MIE GIOCATE '
-                                  '(${snapshot.pending} IN ATTESA)'
-                            : 'LE MIE GIOCATE',
-                      ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        backgroundColor: const Color(0xFF00C853),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F2937),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
                     ),
-                  ),
-
-                  if (snapshot.bets == 0) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F2937),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: const Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.white54),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Quando registrerai una giocata, '
-                              'qui vedrai automaticamente le statistiche '
-                              'su vinte, perse e percentuale di successo.',
-                              style: TextStyle(
-                                color: Colors.white60,
-                                height: 1.4,
-                              ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.autorenew,
+                          color: Colors.white54,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            smartBetStats.analyzed == 0 &&
+                                    diegoStats.analyzed == 0
+                                ? 'Le statistiche inizieranno a popolarsi '
+                                      'con le prossime analisi effettuate '
+                                      'nell’app.'
+                                : 'Gli esiti delle partite concluse vengono '
+                                      'controllati automaticamente. Le analisi '
+                                      'non ancora concluse restano in attesa.',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 11.5,
+                              height: 1.4,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
 
                   const SizedBox(height: 35),
 
