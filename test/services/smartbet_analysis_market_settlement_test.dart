@@ -111,4 +111,44 @@ void main() {
       SmartBetAnalysisSettlement.unsupported,
     );
   });
+
+  test('GOAL + O2.5 viene verificato correttamente', () {
+    final result = SmartBetAnalysisMarketSettlement.evaluate(
+      market: 'GOAL + O2.5',
+      homeGoals: 2,
+      awayGoals: 1,
+    );
+
+    expect(result, SmartBetAnalysisSettlement.correct);
+  });
+
+  test('GOAL + O2.5 è errato se una squadra non segna', () {
+    final result = SmartBetAnalysisMarketSettlement.evaluate(
+      market: 'GOAL + O2.5',
+      homeGoals: 3,
+      awayGoals: 0,
+    );
+
+    expect(result, SmartBetAnalysisSettlement.wrong);
+  });
+
+  test('NO GOAL + U2.5 viene verificato correttamente', () {
+    final result = SmartBetAnalysisMarketSettlement.evaluate(
+      market: 'NO GOAL + U2.5',
+      homeGoals: 1,
+      awayGoals: 0,
+    );
+
+    expect(result, SmartBetAnalysisSettlement.correct);
+  });
+
+  test('NO GOAL + U2.5 è errato se segnano entrambe', () {
+    final result = SmartBetAnalysisMarketSettlement.evaluate(
+      market: 'NO GOAL + U2.5',
+      homeGoals: 1,
+      awayGoals: 1,
+    );
+
+    expect(result, SmartBetAnalysisSettlement.wrong);
+  });
 }
