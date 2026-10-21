@@ -26,7 +26,7 @@ class CreateAiCouponScreen extends StatefulWidget {
   State<CreateAiCouponScreen> createState() => _CreateAiCouponScreenState();
 }
 
-enum _CouponProfile { complete, balanced, rapid }
+enum _CouponRisk { prudent, balanced, aggressive }
 
 enum _CouponMode { automatic, manual }
 
@@ -114,7 +114,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // PATCH 02 — AUDITED SCHEDINA
 
   _CouponMode _mode = _CouponMode.automatic;
-  _CouponProfile _profile = _CouponProfile.complete;
+  _CouponRisk _risk = _CouponRisk.balanced;
 
   _CouponPeriod _period = _CouponPeriod.today;
   DateTimeRange? _customPeriod;
@@ -182,14 +182,25 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // ============================================================
   // PROFILI
   // ============================================================
-  String get _profileName {
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return 'COMPLETA';
-      case _CouponProfile.balanced:
-        return 'BILANCIATA';
-      case _CouponProfile.rapid:
-        return 'RAPIDA ⚡';
+  String get _riskProfileName {
+    switch (_risk) {
+      case _CouponRisk.prudent:
+        return 'PRUDENTE';
+      case _CouponRisk.balanced:
+        return 'EQUILIBRATO';
+      case _CouponRisk.aggressive:
+        return 'AGGRESSIVO';
+    }
+  }
+
+  double get _sharedCoreRatio {
+    switch (_risk) {
+      case _CouponRisk.prudent:
+        return 0.60;
+      case _CouponRisk.balanced:
+        return 0.40;
+      case _CouponRisk.aggressive:
+        return 0.20;
     }
   }
 
@@ -241,27 +252,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   bool _passesPrimary({required int probability, required int smartScore}) {
     final p = probability / 100.0;
 
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return p >= 0.65 && smartScore >= 50;
-
-      case _CouponProfile.balanced:
-      case _CouponProfile.rapid:
-        return p >= 0.55 && smartScore >= 45;
-    }
+    // P4 — analisi GoalVdLine sempre completa.
+    // Il profilo di rischio influenza solo la costruzione del sistema.
+    return p >= 0.65 && smartScore >= 50;
   }
 
   bool _passesAdaptive({required int probability, required int smartScore}) {
     final p = probability / 100.0;
 
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return p >= 0.55 && smartScore >= 40;
-
-      case _CouponProfile.balanced:
-      case _CouponProfile.rapid:
-        return p >= 0.45 && smartScore >= 35;
-    }
+    // Recovery controllata comune a tutti i profili.
+    return p >= 0.55 && smartScore >= 40;
   }
 
   double _rankScore({required int probability, required int smartScore}) {
@@ -478,35 +478,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   int _advancedShortlistSize(int available) {
-    // v1.2.1 RELIABILITY
+    // P4 — l'analisi è sempre quella completa.
     //
-    // La vecchia shortlist era troppo stretta:
-    // 5 risultati  -> 6 analisi avanzate
-    // 10 risultati -> 12
-    // 15 risultati -> 17
-    //
-    // Manteniamo un limite per controllare i costi, ma lasciamo
-    // all'analisi avanzata un vero pool tra cui scegliere.
-
-    int desired;
-    int hardCap;
-
-    switch (_profile) {
-      case _CouponProfile.complete:
-        desired = math.max(18, (_count * 2) + 6);
-        hardCap = 40;
-        break;
-
-      case _CouponProfile.balanced:
-        desired = math.max(14, (_count * 2) + 2);
-        hardCap = 32;
-        break;
-
-      case _CouponProfile.rapid:
-        desired = math.max(10, _count + 5);
-        hardCap = 20;
-        break;
-    }
+    // Il rischio scelto dall'utente non deve ridurre il numero
+    // di partite analizzate né alterare lo screening sportivo.
+    final desired = math.max(18, (_count * 2) + 6);
+    const hardCap = 40;
 
     final capped = math.min(desired, hardCap);
     return math.min(available, capped);
@@ -963,7 +940,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       // Fase 1: pre-analisi locale economica. Nessuna analisi SmartBet avanzata qui.
       final maximumToScan = matches.length;
-      final preliminaryBatchSize = _profile == _CouponProfile.rapid ? 10 : 6;
+      const preliminaryBatchSize = 6;
       final preliminary = <_PreCandidate>[];
 
       setState(() {
@@ -1059,7 +1036,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       var auditRejected = 0;
       var localAdvancedFallback = false;
 
-      final aiBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
+      const aiBatchSize = 2;
 
       if (!mounted) return;
       setState(() {
@@ -1186,7 +1163,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       final quoteCandidates = <_PreCandidate>[...audited, ...reserveQuoteProbe];
 
-      final quoteBatchSize = _profile == _CouponProfile.rapid ? 8 : 6;
+      const quoteBatchSize = 6;
 
       if (!mounted) return;
 
@@ -1289,7 +1266,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _oddsTotal = reserveQuoted.length;
         });
 
-        final recoveryBatchSize = _profile == _CouponProfile.rapid ? 4 : 2;
+        const recoveryBatchSize = 2;
 
         for (
           var start = 0;
@@ -1671,11 +1648,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
           _notice =
               '${parts.join(' • ')}. '
-              'Portfolio di ${_portfolioResults.length} schedine creato. '
+              'Sistema $_riskProfileName di ${_portfolioResults.length} schedine creato. '
               'Quota minima: 1.25.';
         } else {
           _notice =
-              'Portfolio GoalVdLine creato: '
+              'Sistema GoalVdLine $_riskProfileName creato: '
               '${_portfolioResults.length} schedine coordinate '
               'dalla stessa analisi.';
         }
@@ -1842,16 +1819,22 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       ..sort(_reliabilityRankingCompare);
 
     // CORE condivise:
-    // circa il 30% del numero di eventi richiesto.
+    // la quantità dipende dal profilo del sistema.
     //
-    // 3  -> 1
-    // 5  -> 2
-    // 7  -> 3
-    // 10 -> 3
-    // 15 -> 5
+    // PRUDENTE    -> circa 60%
+    // EQUILIBRATO -> circa 40%
+    // AGGRESSIVO  -> circa 20%
+    //
+    // Le CORE vengono sempre scelte dal ranking Reliability.
     final sharedCoreCount = math.min(
       reliabilityRanked.length,
-      math.max(1, (_count * 0.30).ceil()),
+      math.max(1, (_count * _sharedCoreRatio).ceil()),
+    );
+
+    debugPrint(
+      'SISTEMA RISCHIO: $_riskProfileName | '
+      'CORE condivise: $sharedCoreCount/$_count | '
+      'ratio ${(_sharedCoreRatio * 100).round()}%',
     );
 
     final sharedCore = _portfolioVariantTake(
@@ -2353,50 +2336,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final combined = _combinedProbability;
     final totalOdd = _totalOdd ?? 0;
 
-    // VALUE: profilo più aggressivo.
-    if (_profileName == 'VALUE') {
-      if (_results.length >= 8 || totalOdd >= 20.0 || combined < 0.05) {
-        return 'Alto';
-      }
-
-      if (_results.length >= 6 || totalOdd >= 8.0 || combined < 0.15) {
-        return 'Medio-Alto';
-      }
-
-      if (totalOdd >= 4.0 || combined < 0.30) {
-        return 'Medio';
-      }
-
-      return 'Contenuto';
-    }
-
-    // BILANCIATA: tiene conto anche della quota totale.
-    if (_profileName == 'BILANCIATA') {
-      if (_results.length >= 8 || totalOdd >= 15.0 || combined < 0.08) {
-        return 'Alto';
-      }
-
-      if (_results.length >= 6 || totalOdd >= 10.0 || combined < 0.18) {
-        return 'Medio-Alto';
-      }
-
-      if (totalOdd >= 5.0 || combined < 0.35) {
-        return 'Medio';
-      }
-
-      return 'Contenuto';
-    }
-
-    // PREMIUM: resta orientata all'affidabilità.
-    if (_results.length >= 8 || combined < 0.05) {
+    if (_results.length >= 10 || totalOdd >= 20.0 || combined < 0.05) {
       return 'Alto';
     }
 
-    if (_results.length >= 6 || combined < 0.12) {
+    if (_results.length >= 7 || totalOdd >= 10.0 || combined < 0.15) {
       return 'Medio-Alto';
     }
 
-    if (combined < 0.25) {
+    if (_results.length >= 5 || totalOdd >= 5.0 || combined < 0.30) {
       return 'Medio';
     }
 
@@ -2404,8 +2352,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   String get _activeCouponName {
-    if (_mode != _CouponMode.automatic || _portfolioResults.isEmpty) {
-      return _profileName;
+    if (_mode == _CouponMode.manual) {
+      return 'MANUALE';
+    }
+
+    if (_portfolioResults.isEmpty) {
+      return 'GOALVDLINE';
     }
 
     final safeIndex = _selectedPortfolioIndex.clamp(
@@ -2483,6 +2435,93 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return Colors.white70;
   }
 
+  Widget _riskProfileSelector() {
+    Widget chip(_CouponRisk risk, String label, String shortDescription) {
+      final selected = _risk == risk;
+
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        onSelected: _loading
+            ? null
+            : (enabled) {
+                if (!enabled) return;
+
+                setState(() {
+                  _risk = risk;
+                  _results.clear();
+                  _portfolioResults.clear();
+                  _selectedPortfolioIndex = 0;
+                  _error = null;
+                  _notice = null;
+                });
+              },
+      );
+    }
+
+    String description;
+
+    switch (_risk) {
+      case _CouponRisk.prudent:
+        description =
+            'Più CORE condivise e meno rotazione: privilegia '
+            'continuità e affidabilità tra le schedine.';
+        break;
+      case _CouponRisk.balanced:
+        description = 'Equilibrio tra CORE condivise, alternative e value.';
+        break;
+      case _CouponRisk.aggressive:
+        description =
+            'Meno CORE fisse e maggiore rotazione tra alternative '
+            'valide e value. Non abbassa i criteri di qualità.';
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Profilo del sistema',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(_CouponRisk.prudent, 'PRUDENTE', 'Più CORE'),
+            chip(_CouponRisk.balanced, 'EQUILIBRATO', 'Bilanciato'),
+            chip(_CouponRisk.aggressive, 'AGGRESSIVO', 'Più rotazione'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          description,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _portfolioSelector() {
     if (_mode != _CouponMode.automatic ||
         _portfolioResults.length <= 1 ||
@@ -2494,7 +2533,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'PORTFOLIO GOALVDLINE',
+          'SISTEMA GOALVDLINE',
           style: TextStyle(
             color: Colors.white54,
             fontSize: 10,
@@ -3369,7 +3408,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 SizedBox(height: 5),
                 Text(
                   'Un’unica analisi approfondita costruisce il pool migliore. '
-                  'Da questo pool GoalVdLine creerà schedine coordinate senza '
+                  'Da questo pool GoalVdLine creerà un sistema di schedine coordinate senza '
                   'forzare eventi deboli.',
                   style: TextStyle(
                     color: Colors.white54,
@@ -3431,6 +3470,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           const SizedBox(height: 22),
 
           if (_mode == _CouponMode.automatic) ...[
+            _riskProfileSelector(),
+            const SizedBox(height: 22),
             const Text(
               'Quante partite?',
               style: TextStyle(
@@ -3490,9 +3531,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               onPressed: _loading ? null : _createCoupon,
               icon: const Icon(Icons.auto_awesome),
               label: Text(
-                _loading
-                    ? 'ANALISI IN CORSO...'
-                    : 'CREA LA MIA SCHEDINA GOALVDLINE',
+                _loading ? 'ANALISI IN CORSO...' : 'CREA SISTEMA GOALVDLINE',
               ),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -3619,7 +3658,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           const Text(
             'Le probabilità sono stime statistiche e non garantiscono '
             'l’esito delle partite. Le quote sono utilizzate dopo il '
-            'calcolo probabilistico per costruire il portfolio delle schedine.',
+            'calcolo probabilistico per costruire il sistema di schedine.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white30, fontSize: 10, height: 1.4),
           ),
