@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../lib/models/analysis_result.dart';
 import '../../lib/models/match_model.dart';
 import '../../lib/services/dual_engine_analysis_service.dart';
+import '../../lib/services/smartbet_analysis_comparison_store.dart';
 import '../../lib/services/smartbet_analysis_history_store.dart';
 import '../../lib/services/smartbet_analysis_registration_service.dart';
 
@@ -307,4 +308,63 @@ void main() {
 
     expect(store.records, isEmpty);
   });
+
+  test(
+    'registrazione doppia crea automaticamente la coppia SmartBet Diego',
+    () async {
+      final store = SmartBetAnalysisHistoryStore();
+
+      final comparisonStore = SmartBetAnalysisComparisonStore();
+
+      final service = SmartBetAnalysisRegistrationService(
+        store: store,
+        comparisonStore: comparisonStore,
+      );
+
+      final dual = DualEngineAnalysis(
+        smartBet: smartBet(),
+        diego: null,
+        comparison: const DualEngineComparison(
+          status: DualEngineAgreement.diverge,
+          smartBetMarket: '1X',
+          diegoMarket: 'OVER 2.5',
+          smartBetProbability: 0.72,
+          diegoProbability: 0.61,
+          diegoMarketConfidence: 74,
+          diegoClassification: 'QUALIFIED VALUE',
+        ),
+      );
+
+      await service.registerSelection(
+        match: match(fixtureId: 800),
+        smartBet: dual.smartBet,
+        source: SmartBetAnalysisSource.analysis,
+        dualAnalysis: dual,
+        recordedAt: recordedAt,
+      );
+
+      expect(store.records.length, 2);
+      expect(comparisonStore.links.length, 1);
+
+      final link = comparisonStore.links.single;
+
+      expect(link.fixtureId, 800);
+      expect(link.smartBetMarket, '1X');
+      expect(link.diegoMarket, 'OVER 2.5');
+
+      expect(link.sources, [SmartBetAnalysisSource.analysis]);
+
+      final smartRecord = store.records.firstWhere(
+        (record) => record.engine == SmartBetAnalysisEngine.smartBet,
+      );
+
+      final diegoRecord = store.records.firstWhere(
+        (record) => record.engine == SmartBetAnalysisEngine.diego,
+      );
+
+      expect(link.smartBetRecordKey, smartRecord.key);
+
+      expect(link.diegoRecordKey, diegoRecord.key);
+    },
+  );
 }

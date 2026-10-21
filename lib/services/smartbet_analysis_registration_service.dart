@@ -1,6 +1,7 @@
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import 'dual_engine_analysis_service.dart';
+import 'smartbet_analysis_comparison_store.dart';
 import 'smartbet_analysis_history_store.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
@@ -8,8 +9,14 @@ export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 class SmartBetAnalysisRegistrationService {
   final SmartBetAnalysisHistoryStore _store;
 
-  SmartBetAnalysisRegistrationService({SmartBetAnalysisHistoryStore? store})
-    : _store = store ?? SmartBetAnalysisHistoryStore.instance;
+  final SmartBetAnalysisComparisonStore _comparisonStore;
+
+  SmartBetAnalysisRegistrationService({
+    SmartBetAnalysisHistoryStore? store,
+    SmartBetAnalysisComparisonStore? comparisonStore,
+  }) : _store = store ?? SmartBetAnalysisHistoryStore.instance,
+       _comparisonStore =
+           comparisonStore ?? SmartBetAnalysisComparisonStore.instance;
 
   Future<void> registerSelection({
     required MatchModel match,
@@ -40,9 +47,11 @@ class SmartBetAnalysisRegistrationService {
         ? _percentToProbability(smartBetProbabilityPercent)
         : comparison?.smartBetProbability;
 
+    SmartBetAnalysisRecord? smartBetRecord;
+
     if (resolvedSmartBetMarket.trim().isNotEmpty &&
         resolvedSmartBetMarket.trim().toUpperCase() != 'N/D') {
-      await _store.registerAnalysis(
+      smartBetRecord = await _store.registerAnalysis(
         engine: SmartBetAnalysisEngine.smartBet,
         source: source,
         fixtureId: match.fixtureId,
@@ -63,14 +72,15 @@ class SmartBetAnalysisRegistrationService {
     // ============================================================
     //
     // unavailable:
-    //   Diego non ha prodotto alcuna analisi -> non registriamo.
+    //   nessuna previsione Diego -> nessun record / confronto.
     //
     // noSelection:
-    //   Diego ha prodotto una lettura statistica ma non una
-    //   selezione qualificata -> la registriamo con qualified=false.
+    //   Diego ha comunque prodotto una previsione statistica.
+    //   La salviamo con qualified=false ed entra nella coppia
+    //   SmartBet/Diego.
     //
     // agree / partial / diverge:
-    //   Diego ha prodotto una vera selezione qualificata.
+    //   previsione Diego qualificata.
     // ============================================================
 
     if (dualAnalysis == null ||
@@ -87,7 +97,7 @@ class SmartBetAnalysisRegistrationService {
 
     final qualified = comparison.status != DualEngineAgreement.noSelection;
 
-    await _store.registerAnalysis(
+    final diegoRecord = await _store.registerAnalysis(
       engine: SmartBetAnalysisEngine.diego,
       source: source,
       fixtureId: match.fixtureId,
@@ -103,6 +113,30 @@ class SmartBetAnalysisRegistrationService {
       qualified: qualified,
       recordedAt: recordedAt,
     );
+
+    // ============================================================
+    // COPPIA SMARTBET ↔ DIEGO
+    // ============================================================
+    //
+    // La coppia viene costruita usando i record realmente
+    // persistiti. In questo modo:
+    //
+    // - dedup e normalizzazione restano una responsabilità
+    //   dello HistoryStore;
+    // - il ComparisonStore non deve ricostruire abbinamenti
+    //   a posteriori;
+    // - più mercati della stessa fixture possono mantenere
+    //   coppie distinte e corrette.
+    // ============================================================
+
+    if (smartBetRecord != null && diegoRecord != null) {
+      await _comparisonStore.registerPair(
+        smartBet: smartBetRecord,
+        diego: diegoRecord,
+        source: source,
+        recordedAt: recordedAt,
+      );
+    }
   }
 
   double _percentToProbability(int value) {
