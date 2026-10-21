@@ -97,6 +97,13 @@ class _CouponPick {
   }
 }
 
+class _PortfolioShadow {
+  final String name;
+  final List<_CouponPick> picks;
+
+  const _PortfolioShadow({required this.name, required this.picks});
+}
+
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
@@ -176,32 +183,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return 'BILANCIATA';
       case _CouponProfile.rapid:
         return 'RAPIDA ⚡';
-    }
-  }
-
-  String get _profileSubtitle {
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return 'COMPLETA — Controllo massimo\n'
-            'analisi GoalVdLine avanzata su shortlist ampia; Auditor finale solo sulle selezioni.';
-      case _CouponProfile.balanced:
-        return 'BILANCIATA — Equilibrio qualità/tempo\n'
-            'GoalVdLine su shortlist intermedia; Auditor finale di fattibilità.';
-      case _CouponProfile.rapid:
-        return 'RAPIDA ⚡ — Priorità velocità (~1 minuto)\n'
-            'Shortlist ridotta. L’Auditor completo interviene solo '
-            'sulle candidate più delicate.';
-    }
-  }
-
-  String get _profileDescription {
-    switch (_profile) {
-      case _CouponProfile.complete:
-        return 'Privilegia probabilità elevate e Smart Score solidi. GoalVdLine costruisce prima la schedina; l’Auditor controlla solo le selezioni finali.';
-      case _CouponProfile.balanced:
-        return 'Cerca un compromesso tra affidabilità, quota e tempo di elaborazione.';
-      case _CouponProfile.rapid:
-        return 'Riduce la shortlist avanzata per velocizzare la schedina. Mantiene comunque AI, Auditor e quota minima 1.25.';
     }
   }
 
@@ -1403,8 +1384,28 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // controlla prima SOLO le vere finaliste.
       // Le riserve vengono auditate soltanto se una finalista viene bloccata.
       final feasible = <_CouponPick>[];
-      final finalists = qualified.take(_count).toList();
-      final reserves = qualified.skip(_count).toList();
+
+      // PORTFOLIO P2
+      //
+      // Non ci fermiamo più alle sole _count finaliste.
+      // Auditiamo un pool più ampio da riutilizzare nella fase
+      // successiva per costruire più schedine coordinate.
+      //
+      // 3 eventi  -> fino a 11 candidate validate
+      // 5 eventi  -> fino a 13 candidate validate
+      // 7 eventi  -> fino a 15 candidate validate
+      // 10 eventi -> fino a 20 candidate validate
+      // 15 eventi -> fino a 30 candidate validate
+      //
+      // Il valore viene comunque limitato alla quantità reale
+      // di candidate qualificate disponibili.
+      final portfolioAuditTarget = math.min(
+        qualified.length,
+        math.max(_count + 8, _count * 2),
+      );
+
+      final finalists = qualified.take(portfolioAuditTarget).toList();
+      final reserves = qualified.skip(portfolioAuditTarget).toList();
 
       if (finalists.isNotEmpty) {
         if (!mounted) return;
@@ -1455,7 +1456,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         var reserveIndex = 0;
 
-        while (feasible.length < _count && reserveIndex < reserves.length) {
+        while (feasible.length < portfolioAuditTarget &&
+            reserveIndex < reserves.length) {
           final pick = reserves[reserveIndex++];
           final audit = SmartBetLocalAuditor.evaluate(
             analysis: pick.analysis,
@@ -1494,6 +1496,41 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
       }
 
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('GOALVDLINE PORTFOLIO POOL — P2');
+      debugPrint('========================================');
+      debugPrint(
+        'Richieste: $_count | '
+        'Qualified: ${qualified.length} | '
+        'Target audit: $portfolioAuditTarget | '
+        'Validate: ${feasible.length}',
+      );
+
+      for (var index = 0; index < feasible.length; index++) {
+        final item = feasible[index];
+
+        debugPrint(
+          '${index + 1}. '
+          '${item.match.homeTeam} - ${item.match.awayTeam} '
+          '| ${item.market} '
+          '| P ${item.probability} '
+          '| REL ${item.reliabilityScore ?? -1} '
+          '| SCORE ${item.rankScore.toStringAsFixed(1)} '
+          '| AUDIT ${item.auditorStatus}',
+        );
+      }
+
+      debugPrint('========================================');
+
+      // P3A — Portfolio Engine SHADOW.
+      //
+      // Costruiamo e misuriamo le 5 schedine, ma per ora NON
+      // modifichiamo il risultato mostrato all'utente.
+      final portfolioShadow = _buildPortfolioShadow(feasible);
+      _logPortfolioShadow(portfolioShadow);
+
+      // La schedina attiva resta ancora quella precedente.
       final selected = feasible.take(_count).toList();
 
       // v1.2.1 — Reliability shadow:
@@ -1626,6 +1663,260 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (smartScore != 0) return smartScore;
 
     return a.match.fixtureId.compareTo(b.match.fixtureId);
+  }
+
+  List<_CouponPick> _portfolioUniqueTake(
+    Iterable<_CouponPick> source,
+    int limit, {
+    Iterable<_CouponPick> seed = const <_CouponPick>[],
+  }) {
+    final result = <_CouponPick>[];
+    final fixtures = <int>{};
+
+    for (final item in seed) {
+      if (result.length >= limit) break;
+
+      if (fixtures.add(item.match.fixtureId)) {
+        result.add(item);
+      }
+    }
+
+    for (final item in source) {
+      if (result.length >= limit) break;
+
+      if (fixtures.add(item.match.fixtureId)) {
+        result.add(item);
+      }
+    }
+
+    return result;
+  }
+
+  int _portfolioReliability(_CouponPick item) {
+    return item.reliabilityScore ??
+        ((item.probability * 0.55) + (item.analysis.smartScore * 0.45)).round();
+  }
+
+  List<_PortfolioShadow> _buildPortfolioShadow(List<_CouponPick> source) {
+    if (source.isEmpty) {
+      return const <_PortfolioShadow>[];
+    }
+
+    final reliabilityRanked = List<_CouponPick>.of(source)
+      ..sort(_reliabilityRankingCompare);
+
+    // CORE = circa il 30% della dimensione richiesta.
+    //
+    // Non è una soglia sportiva artificiale:
+    // identifica semplicemente la parte più stabile del ranking
+    // già passata da quote, qualità e Auditor.
+    final coreCount = math.min(
+      reliabilityRanked.length,
+      math.max(1, (_count * 0.30).ceil()),
+    );
+
+    final core = _portfolioUniqueTake(reliabilityRanked, coreCount);
+
+    // ------------------------------------------------------------
+    // 1. CORE
+    // Massima priorità al ranking Reliability.
+    // ------------------------------------------------------------
+
+    final coreCoupon = _portfolioUniqueTake(reliabilityRanked, _count);
+
+    // ------------------------------------------------------------
+    // 2. PRUDENTE
+    // Mantiene le CORE e privilegia probabilità + Reliability.
+    // ------------------------------------------------------------
+
+    final prudentRanked = List<_CouponPick>.of(source)
+      ..sort((a, b) {
+        final probability = b.probability.compareTo(a.probability);
+        if (probability != 0) return probability;
+
+        final reliability = _portfolioReliability(
+          b,
+        ).compareTo(_portfolioReliability(a));
+        if (reliability != 0) return reliability;
+
+        return b.rankScore.compareTo(a.rankScore);
+      });
+
+    final prudentCoupon = _portfolioUniqueTake(
+      prudentRanked,
+      _count,
+      seed: core,
+    );
+
+    // ------------------------------------------------------------
+    // 3. EQUILIBRATA
+    // CORE + ranking complessivo GoalVdLine.
+    // ------------------------------------------------------------
+
+    final balancedRanked = List<_CouponPick>.of(source)
+      ..sort((a, b) {
+        final reliability = _portfolioReliability(
+          b,
+        ).compareTo(_portfolioReliability(a));
+        if (reliability != 0) return reliability;
+
+        final score = b.rankScore.compareTo(a.rankScore);
+        if (score != 0) return score;
+
+        return b.probability.compareTo(a.probability);
+      });
+
+    final balancedCoupon = _portfolioUniqueTake(
+      balancedRanked,
+      _count,
+      seed: core,
+    );
+
+    // ------------------------------------------------------------
+    // 4. VALUE
+    // Usa solamente candidate già validate, ma tra queste dà
+    // maggiore priorità a expected value ed edge.
+    // ------------------------------------------------------------
+
+    final valueRanked = List<_CouponPick>.of(source)
+      ..sort((a, b) {
+        final expectedValue = b.expectedValue.compareTo(a.expectedValue);
+        if (expectedValue != 0) return expectedValue;
+
+        final edge = b.edge.compareTo(a.edge);
+        if (edge != 0) return edge;
+
+        final reliability = _portfolioReliability(
+          b,
+        ).compareTo(_portfolioReliability(a));
+        if (reliability != 0) return reliability;
+
+        return b.probability.compareTo(a.probability);
+      });
+
+    final valueCoupon = _portfolioUniqueTake(valueRanked, _count, seed: core);
+
+    // ------------------------------------------------------------
+    // 5. DIVERSIFICATA
+    //
+    // Penalizza le partite già molto utilizzate nelle prime
+    // quattro schedine, mantenendo comunque le CORE.
+    // ------------------------------------------------------------
+
+    final usage = <int, int>{};
+
+    void registerUsage(List<_CouponPick> coupon) {
+      for (final item in coupon) {
+        usage[item.match.fixtureId] = (usage[item.match.fixtureId] ?? 0) + 1;
+      }
+    }
+
+    registerUsage(coreCoupon);
+    registerUsage(prudentCoupon);
+    registerUsage(balancedCoupon);
+    registerUsage(valueCoupon);
+
+    final diversifiedRanked = List<_CouponPick>.of(source)
+      ..sort((a, b) {
+        final usageA = usage[a.match.fixtureId] ?? 0;
+        final usageB = usage[b.match.fixtureId] ?? 0;
+
+        final usageCompare = usageA.compareTo(usageB);
+        if (usageCompare != 0) return usageCompare;
+
+        final reliability = _portfolioReliability(
+          b,
+        ).compareTo(_portfolioReliability(a));
+        if (reliability != 0) return reliability;
+
+        return b.rankScore.compareTo(a.rankScore);
+      });
+
+    final diversifiedCoupon = _portfolioUniqueTake(
+      diversifiedRanked,
+      _count,
+      seed: core,
+    );
+
+    return <_PortfolioShadow>[
+      _PortfolioShadow(name: 'CORE', picks: coreCoupon),
+      _PortfolioShadow(name: 'PRUDENTE', picks: prudentCoupon),
+      _PortfolioShadow(name: 'EQUILIBRATA', picks: balancedCoupon),
+      _PortfolioShadow(name: 'VALUE', picks: valueCoupon),
+      _PortfolioShadow(name: 'DIVERSIFICATA', picks: diversifiedCoupon),
+    ];
+  }
+
+  void _logPortfolioShadow(List<_PortfolioShadow> portfolios) {
+    if (portfolios.isEmpty) return;
+
+    String pickKey(_CouponPick item) =>
+        '${item.match.fixtureId}|${item.market.trim().toUpperCase()}';
+
+    debugPrint('');
+    debugPrint('========================================');
+    debugPrint('GOALVDLINE PORTFOLIO ENGINE — P3A SHADOW');
+    debugPrint('========================================');
+
+    final union = <String>{};
+
+    for (final portfolio in portfolios) {
+      final keys = portfolio.picks.map(pickKey).toSet();
+      union.addAll(keys);
+
+      debugPrint('');
+      debugPrint(
+        '${portfolio.name} '
+        '| ${portfolio.picks.length}/$_count eventi',
+      );
+
+      for (var index = 0; index < portfolio.picks.length; index++) {
+        final item = portfolio.picks[index];
+
+        debugPrint(
+          '${index + 1}. '
+          '${item.match.homeTeam} - ${item.match.awayTeam} '
+          '| ${item.market} '
+          '| P ${item.probability} '
+          '| REL ${_portfolioReliability(item)} '
+          '| EV ${item.expectedValue.toStringAsFixed(3)} '
+          '| EDGE ${item.edge.toStringAsFixed(3)}',
+        );
+      }
+    }
+
+    debugPrint('');
+    debugPrint('--- OVERLAP ---');
+
+    for (var i = 0; i < portfolios.length; i++) {
+      final a = portfolios[i];
+      final aKeys = a.picks.map(pickKey).toSet();
+
+      for (var j = i + 1; j < portfolios.length; j++) {
+        final b = portfolios[j];
+        final bKeys = b.picks.map(pickKey).toSet();
+
+        final overlap = aKeys.intersection(bKeys).length;
+        final denominator = math.min(aKeys.length, bKeys.length);
+
+        debugPrint(
+          '${a.name} ↔ ${b.name}: '
+          '$overlap/$denominator',
+        );
+      }
+    }
+
+    final uniqueFixtures = portfolios
+        .expand((portfolio) => portfolio.picks)
+        .map((item) => item.match.fixtureId)
+        .toSet();
+
+    debugPrint('');
+    debugPrint(
+      'Selezioni uniche: ${union.length} | '
+      'Partite uniche per Diego: ${uniqueFixtures.length}',
+    );
+    debugPrint('========================================');
   }
 
   void _logReliabilityRankingShadow(List<_CouponPick> source) {
@@ -1987,54 +2278,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (value >= 75) return Colors.greenAccent;
     if (value >= 65) return Colors.orangeAccent;
     return Colors.white70;
-  }
-
-  Widget _profileSelector() {
-    Widget chip(_CouponProfile profile, String label) {
-      final selected = _profile == profile;
-
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
-          child: ChoiceChip(
-            label: SizedBox(
-              width: double.infinity,
-              child: Text(label, textAlign: TextAlign.center),
-            ),
-            selected: selected,
-            showCheckmark: false,
-            selectedColor: const Color(0xFF00C853),
-            backgroundColor: const Color(0xFF1F2937),
-            side: BorderSide(
-              color: selected ? const Color(0xFF00C853) : Colors.white12,
-            ),
-            labelStyle: TextStyle(
-              color: selected ? Colors.white : Colors.white70,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-            onSelected: _loading
-                ? null
-                : (_) {
-                    setState(() {
-                      _profile = profile;
-                      _results.clear();
-                      _error = null;
-                      _notice = null;
-                    });
-                  },
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        chip(_CouponProfile.complete, 'COMPLETA'),
-        chip(_CouponProfile.balanced, 'BILANCIATA'),
-        chip(_CouponProfile.rapid, 'RAPIDA ⚡'),
-      ],
-    );
   }
 
   Widget _modeSelector() {
@@ -2815,8 +3058,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
                 SizedBox(height: 7),
                 Text(
-                  'GoalVdLine calcola prima le probabilità e successivamente '
-                  'usa le quote reali per costruire il profilo scelto.',
+                  'GoalVdLine analizza il pool disponibile, seleziona le '
+                  'giocate migliori e usa le quote reali solo nella fase finale.',
                   style: TextStyle(color: Colors.white70, height: 1.4),
                 ),
               ],
@@ -2827,38 +3070,30 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
           const SizedBox(height: 22),
 
-          const Text(
-            'Profilo schedina',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _profileSelector(),
-          const SizedBox(height: 12),
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: const Color(0xFF1F2937),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white10),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$_profileName — $_profileSubtitle',
-                  style: const TextStyle(
+                  'ANALISI GOALVDLINE COMPLETA',
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 5),
+                SizedBox(height: 5),
                 Text(
-                  _profileDescription,
-                  style: const TextStyle(
+                  'Un’unica analisi approfondita costruisce il pool migliore. '
+                  'Da questo pool GoalVdLine creerà schedine coordinate senza '
+                  'forzare eventi deboli.',
+                  style: TextStyle(
                     color: Colors.white54,
                     fontSize: 12,
                     height: 1.4,
@@ -2933,22 +3168,40 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            Slider(
-              value: _count.toDouble(),
-              min: 3,
-              max: 15,
-              divisions: 12,
-              label: '$_count',
-              onChanged: _loading
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _count = value.round();
-                        _results.clear();
-                        _error = null;
-                        _notice = null;
-                      });
-                    },
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [3, 5, 7, 10, 15].map((value) {
+                final selected = _count == value;
+
+                return ChoiceChip(
+                  label: Text('$value'),
+                  selected: selected,
+                  showCheckmark: false,
+                  selectedColor: const Color(0xFF00C853),
+                  backgroundColor: const Color(0xFF1F2937),
+                  side: BorderSide(
+                    color: selected ? const Color(0xFF00C853) : Colors.white12,
+                  ),
+                  labelStyle: TextStyle(
+                    color: selected ? Colors.white : Colors.white70,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  onSelected: _loading
+                      ? null
+                      : (enabled) {
+                          if (!enabled) return;
+
+                          setState(() {
+                            _count = value;
+                            _results.clear();
+                            _error = null;
+                            _notice = null;
+                          });
+                        },
+                );
+              }).toList(),
             ),
             const SizedBox(height: 6),
             FilledButton.icon(
