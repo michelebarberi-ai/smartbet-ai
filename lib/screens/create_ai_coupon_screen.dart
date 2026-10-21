@@ -136,6 +136,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   final List<_CouponPick> _results = [];
 
+  // P3B — portfolio automatico attivo.
+  //
+  // _results continua a rappresentare la schedina attualmente
+  // visualizzata, così summary/card/share possono essere riutilizzati.
+  final List<_PortfolioShadow> _portfolioResults = [];
+  int _selectedPortfolioIndex = 0;
+
   final Map<int, MatchModel> _manualSelectedMatches = <int, MatchModel>{};
 
   static const double _minimumOdd = 1.25;
@@ -665,6 +672,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _selectedCompetitionKeys.clear();
       _manualSelectedMatches.clear();
       _results.clear();
+      _portfolioResults.clear();
+      _selectedPortfolioIndex = 0;
       _error = null;
       _notice = null;
     });
@@ -736,6 +745,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _error = null;
       _notice = null;
       _results.clear();
+      _portfolioResults.clear();
+      _selectedPortfolioIndex = 0;
     });
 
     try {
@@ -919,6 +930,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _error = null;
       _notice = null;
       _results.clear();
+      _portfolioResults.clear();
+      _selectedPortfolioIndex = 0;
     });
 
     try {
@@ -1523,68 +1536,148 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       debugPrint('========================================');
 
-      // P3A — Portfolio Engine SHADOW.
+      // P3B — PORTFOLIO ATTIVO
       //
-      // Costruiamo e misuriamo le 5 schedine, ma per ora NON
-      // modifichiamo il risultato mostrato all'utente.
-      final portfolioShadow = _buildPortfolioShadow(feasible);
-      _logPortfolioShadow(portfolioShadow);
+      // Le cinque schedine vengono costruite sullo stesso pool già
+      // analizzato e auditato. Nessuna nuova analisi SmartBet viene
+      // eseguita per creare le varianti.
+      final portfolio = _buildPortfolioShadow(feasible);
+      _logPortfolioShadow(portfolio);
 
-      // La schedina attiva resta ancora quella precedente.
-      final selected = feasible.take(_count).toList();
+      if (portfolio.isEmpty) {
+        if (!mounted) return;
 
-      // v1.2.1 — Reliability shadow:
-      // osserva i valori senza modificare mercato, ranking o schedina.
-      _logReliabilityShadow(selected);
+        setState(() {
+          _portfolioResults.clear();
+          _selectedPortfolioIndex = 0;
+          _results.clear();
+          _loading = false;
+          _phase = '';
+          _error =
+              'GoalVdLine non ha trovato abbastanza selezioni valide '
+              'per costruire il portfolio.';
+        });
 
-      final adaptiveCount = selected.where((e) => e.adaptive).length;
-
-      // La qualità decide CHI entra. Paese/competizione/orario decidono solo
-      // l'ordine di visualizzazione, per rendere più facile riportare la schedina.
-      selected.sort(_presentationCompare);
-
-      // DiegoAI viene aggiunto soltanto alle selezioni definitive.
-      // Non modifica ranking, quote o Auditor SmartBet.
-      final enrichedSelected = <_CouponPick>[];
-
-      for (final item in selected) {
-        final dual = await _dualEngineService.attachDiego(
-          match: item.match,
-          smartBet: item.analysis,
-          smartBetMarket: item.market,
-          smartBetProbability: item.probability,
-        );
-
-        enrichedSelected.add(item.withDualAnalysis(dual));
+        return;
       }
 
+      // ------------------------------------------------------------
+      // DIEGO DEDUPLICATO
+      // ------------------------------------------------------------
+      //
+      // Ogni fixture può comparire in più schedine.
+      // Diego viene quindi calcolato una sola volta per partita,
+      // poi lo stesso risultato viene riutilizzato in tutte le varianti.
+      final uniqueByFixture = <int, _CouponPick>{};
+
+      for (final coupon in portfolio) {
+        for (final item in coupon.picks) {
+          uniqueByFixture.putIfAbsent(item.match.fixtureId, () => item);
+        }
+      }
+
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('GOALVDLINE PORTFOLIO — DIEGO DEDUP');
+      debugPrint('========================================');
+      debugPrint(
+        '5 schedine | '
+        '${portfolio.expand((e) => e.picks).length} posti totali | '
+        '${uniqueByFixture.length} fixture uniche da elaborare',
+      );
+
+      final enrichedByFixture = <int, _CouponPick>{};
+
+      for (final item in uniqueByFixture.values) {
+        try {
+          final dual = await _dualEngineService.attachDiego(
+            match: item.match,
+            smartBet: item.analysis,
+            smartBetMarket: item.market,
+            smartBetProbability: item.probability,
+          );
+
+          enrichedByFixture[item.match.fixtureId] = item.withDualAnalysis(dual);
+        } catch (e) {
+          // SmartBet resta valido anche se Diego non è disponibile.
+          debugPrint(
+            'PORTFOLIO DIEGO ERROR '
+            '${item.match.fixtureId}: $e',
+          );
+
+          enrichedByFixture[item.match.fixtureId] = item;
+        }
+      }
+
+      final enrichedPortfolio = portfolio.map((coupon) {
+        final picks = coupon.picks.map((item) {
+          return enrichedByFixture[item.match.fixtureId] ?? item;
+        }).toList()..sort(_presentationCompare);
+
+        return _PortfolioShadow(name: coupon.name, picks: picks);
+      }).toList();
+
+      final firstPortfolio = enrichedPortfolio.first;
+
+      // Manteniamo il Reliability log sulla prima schedina,
+      // ora corrispondente alla CORE.
+      _logReliabilityShadow(firstPortfolio.picks);
+
+      final adaptiveCount = firstPortfolio.picks
+          .where((e) => e.adaptive)
+          .length;
+
+      final incompletePortfolios = enrichedPortfolio
+          .where((coupon) => coupon.picks.length < _count)
+          .length;
+
       if (!mounted) return;
+
       setState(() {
+        _portfolioResults
+          ..clear()
+          ..addAll(enrichedPortfolio);
+
+        _selectedPortfolioIndex = 0;
+
+        // _results è sempre la schedina attualmente visualizzata.
         _results
           ..clear()
-          ..addAll(enrichedSelected);
+          ..addAll(firstPortfolio.picks);
+
         _loading = false;
         _phase = '';
 
         if (_results.isEmpty) {
           _error = _aiService.aiServiceUnavailable
               ? _aiService.aiServiceUnavailableMessage
-              : 'GoalVdLine non ha trovato selezioni con quota disponibile di almeno 1.25 che abbiano superato i controlli di qualità.';
-        } else if (_results.length < _count) {
+              : 'GoalVdLine non ha trovato selezioni con quota disponibile '
+                    'di almeno 1.25 che abbiano superato i controlli di qualità.';
+        } else if (incompletePortfolios > 0) {
           _notice =
-              'Hai richiesto $_count partite. GoalVdLine ne consiglia ${_results.length} '
-              'con quota disponibile di almeno 1.25 per mantenere qualità: non forza eventi deboli.'
+              '$incompletePortfolios schedine del portfolio contengono meno '
+              'di $_count eventi: GoalVdLine non forza selezioni deboli.'
               '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
         } else if (adaptiveCount > 0 || auditRejected > 0) {
           final parts = <String>[];
+
           if (adaptiveCount > 0) {
             parts.add('$adaptiveCount selezioni usano criteri adattivi');
           }
+
           if (auditRejected > 0) {
             parts.add('l’Auditor ha escluso $auditRejected candidate');
           }
+
           _notice =
-              '${parts.join(' • ')}. Quota minima: 1.25. GoalVdLine usa la migliore quota disponibile nel feed.';
+              '${parts.join(' • ')}. '
+              'Portfolio di ${_portfolioResults.length} schedine creato. '
+              'Quota minima: 1.25.';
+        } else {
+          _notice =
+              'Portfolio GoalVdLine creato: '
+              '${_portfolioResults.length} schedine coordinate '
+              'dalla stessa analisi.';
         }
       });
     } catch (e) {
@@ -1665,14 +1758,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return a.match.fixtureId.compareTo(b.match.fixtureId);
   }
 
-  List<_CouponPick> _portfolioUniqueTake(
+  List<_CouponPick> _portfolioVariantTake(
     Iterable<_CouponPick> source,
     int limit, {
     Iterable<_CouponPick> seed = const <_CouponPick>[],
+    Set<int> avoidFixtures = const <int>{},
   }) {
     final result = <_CouponPick>[];
     final fixtures = <int>{};
 
+    // Le CORE vengono inserite per prime.
     for (final item in seed) {
       if (result.length >= limit) break;
 
@@ -1681,6 +1776,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       }
     }
 
+    // Primo passaggio:
+    // preferiamo partite non presenti nelle schedine da evitare.
+    for (final item in source) {
+      if (result.length >= limit) break;
+
+      if (avoidFixtures.contains(item.match.fixtureId)) {
+        continue;
+      }
+
+      if (fixtures.add(item.match.fixtureId)) {
+        result.add(item);
+      }
+    }
+
+    // Secondo passaggio:
+    // se il pool realmente valido non basta, riutilizziamo candidate
+    // già presenti altrove. Non introduciamo però nuove candidate deboli:
+    // source è già stato filtrato prima della costruzione del portfolio.
     for (final item in source) {
       if (result.length >= limit) break;
 
@@ -1697,39 +1810,81 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         ((item.probability * 0.55) + (item.analysis.smartScore * 0.45)).round();
   }
 
+  Set<int> _portfolioNonCoreFixtures(
+    List<_CouponPick> coupon,
+    Set<int> sharedCoreFixtures,
+  ) {
+    return coupon
+        .where((item) => !sharedCoreFixtures.contains(item.match.fixtureId))
+        .map((item) => item.match.fixtureId)
+        .toSet();
+  }
+
   List<_PortfolioShadow> _buildPortfolioShadow(List<_CouponPick> source) {
     if (source.isEmpty) {
       return const <_PortfolioShadow>[];
     }
 
-    final reliabilityRanked = List<_CouponPick>.of(source)
+    // PORTFOLIO P3A.1
+    //
+    // Diversificare non deve significare abbassare la qualità.
+    // Le alternative con EV o edge negativi non vengono utilizzate
+    // per riempire artificialmente le cinque schedine.
+    final eligible = source
+        .where((item) => item.expectedValue >= 0.0 && item.edge >= 0.0)
+        .toList();
+
+    if (eligible.isEmpty) {
+      return const <_PortfolioShadow>[];
+    }
+
+    final reliabilityRanked = List<_CouponPick>.of(eligible)
       ..sort(_reliabilityRankingCompare);
 
-    // CORE = circa il 30% della dimensione richiesta.
+    // CORE condivise:
+    // circa il 30% del numero di eventi richiesto.
     //
-    // Non è una soglia sportiva artificiale:
-    // identifica semplicemente la parte più stabile del ranking
-    // già passata da quote, qualità e Auditor.
-    final coreCount = math.min(
+    // 3  -> 1
+    // 5  -> 2
+    // 7  -> 3
+    // 10 -> 3
+    // 15 -> 5
+    final sharedCoreCount = math.min(
       reliabilityRanked.length,
       math.max(1, (_count * 0.30).ceil()),
     );
 
-    final core = _portfolioUniqueTake(reliabilityRanked, coreCount);
+    final sharedCore = _portfolioVariantTake(
+      reliabilityRanked,
+      sharedCoreCount,
+    );
 
-    // ------------------------------------------------------------
+    final sharedCoreFixtures = sharedCore
+        .map((item) => item.match.fixtureId)
+        .toSet();
+
+    // ============================================================
     // 1. CORE
-    // Massima priorità al ranking Reliability.
-    // ------------------------------------------------------------
+    // ============================================================
+    //
+    // Riferimento principale:
+    // Reliability -> probabilità -> Smart Score -> ranking storico.
+    final coreCoupon = _portfolioVariantTake(reliabilityRanked, _count);
 
-    final coreCoupon = _portfolioUniqueTake(reliabilityRanked, _count);
+    final coreAlternatives = _portfolioNonCoreFixtures(
+      coreCoupon,
+      sharedCoreFixtures,
+    );
 
-    // ------------------------------------------------------------
-    // 2. PRUDENTE
-    // Mantiene le CORE e privilegia probabilità + Reliability.
-    // ------------------------------------------------------------
-
-    final prudentRanked = List<_CouponPick>.of(source)
+    // ============================================================
+    // 2. PROBABILITÀ
+    // ============================================================
+    //
+    // Mantiene soltanto le CORE obbligatorie e privilegia
+    // probabilità assoluta + Reliability.
+    //
+    // Prima prova a NON utilizzare le altre partite della CORE.
+    final probabilityRanked = List<_CouponPick>.of(eligible)
       ..sort((a, b) {
         final probability = b.probability.compareTo(a.probability);
         if (probability != 0) return probability;
@@ -1742,43 +1897,59 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return b.rankScore.compareTo(a.rankScore);
       });
 
-    final prudentCoupon = _portfolioUniqueTake(
-      prudentRanked,
+    final probabilityCoupon = _portfolioVariantTake(
+      probabilityRanked,
       _count,
-      seed: core,
+      seed: sharedCore,
+      avoidFixtures: coreAlternatives,
     );
 
-    // ------------------------------------------------------------
-    // 3. EQUILIBRATA
-    // CORE + ranking complessivo GoalVdLine.
-    // ------------------------------------------------------------
+    final probabilityAlternatives = _portfolioNonCoreFixtures(
+      probabilityCoupon,
+      sharedCoreFixtures,
+    );
 
-    final balancedRanked = List<_CouponPick>.of(source)
+    // ============================================================
+    // 3. EQUILIBRIO
+    // ============================================================
+    //
+    // Usa il ranking complessivo GoalVdLine come criterio principale,
+    // ma cerca prima candidate non già utilizzate nelle parti
+    // non-CORE delle prime due schedine.
+    final balanceRanked = List<_CouponPick>.of(eligible)
       ..sort((a, b) {
+        final score = b.rankScore.compareTo(a.rankScore);
+        if (score != 0) return score;
+
         final reliability = _portfolioReliability(
           b,
         ).compareTo(_portfolioReliability(a));
         if (reliability != 0) return reliability;
 
-        final score = b.rankScore.compareTo(a.rankScore);
-        if (score != 0) return score;
-
         return b.probability.compareTo(a.probability);
       });
 
-    final balancedCoupon = _portfolioUniqueTake(
-      balancedRanked,
+    final balanceAvoid = <int>{...coreAlternatives, ...probabilityAlternatives};
+
+    final balanceCoupon = _portfolioVariantTake(
+      balanceRanked,
       _count,
-      seed: core,
+      seed: sharedCore,
+      avoidFixtures: balanceAvoid,
     );
 
-    // ------------------------------------------------------------
-    // 4. VALUE
-    // Usa solamente candidate già validate, ma tra queste dà
-    // maggiore priorità a expected value ed edge.
-    // ------------------------------------------------------------
+    final balanceAlternatives = _portfolioNonCoreFixtures(
+      balanceCoupon,
+      sharedCoreFixtures,
+    );
 
-    final valueRanked = List<_CouponPick>.of(source)
+    // ============================================================
+    // 4. VALUE
+    // ============================================================
+    //
+    // Sempre candidate già validate e con EV/edge non negativi.
+    // Tra queste privilegia EV -> edge -> Reliability.
+    final valueRanked = List<_CouponPick>.of(eligible)
       ..sort((a, b) {
         final expectedValue = b.expectedValue.compareTo(a.expectedValue);
         if (expectedValue != 0) return expectedValue;
@@ -1794,15 +1965,25 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return b.probability.compareTo(a.probability);
       });
 
-    final valueCoupon = _portfolioUniqueTake(valueRanked, _count, seed: core);
+    final valueAvoid = <int>{
+      ...coreAlternatives,
+      ...probabilityAlternatives,
+      ...balanceAlternatives,
+    };
 
-    // ------------------------------------------------------------
+    final valueCoupon = _portfolioVariantTake(
+      valueRanked,
+      _count,
+      seed: sharedCore,
+      avoidFixtures: valueAvoid,
+    );
+
+    // ============================================================
     // 5. DIVERSIFICATA
+    // ============================================================
     //
-    // Penalizza le partite già molto utilizzate nelle prime
-    // quattro schedine, mantenendo comunque le CORE.
-    // ------------------------------------------------------------
-
+    // Misura quante volte ogni partita è già comparsa.
+    // A parità di utilizzo vince sempre la candidata più affidabile.
     final usage = <int, int>{};
 
     void registerUsage(List<_CouponPick> coupon) {
@@ -1812,36 +1993,45 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     registerUsage(coreCoupon);
-    registerUsage(prudentCoupon);
-    registerUsage(balancedCoupon);
+    registerUsage(probabilityCoupon);
+    registerUsage(balanceCoupon);
     registerUsage(valueCoupon);
 
-    final diversifiedRanked = List<_CouponPick>.of(source)
+    final diversifiedRanked = List<_CouponPick>.of(eligible)
       ..sort((a, b) {
         final usageA = usage[a.match.fixtureId] ?? 0;
         final usageB = usage[b.match.fixtureId] ?? 0;
 
-        final usageCompare = usageA.compareTo(usageB);
-        if (usageCompare != 0) return usageCompare;
+        final use = usageA.compareTo(usageB);
+        if (use != 0) return use;
 
         final reliability = _portfolioReliability(
           b,
         ).compareTo(_portfolioReliability(a));
         if (reliability != 0) return reliability;
 
+        final probability = b.probability.compareTo(a.probability);
+        if (probability != 0) return probability;
+
         return b.rankScore.compareTo(a.rankScore);
       });
 
-    final diversifiedCoupon = _portfolioUniqueTake(
+    final diversifiedCoupon = _portfolioVariantTake(
       diversifiedRanked,
       _count,
-      seed: core,
+      seed: sharedCore,
+    );
+
+    debugPrint(
+      'PORTFOLIO ELIGIBLE: '
+      '${eligible.length}/${source.length} '
+      '(EV >= 0, edge >= 0)',
     );
 
     return <_PortfolioShadow>[
       _PortfolioShadow(name: 'CORE', picks: coreCoupon),
-      _PortfolioShadow(name: 'PRUDENTE', picks: prudentCoupon),
-      _PortfolioShadow(name: 'EQUILIBRATA', picks: balancedCoupon),
+      _PortfolioShadow(name: 'PROBABILITÀ', picks: probabilityCoupon),
+      _PortfolioShadow(name: 'EQUILIBRIO', picks: balanceCoupon),
       _PortfolioShadow(name: 'VALUE', picks: valueCoupon),
       _PortfolioShadow(name: 'DIVERSIFICATA', picks: diversifiedCoupon),
     ];
@@ -2213,6 +2403,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     return 'Contenuto';
   }
 
+  String get _activeCouponName {
+    if (_mode != _CouponMode.automatic || _portfolioResults.isEmpty) {
+      return _profileName;
+    }
+
+    final safeIndex = _selectedPortfolioIndex.clamp(
+      0,
+      _portfolioResults.length - 1,
+    );
+
+    return _portfolioResults[safeIndex].name;
+  }
+
   // ============================================================
   // CONDIVIDI
   // ============================================================
@@ -2221,7 +2424,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (_results.isEmpty) return;
 
     final text = StringBuffer()
-      ..writeln('GOALVDLINE — SCHEDINA $_profileName')
+      ..writeln('GOALVDLINE — SCHEDINA $_activeCouponName')
       ..writeln()
       ..writeln('${_results.length} partite')
       ..writeln(
@@ -2265,7 +2468,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     await SharePlus.instance.share(
       ShareParams(
         text: text.toString(),
-        subject: 'GoalVdLine — Schedina $_profileName',
+        subject: 'GoalVdLine — Schedina $_activeCouponName',
       ),
     );
   }
@@ -2278,6 +2481,69 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (value >= 75) return Colors.greenAccent;
     if (value >= 65) return Colors.orangeAccent;
     return Colors.white70;
+  }
+
+  Widget _portfolioSelector() {
+    if (_mode != _CouponMode.automatic ||
+        _portfolioResults.length <= 1 ||
+        _loading) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PORTFOLIO GOALVDLINE',
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(_portfolioResults.length, (index) {
+              final portfolio = _portfolioResults[index];
+              final selected = index == _selectedPortfolioIndex;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: ChoiceChip(
+                  label: Text(portfolio.name),
+                  selected: selected,
+                  showCheckmark: false,
+                  selectedColor: const Color(0xFF00C853),
+                  backgroundColor: const Color(0xFF1F2937),
+                  side: BorderSide(
+                    color: selected ? const Color(0xFF00C853) : Colors.white12,
+                  ),
+                  labelStyle: TextStyle(
+                    color: selected ? Colors.white : Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  onSelected: (enabled) {
+                    if (!enabled) return;
+
+                    setState(() {
+                      _selectedPortfolioIndex = index;
+
+                      _results
+                        ..clear()
+                        ..addAll(portfolio.picks);
+                    });
+                  },
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _modeSelector() {
@@ -2310,6 +2576,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 setState(() {
                   _mode = mode;
                   _results.clear();
+                  _portfolioResults.clear();
+                  _selectedPortfolioIndex = 0;
                   _error = null;
                   _notice = null;
                 });
@@ -2582,6 +2850,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                                         match.fixtureId,
                                       );
                                       _results.clear();
+                                      _portfolioResults.clear();
+                                      _selectedPortfolioIndex = 0;
                                       _error = null;
                                       _notice = null;
                                     });
@@ -2606,6 +2876,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                                         match;
 
                                     _results.clear();
+                                    _portfolioResults.clear();
+                                    _selectedPortfolioIndex = 0;
                                     _error = null;
                                     _notice = null;
                                   });
@@ -2739,6 +3011,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                                 _manualSelectedMatches.remove(match.fixtureId);
 
                                 _results.clear();
+                                _portfolioResults.clear();
+                                _selectedPortfolioIndex = 0;
                                 _error = null;
                                 _notice = null;
                               });
@@ -2790,6 +3064,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   _selectedCompetitionKeys.clear();
                   _manualSelectedMatches.clear();
                   _results.clear();
+                  _portfolioResults.clear();
+                  _selectedPortfolioIndex = 0;
                   _error = null;
                   _notice = null;
                 });
@@ -2861,6 +3137,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         _manualSelectedMatches.clear();
         _results.clear();
+        _portfolioResults.clear();
+        _selectedPortfolioIndex = 0;
         _error = null;
         _notice = null;
       });
@@ -3141,6 +3419,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                         _italyScheduleOnly = value;
                         _manualSelectedMatches.clear();
                         _results.clear();
+                        _portfolioResults.clear();
+                        _selectedPortfolioIndex = 0;
                         _error = null;
                         _notice = null;
                       });
@@ -3196,6 +3476,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                           setState(() {
                             _count = value;
                             _results.clear();
+                            _portfolioResults.clear();
+                            _selectedPortfolioIndex = 0;
                             _error = null;
                             _notice = null;
                           });
@@ -3289,7 +3571,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                         '${_mode == _CouponMode.manual ? _manualSelectedMatches.length : _count}'
                   : _mode == _CouponMode.manual
                   ? 'Analisi manuale'
-                  : 'Schedina $_profileName',
+                  : 'Schedina $_activeCouponName',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -3306,6 +3588,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   height: 1.35,
                 ),
               ),
+            ],
+            if (_mode == _CouponMode.automatic &&
+                _portfolioResults.length > 1 &&
+                !_loading) ...[
+              const SizedBox(height: 12),
+              _portfolioSelector(),
             ],
             const SizedBox(height: 12),
             _summary(),
@@ -3331,7 +3619,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           const Text(
             'Le probabilità sono stime statistiche e non garantiscono '
             'l’esito delle partite. Le quote sono utilizzate dopo il '
-            'calcolo probabilistico per selezionare il profilo della schedina.',
+            'calcolo probabilistico per costruire il portfolio delle schedine.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white30, fontSize: 10, height: 1.4),
           ),
