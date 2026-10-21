@@ -3,6 +3,8 @@ import '../models/match_model.dart';
 import 'dual_engine_analysis_service.dart';
 import 'smartbet_analysis_history_store.dart';
 
+export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
+
 class SmartBetAnalysisRegistrationService {
   final SmartBetAnalysisHistoryStore _store;
 

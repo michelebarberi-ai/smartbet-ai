@@ -1,4 +1,5 @@
 import '../services/dual_engine_analysis_service.dart';
+import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_coupon_service.dart';
 import '../services/review_coupon_store.dart';
 import 'coupon_screen.dart';
@@ -1511,6 +1512,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
                         final advancedResult = dualAnalysis.smartBet;
                         final diegoAnalysis = dualAnalysis.diego;
+
+                        try {
+                          await SmartBetAnalysisRegistrationService()
+                              .registerSelection(
+                                match: match,
+                                smartBet: advancedResult,
+                                source: SmartBetAnalysisSource.analysis,
+                                dualAnalysis: dualAnalysis,
+                              );
+                        } catch (e) {
+                          debugPrint(
+                            'ANALYSIS HISTORY ERROR '
+                            '${match.fixtureId}: $e',
+                          );
+                        }
 
                         if (!context.mounted) {
                           return;

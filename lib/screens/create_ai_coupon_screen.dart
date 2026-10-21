@@ -15,6 +15,7 @@ import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
+import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
@@ -841,6 +842,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       analyzed.sort(_presentationCompare);
 
+      for (final item in analyzed) {
+        try {
+          await SmartBetAnalysisRegistrationService().registerSelection(
+            match: item.match,
+            smartBet: item.analysis,
+            source: SmartBetAnalysisSource.aiCoupon,
+            smartBetMarket: item.market,
+            smartBetProbabilityPercent: item.probability,
+            dualAnalysis: item.dualAnalysis,
+          );
+        } catch (e) {
+          debugPrint(
+            'AI COUPON HISTORY ERROR '
+            '${item.match.fixtureId}|${item.market}: $e',
+          );
+        }
+      }
+
       if (!mounted) return;
 
       final discouraged = analyzed
@@ -1593,6 +1612,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         return _PortfolioShadow(name: coupon.name, picks: picks);
       }).toList();
+
+      for (final item in enrichedByFixture.values) {
+        try {
+          await SmartBetAnalysisRegistrationService().registerSelection(
+            match: item.match,
+            smartBet: item.analysis,
+            source: SmartBetAnalysisSource.aiCoupon,
+            smartBetMarket: item.market,
+            smartBetProbabilityPercent: item.probability,
+            dualAnalysis: item.dualAnalysis,
+          );
+        } catch (e) {
+          debugPrint(
+            'AI PORTFOLIO HISTORY ERROR '
+            '${item.match.fixtureId}|${item.market}: $e',
+          );
+        }
+      }
 
       final firstPortfolio = enrichedPortfolio.first;
 

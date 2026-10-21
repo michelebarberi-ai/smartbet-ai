@@ -13,6 +13,7 @@ import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
+import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 
 enum _PredictionPeriod { today, next2Days, next3Days, custom }
@@ -979,6 +980,24 @@ class _PredictionScreenState extends State<PredictionScreen> {
         );
 
         enrichedFinalResults.add(item.withDualAnalysis(dual));
+      }
+
+      for (final item in enrichedFinalResults) {
+        try {
+          await SmartBetAnalysisRegistrationService().registerSelection(
+            match: item.match,
+            smartBet: item.analysis,
+            source: SmartBetAnalysisSource.dailyResults,
+            smartBetMarket: item.market,
+            smartBetProbabilityPercent: item.probability,
+            dualAnalysis: item.dualAnalysis,
+          );
+        } catch (e) {
+          debugPrint(
+            'DAILY RESULTS HISTORY ERROR '
+            '${item.match.fixtureId}|${item.market}: $e',
+          );
+        }
       }
 
       if (!mounted) {

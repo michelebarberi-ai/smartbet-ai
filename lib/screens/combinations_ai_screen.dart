@@ -14,6 +14,7 @@ import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
+import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
@@ -1555,6 +1556,24 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             })
             .toList(growable: false);
 
+        for (final item in enrichedByKey.values) {
+          try {
+            await SmartBetAnalysisRegistrationService().registerSelection(
+              match: item.match,
+              smartBet: item.analysis,
+              source: SmartBetAnalysisSource.combinations,
+              smartBetMarket: item.market,
+              smartBetProbabilityPercent: item.probability,
+              dualAnalysis: item.dualAnalysis,
+            );
+          } catch (e) {
+            debugPrint(
+              'COMBINATIONS HISTORY ERROR '
+              '${item.match.fixtureId}|${item.market}: $e',
+            );
+          }
+        }
+
         if (!mounted) {
           return;
         }
@@ -1596,6 +1615,24 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         );
 
         enrichedCandidates.add(item.withDualAnalysis(dual));
+      }
+
+      for (final item in enrichedCandidates) {
+        try {
+          await SmartBetAnalysisRegistrationService().registerSelection(
+            match: item.match,
+            smartBet: item.analysis,
+            source: SmartBetAnalysisSource.combinations,
+            smartBetMarket: item.market,
+            smartBetProbabilityPercent: item.probability,
+            dualAnalysis: item.dualAnalysis,
+          );
+        } catch (e) {
+          debugPrint(
+            'COMBINATIONS HISTORY ERROR '
+            '${item.match.fixtureId}|${item.market}: $e',
+          );
+        }
       }
 
       if (!mounted) {
