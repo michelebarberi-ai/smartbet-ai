@@ -45,10 +45,20 @@ class DiegoAiMarketValue {
 
   bool get hasPositiveEv => expectedValue > 0;
 
-  bool get hasValue =>
+  bool get isSpeculativeValue => classification == 'SPECULATIVE VALUE';
+
+  bool get isQualifiedValue =>
       classification == 'WEAK VALUE' ||
       classification == 'VALUE' ||
       classification == 'STRONG VALUE';
+
+  /// Compatibilità con il codice esistente:
+  /// "hasValue" significa value qualificato come raccomandazione.
+  bool get hasValue => isQualifiedValue;
+
+  /// Comprende anche il value matematico escluso dalla raccomandazione
+  /// perché troppo speculativo.
+  bool get hasMathematicalValue => isQualifiedValue || isSpeculativeValue;
 }
 
 class DiegoAiMultiMarketValueResult {
@@ -57,7 +67,14 @@ class DiegoAiMultiMarketValueResult {
   const DiegoAiMultiMarketValueResult({required this.markets});
 
   List<DiegoAiMarketValue> get valueMarkets {
-    final result = markets.where((item) => item.hasValue).toList()
+    final result = markets.where((item) => item.isQualifiedValue).toList()
+      ..sort((a, b) => b.expectedValue.compareTo(a.expectedValue));
+
+    return List.unmodifiable(result);
+  }
+
+  List<DiegoAiMarketValue> get speculativeValueMarkets {
+    final result = markets.where((item) => item.isSpeculativeValue).toList()
       ..sort((a, b) => b.expectedValue.compareTo(a.expectedValue));
 
     return List.unmodifiable(result);
@@ -72,9 +89,25 @@ class DiegoAiMultiMarketValueResult {
 
     return values.first;
   }
+
+  DiegoAiMarketValue? get bestSpeculativeValue {
+    final values = speculativeValueMarkets;
+
+    if (values.isEmpty) {
+      return null;
+    }
+
+    return values.first;
+  }
 }
 
 class DiegoAiMultiMarketValueService {
+  /// Guardrail iniziale v1.2.1.
+  ///
+  /// Un value matematico sotto questa probabilità resta informativo,
+  /// ma non viene trattato come raccomandazione DiegoAI.
+  static const double _speculativeProbabilityThreshold = 0.25;
+
   final DiegoAiMarketProbabilityService probabilityService;
 
   const DiegoAiMultiMarketValueService({
@@ -132,6 +165,7 @@ class DiegoAiMultiMarketValueService {
       );
 
       final classification = _classify(
+        aiProbability: aiProbability,
         dataConfidence: dataConfidence,
         marketConfidence: marketConfidence,
         edge: edge,
@@ -210,6 +244,7 @@ class DiegoAiMultiMarketValueService {
   }
 
   String _classify({
+    required double aiProbability,
     required int dataConfidence,
     required int marketConfidence,
     required double edge,
@@ -219,18 +254,28 @@ class DiegoAiMultiMarketValueService {
       return 'NO VALUE';
     }
 
+    String classification;
+
     if (marketConfidence >= 70 && edge >= 0.08 && expectedValue >= 0.12) {
-      return 'STRONG VALUE';
+      classification = 'STRONG VALUE';
+    } else if (marketConfidence >= 60 &&
+        edge >= 0.05 &&
+        expectedValue >= 0.07) {
+      classification = 'VALUE';
+    } else if (marketConfidence >= 50 &&
+        edge >= 0.03 &&
+        expectedValue >= 0.04) {
+      classification = 'WEAK VALUE';
+    } else {
+      return 'NO VALUE';
     }
 
-    if (marketConfidence >= 60 && edge >= 0.05 && expectedValue >= 0.07) {
-      return 'VALUE';
+    // Un grande EV non trasforma automaticamente un evento raro
+    // in una raccomandazione affidabile.
+    if (aiProbability < _speculativeProbabilityThreshold) {
+      return 'SPECULATIVE VALUE';
     }
 
-    if (marketConfidence >= 50 && edge >= 0.03 && expectedValue >= 0.04) {
-      return 'WEAK VALUE';
-    }
-
-    return 'NO VALUE';
+    return classification;
   }
 }

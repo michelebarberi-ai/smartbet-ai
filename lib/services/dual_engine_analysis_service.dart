@@ -72,6 +72,10 @@ class DualEngineComparison {
         return 'DIVERGENZA';
 
       case DualEngineAgreement.noSelection:
+        if (diegoClassification == 'SPECULATIVE VALUE') {
+          return 'VALUE SPECULATIVO';
+        }
+
         return diegoOdd == null ? 'VALUE NON VERIFICABILE' : 'NESSUN VALUE';
 
       case DualEngineAgreement.unavailable:
@@ -101,6 +105,12 @@ class DualEngineComparison {
             'Le due indicazioni sono in contrasto.';
 
       case DualEngineAgreement.noSelection:
+        if (diegoClassification == 'SPECULATIVE VALUE') {
+          return 'DiegoAI rileva valore matematico su $diegoLabel, '
+              'ma la probabilità assoluta è troppo bassa per '
+              'considerarlo una raccomandazione qualificata.';
+        }
+
         if (diegoOdd == null) {
           return 'DiegoAI indica $diegoLabel come lettura statistica '
               'di riferimento. Il valore non può essere verificato '
@@ -404,6 +414,15 @@ class DualEngineAnalysisService {
   }
 
   _EngineMarketChoice _diegoStatisticalChoice(DiegoAiAnalysis analysis) {
+    // Se esiste un value matematico escluso soltanto perché
+    // troppo speculativo, lo mostriamo come LETTURA e non
+    // come raccomandazione DiegoAI.
+    final speculativeValue = analysis.multiMarketValue.bestSpeculativeValue;
+
+    if (speculativeValue != null) {
+      return _choiceFromValue(speculativeValue);
+    }
+
     // Se esistono mercati con quota, prendiamo quello
     // che Diego considera statisticamente più probabile.
     //

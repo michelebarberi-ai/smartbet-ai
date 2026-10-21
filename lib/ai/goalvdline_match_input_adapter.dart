@@ -9,6 +9,8 @@ class GoalVdLineMatchInputAdapter {
     required MatchModel match,
     required MatchDossier dossier,
     int simulations = 20000,
+    double homeContextAdjustment = 0.0,
+    double awayContextAdjustment = 0.0,
   }) {
     final home = _buildTeamState(
       teamId: match.homeTeamId,
@@ -18,6 +20,7 @@ class GoalVdLineMatchInputAdapter {
       venue: dossier.homeVenue,
       dossier: dossier,
       isHome: true,
+      contextAdjustment: homeContextAdjustment,
     );
 
     final away = _buildTeamState(
@@ -28,6 +31,7 @@ class GoalVdLineMatchInputAdapter {
       venue: dossier.awayVenue,
       dossier: dossier,
       isHome: false,
+      contextAdjustment: awayContextAdjustment,
     );
 
     return GoalVdLineMatchEngineInput(
@@ -51,6 +55,7 @@ class GoalVdLineMatchInputAdapter {
     required Map<String, dynamic> venue,
     required MatchDossier dossier,
     required bool isHome,
+    required double contextAdjustment,
   }) {
     final matchesPlayed = _toInt(statistics['matchesPlayed']);
     final wins = _toInt(statistics['wins']);
@@ -203,10 +208,6 @@ class GoalVdLineMatchInputAdapter {
     // Per ora NON inventiamo una forza rosa.
     // 50 è neutro e quindi non influenza il confronto.
     const squadStrength = 50.0;
-
-    // Per ora il contesto testuale non modifica numericamente
-    // la simulazione. Verrà collegato nella fase successiva.
-    const contextAdjustment = 0.0;
 
     // Motivazione neutra finché non avremo un segnale reale
     // e strutturato dal contesto.

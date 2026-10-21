@@ -140,12 +140,39 @@ class ResolvedTeamData {
   }
 }
 
+class ResolvedTeamLeague {
+  final int teamId;
+  final String teamName;
+
+  final int season;
+
+  final int leagueId;
+  final String leagueName;
+
+  const ResolvedTeamLeague({
+    required this.teamId,
+    required this.teamName,
+    required this.season,
+    required this.leagueId,
+    required this.leagueName,
+  });
+}
+
+abstract class TeamLeagueCacheStore {
+  Future<ResolvedTeamLeague?> read({required int teamId, required int season});
+
+  Future<void> write(ResolvedTeamLeague value);
+}
+
 class TeamDataResolver {
   final http.Client _client;
 
+  final TeamLeagueCacheStore? leagueCacheStore;
+
   late final HistoricalTeamService _historicalService;
 
-  TeamDataResolver({http.Client? client}) : _client = client ?? http.Client() {
+  TeamDataResolver({http.Client? client, this.leagueCacheStore})
+    : _client = client ?? http.Client() {
     _historicalService = HistoricalTeamService(client: _client);
   }
 
@@ -154,6 +181,8 @@ class TeamDataResolver {
   // ============================================================
 
   static final Map<String, ResolvedTeamData?> _cache = {};
+
+  static final Map<String, ResolvedTeamLeague?> _leagueOnlyCache = {};
 
   // ============================================================
   // RISOLUZIONE PRINCIPALE
@@ -201,6 +230,112 @@ class TeamDataResolver {
     _cache[cacheKey] = resolved;
 
     return resolved;
+  }
+
+  // ============================================================
+  // SOLO CAMPIONATO ATTUALE - LOOKUP LEGGERO
+  // ============================================================
+
+  Future<ResolvedTeamLeague?> resolveCurrentLeagueOnly({
+    required int teamId,
+    required String teamName,
+    required DateTime referenceDate,
+  }) async {
+    if (teamId <= 0) {
+      return null;
+    }
+
+    final referenceYear = referenceDate.year;
+
+    // Prima stagione coerente con l'anno della partita.
+    // Se l'API non espone ancora quella stagione, proviamo
+    // anche la precedente. Ci serve solamente identificare
+    // il campionato domestico, non recuperare statistiche.
+    final seasons = <int>[referenceYear, referenceYear - 1];
+
+    for (final season in seasons) {
+      final cacheKey = '$teamId|$season';
+
+      if (_leagueOnlyCache.containsKey(cacheKey)) {
+        final cached = _leagueOnlyCache[cacheKey];
+
+        if (cached != null) {
+          return cached;
+        }
+
+        continue;
+      }
+
+      final persistentStore = leagueCacheStore;
+
+      if (persistentStore != null) {
+        try {
+          final persisted = await persistentStore.read(
+            teamId: teamId,
+            season: season,
+          );
+
+          if (persisted != null) {
+            _leagueOnlyCache[cacheKey] = persisted;
+            return persisted;
+          }
+        } catch (_) {
+          // La persistenza è soltanto un'ottimizzazione.
+          // Un errore locale non deve impedire il lookup API.
+        }
+      }
+
+      final leagues = await _getTeamLeagues(teamId: teamId, season: season);
+
+      final ordered = _sortLeagueCandidates(leagues);
+
+      ResolvedTeamLeague? resolved;
+
+      for (final candidate in ordered) {
+        final leagueId = _toInt(candidate['leagueId']);
+
+        final leagueName = candidate['leagueName']?.toString().trim() ?? '';
+
+        final leagueType = candidate['leagueType']?.toString().trim() ?? '';
+
+        if (leagueId <= 0 || leagueName.isEmpty) {
+          continue;
+        }
+
+        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+          continue;
+        }
+
+        resolved = ResolvedTeamLeague(
+          teamId: teamId,
+          teamName: teamName,
+          season: season,
+          leagueId: leagueId,
+          leagueName: leagueName,
+        );
+
+        break;
+      }
+
+      _leagueOnlyCache[cacheKey] = resolved;
+
+      if (resolved != null) {
+        final persistentStore = leagueCacheStore;
+
+        if (persistentStore != null) {
+          try {
+            await persistentStore.write(resolved);
+          } catch (_) {
+            // Il risultato API resta valido anche se
+            // la cache persistente non è scrivibile.
+          }
+        }
+
+        return resolved;
+      }
+    }
+
+    return null;
   }
 
   // ============================================================
@@ -785,6 +920,7 @@ class TeamDataResolver {
 
   static void clearCache() {
     _cache.clear();
+    _leagueOnlyCache.clear();
 
     HistoricalTeamService.clearCache();
   }

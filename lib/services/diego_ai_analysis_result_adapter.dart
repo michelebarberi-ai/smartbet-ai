@@ -23,20 +23,31 @@ class DiegoAiAnalysisResultAdapter {
     );
 
     final bestValue = analysis.bestMultiMarketValue;
+    final bestSpeculativeValue = analysis.multiMarketValue.bestSpeculativeValue;
 
     final hasQualifiedValue = bestValue != null;
 
-    final valueText = bestValue == null
-        ? 'Nessun mercato qualificato come value.'
-        : '${bestValue.classification}: '
+    final valueText = bestValue != null
+        ? '${bestValue.classification}: '
               '${bestValue.market} @ ${bestValue.odd.toStringAsFixed(2)} '
-              '• EV ${(bestValue.expectedValue * 100).toStringAsFixed(1)}%';
+              '• EV ${(bestValue.expectedValue * 100).toStringAsFixed(1)}%'
+        : bestSpeculativeValue != null
+        ? 'SPECULATIVE VALUE: '
+              '${bestSpeculativeValue.market} @ '
+              '${bestSpeculativeValue.odd.toStringAsFixed(2)} '
+              '• EV ${(bestSpeculativeValue.expectedValue * 100).toStringAsFixed(1)}%'
+        : 'Nessun mercato qualificato come value.';
 
-    final stakeRecommendation = bestValue == null
-        ? 'DiegoAI non rileva una quota sufficientemente interessante.'
-        : 'DiegoAI rileva ${bestValue.classification.toLowerCase()} '
+    final stakeRecommendation = bestValue != null
+        ? 'DiegoAI rileva ${bestValue.classification.toLowerCase()} '
               'su ${bestValue.market} @ '
-              '${bestValue.odd.toStringAsFixed(2)}.';
+              '${bestValue.odd.toStringAsFixed(2)}.'
+        : bestSpeculativeValue != null
+        ? 'DiegoAI rileva valore matematico speculativo su '
+              '${bestSpeculativeValue.market} @ '
+              '${bestSpeculativeValue.odd.toStringAsFixed(2)}, '
+              'ma non lo considera una selezione qualificata.'
+        : 'DiegoAI non rileva una quota sufficientemente interessante.';
 
     return AnalysisResult(
       // Per la compatibilità con la UI attuale utilizziamo
@@ -119,6 +130,7 @@ class DiegoAiAnalysisResultAdapter {
 
   static String _explanation(DiegoAiAnalysis analysis) {
     final best = analysis.bestMultiMarketValue;
+    final speculative = analysis.multiMarketValue.bestSpeculativeValue;
 
     final buffer = StringBuffer();
 
@@ -134,18 +146,27 @@ class DiegoAiAnalysisResultAdapter {
       '${analysis.expectedAwayGoals.toStringAsFixed(2)}',
     );
 
-    if (best == null) {
-      buffer.writeln(
-        'Value: nessun mercato supera contemporaneamente '
-        'i filtri di confidence, edge ed expected value.',
-      );
-    } else {
+    if (best != null) {
       buffer.writeln(
         'Value: ${best.market} '
         '@ ${best.odd.toStringAsFixed(2)} '
         '(${best.classification}), '
         'Market Confidence ${best.marketConfidence}/100, '
         'EV ${(best.expectedValue * 100).toStringAsFixed(1)}%.',
+      );
+    } else if (speculative != null) {
+      buffer.writeln(
+        'Value matematico speculativo: ${speculative.market} '
+        '@ ${speculative.odd.toStringAsFixed(2)}, '
+        'probabilità ${(speculative.aiProbability * 100).round()}%, '
+        'Market Confidence ${speculative.marketConfidence}/100, '
+        'EV ${(speculative.expectedValue * 100).toStringAsFixed(1)}%. '
+        'Non è una selezione qualificata.',
+      );
+    } else {
+      buffer.writeln(
+        'Value: nessun mercato supera contemporaneamente '
+        'i filtri di confidence, edge ed expected value.',
       );
     }
 

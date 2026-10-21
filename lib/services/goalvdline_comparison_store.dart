@@ -15,6 +15,7 @@ class GoalVdLineComparisonRecord {
 
   final Map<String, dynamic>? smartBet;
   final Map<String, dynamic>? shadow;
+  final Map<String, dynamic>? leagueStrength;
   final Map<String, dynamic>? actualResult;
 
   final DateTime createdAt;
@@ -27,6 +28,7 @@ class GoalVdLineComparisonRecord {
     required this.matchDate,
     required this.smartBet,
     required this.shadow,
+    this.leagueStrength,
     required this.actualResult,
     required this.createdAt,
     required this.updatedAt,
@@ -35,6 +37,8 @@ class GoalVdLineComparisonRecord {
   bool get hasSmartBet => smartBet != null;
 
   bool get hasShadow => shadow != null;
+
+  bool get hasLeagueStrength => leagueStrength != null;
 
   bool get isComplete => hasSmartBet && hasShadow;
 
@@ -46,6 +50,7 @@ class GoalVdLineComparisonRecord {
     DateTime? matchDate,
     Map<String, dynamic>? smartBet,
     Map<String, dynamic>? shadow,
+    Map<String, dynamic>? leagueStrength,
     Map<String, dynamic>? actualResult,
     DateTime? updatedAt,
   }) {
@@ -56,6 +61,7 @@ class GoalVdLineComparisonRecord {
       matchDate: matchDate ?? this.matchDate,
       smartBet: smartBet ?? this.smartBet,
       shadow: shadow ?? this.shadow,
+      leagueStrength: leagueStrength ?? this.leagueStrength,
       actualResult: actualResult ?? this.actualResult,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -70,6 +76,7 @@ class GoalVdLineComparisonRecord {
       'matchDate': matchDate.toIso8601String(),
       'smartBet': smartBet,
       'shadow': shadow,
+      'leagueStrength': leagueStrength,
       'actualResult': actualResult,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -94,6 +101,7 @@ class GoalVdLineComparisonRecord {
             DateTime.tryParse(json['matchDate']?.toString() ?? '') ?? now,
         smartBet: _toMap(json['smartBet']),
         shadow: _toMap(json['shadow']),
+        leagueStrength: _toMap(json['leagueStrength']),
         actualResult: _toMap(json['actualResult']),
         createdAt:
             DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? now,
@@ -207,9 +215,32 @@ class GoalVdLineComparisonStore {
   }
 
   // ============================================================
-  // RISULTATO REALE
+  // D2B.2 LEAGUE STRENGTH PROSPECTIVE SHADOW
   // ============================================================
 
+  void registerLeagueStrength({
+    required MatchModel match,
+    required Map<String, dynamic> leagueStrength,
+  }) {
+    _enqueue(() async {
+      await _ensureLoaded();
+
+      final now = DateTime.now();
+
+      final record = _baseRecord(match: match, now: now).copyWith(
+        leagueStrength: Map<String, dynamic>.from(leagueStrength),
+        updatedAt: now,
+      );
+
+      _records[match.fixtureId] = record;
+
+      await _save();
+    });
+  }
+
+  // ============================================================
+  // RISULTATO REALE
+  // ============================================================
   void registerActualResult({
     required int fixtureId,
     required int homeGoals,
@@ -317,6 +348,7 @@ class GoalVdLineComparisonStore {
       matchDate: matchDate,
       smartBet: null,
       shadow: null,
+      leagueStrength: null,
       actualResult: null,
       createdAt: now,
       updatedAt: now,

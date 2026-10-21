@@ -5,6 +5,34 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'api_rate_limiter.dart';
 
+class HistoricalFixtureSample {
+  final int fixtureId;
+  final DateTime date;
+
+  final int opponentId;
+  final String opponentName;
+
+  final bool isHome;
+
+  final int goalsFor;
+  final int goalsAgainst;
+
+  final String result;
+  final String round;
+
+  const HistoricalFixtureSample({
+    required this.fixtureId,
+    required this.date,
+    required this.opponentId,
+    required this.opponentName,
+    required this.isHome,
+    required this.goalsFor,
+    required this.goalsAgainst,
+    required this.result,
+    required this.round,
+  });
+}
+
 class HistoricalTeamData {
   final int originalTeamId;
   final String originalTeamName;
@@ -31,6 +59,8 @@ class HistoricalTeamData {
   final int awayDraws;
   final int awayLosses;
 
+  final List<HistoricalFixtureSample> fixtures;
+
   const HistoricalTeamData({
     required this.originalTeamId,
     required this.originalTeamName,
@@ -51,6 +81,7 @@ class HistoricalTeamData {
     required this.awayWins,
     required this.awayDraws,
     required this.awayLosses,
+    this.fixtures = const [],
   });
 
   double get winRate {
@@ -317,6 +348,8 @@ class HistoricalTeamService {
     int ignoredInvalidDate = 0;
     int ignoredAfterReferenceDate = 0;
 
+    final historicalFixtures = <HistoricalFixtureSample>[];
+
     for (final item in fixtures) {
       if (item is! Map<String, dynamic>) {
         continue;
@@ -325,6 +358,7 @@ class HistoricalTeamService {
       final fixture = item['fixture'];
       final teams = item['teams'];
       final goals = item['goals'];
+      final league = item['league'];
 
       if (fixture is! Map<String, dynamic> ||
           teams is! Map<String, dynamic> ||
@@ -421,6 +455,46 @@ class HistoricalTeamService {
       // PARTITA VALIDA
       // ========================================================
 
+      final isHome = homeId == teamId;
+
+      final opponent = isHome ? away : home;
+
+      final opponentId = _toInt(opponent['id']);
+
+      final opponentName = opponent['name']?.toString().trim() ?? '';
+
+      final teamGoals = isHome ? homeGoals : awayGoals;
+
+      final opponentGoals = isHome ? awayGoals : homeGoals;
+
+      final result = teamGoals > opponentGoals
+          ? 'V'
+          : teamGoals == opponentGoals
+          ? 'X'
+          : 'S';
+
+      final fixtureId = _toInt(fixture['id']);
+
+      final round = league is Map<String, dynamic>
+          ? league['round']?.toString().trim() ?? ''
+          : '';
+
+      historicalFixtures.add(
+        HistoricalFixtureSample(
+          fixtureId: fixtureId,
+          date: fixtureDate,
+          opponentId: opponentId,
+          opponentName: opponentName.isEmpty
+              ? 'Avversario sconosciuto'
+              : opponentName,
+          isHome: isHome,
+          goalsFor: teamGoals,
+          goalsAgainst: opponentGoals,
+          result: result,
+          round: round,
+        ),
+      );
+
       matchesPlayed++;
 
       // ========================================================
@@ -465,6 +539,8 @@ class HistoricalTeamService {
         }
       }
     }
+
+    historicalFixtures.sort((a, b) => a.date.compareTo(b.date));
 
     // ==========================================================
     // LOG FILTRAGGIO
@@ -579,6 +655,7 @@ class HistoricalTeamService {
       awayWins: awayWins,
       awayDraws: awayDraws,
       awayLosses: awayLosses,
+      fixtures: historicalFixtures,
     );
   }
 
