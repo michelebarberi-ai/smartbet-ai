@@ -203,6 +203,53 @@ void main() {
     expect(overall.brierScore, closeTo(0.17, 0.0001));
   });
 
+  test('calibrazione usa solo record con probabilita disponibile', () {
+    final records = [
+      record(
+        fixtureId: 501,
+        engine: SmartBetAnalysisEngine.smartBet,
+        market: 'GOAL',
+        league: 'Serie A',
+        status: SmartBetAnalysisStatus.correct,
+        probability: 0.80,
+      ),
+      record(
+        fixtureId: 502,
+        engine: SmartBetAnalysisEngine.smartBet,
+        market: 'GOAL',
+        league: 'Serie A',
+        status: SmartBetAnalysisStatus.wrong,
+        probability: null,
+      ),
+      record(
+        fixtureId: 503,
+        engine: SmartBetAnalysisEngine.smartBet,
+        market: 'GOAL',
+        league: 'Serie A',
+        status: SmartBetAnalysisStatus.correct,
+        probability: null,
+      ),
+    ];
+
+    final report = service.analyze(records);
+
+    final overall = report.segments.firstWhere(
+      (segment) =>
+          segment.engine == SmartBetAnalysisEngine.smartBet &&
+          segment.dimension == SmartBetAdaptiveLearningDimension.overall,
+    );
+
+    expect(overall.sampleSize, 3);
+    expect(overall.correct, 2);
+    expect(overall.wrong, 1);
+
+    expect(overall.probabilitySampleSize, 1);
+    expect(overall.accuracy, closeTo(66.6667, 0.001));
+    expect(overall.averagePredictedProbability, 80.0);
+    expect(overall.calibrationGap, closeTo(20.0, 0.0001));
+    expect(overall.brierScore, closeTo(0.04, 0.0001));
+  });
+
   test('classifica correttamente la forza del campione', () {
     expect(
       SmartBetAdaptiveLearningService.signalForSample(49),

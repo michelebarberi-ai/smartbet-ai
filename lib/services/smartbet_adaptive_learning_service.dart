@@ -354,6 +354,7 @@ class _LearningBucket {
   int wrong = 0;
 
   int probabilitySampleSize = 0;
+  int probabilityCorrect = 0;
 
   double probabilitySum = 0.0;
   double brierSum = 0.0;
@@ -386,6 +387,7 @@ class _LearningBucket {
     final normalized = probability.clamp(0.0, 1.0);
 
     probabilitySampleSize++;
+    if (isCorrect) probabilityCorrect++;
     probabilitySum += normalized;
 
     final actual = isCorrect ? 1.0 : 0.0;
@@ -404,7 +406,8 @@ class _LearningBucket {
 
     final calibrationGap = averageProbability == null
         ? null
-        : accuracy - averageProbability;
+        : (probabilityCorrect / probabilitySampleSize * 100.0) -
+              averageProbability;
 
     final brierScore = probabilitySampleSize > 0
         ? brierSum / probabilitySampleSize
