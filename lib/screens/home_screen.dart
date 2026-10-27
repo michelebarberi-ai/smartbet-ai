@@ -10,6 +10,7 @@ import '../widgets/ai_card.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
 import 'analysis_history_screen.dart';
+import 'smartbet_learning_monitor_screen.dart';
 import 'settings_screen.dart';
 
 String _smartBetGreeting() {
@@ -541,6 +542,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 14),
 
                   _directComparisonCard(comparisonStats),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const SmartBetLearningMonitorScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.analytics_outlined),
+                      label: const Text('LEARNING MONITOR'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.lightBlueAccent,
+                        side: const BorderSide(color: Colors.lightBlueAccent),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                      ),
+                    ),
+                  ),
 
                   const SizedBox(height: 14),
 
