@@ -45,6 +45,7 @@ class SmartBetAnalysisRecord {
 
   final DateTime firstSeenAt;
   final DateTime lastSeenAt;
+  final DateTime? resolvedAt;
 
   const SmartBetAnalysisRecord({
     required this.engine,
@@ -67,6 +68,7 @@ class SmartBetAnalysisRecord {
     required this.actualAwayGoals,
     required this.firstSeenAt,
     required this.lastSeenAt,
+    this.resolvedAt,
   });
 
   String get key =>
@@ -105,6 +107,7 @@ class SmartBetAnalysisRecord {
       actualAwayGoals: actualAwayGoals,
       firstSeenAt: firstSeenAt,
       lastSeenAt: seenAt,
+      resolvedAt: resolvedAt,
     );
   }
 
@@ -135,6 +138,11 @@ class SmartBetAnalysisRecord {
       actualAwayGoals: awayGoals,
       firstSeenAt: firstSeenAt,
       lastSeenAt: updatedAt,
+      resolvedAt:
+          resolvedAt ??
+          (this.status == SmartBetAnalysisStatus.pending
+              ? updatedAt.toUtc()
+              : null),
     );
   }
 
@@ -160,6 +168,7 @@ class SmartBetAnalysisRecord {
       'actualAwayGoals': actualAwayGoals,
       'firstSeenAt': firstSeenAt.toUtc().toIso8601String(),
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
+      'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -175,6 +184,7 @@ class SmartBetAnalysisRecord {
     );
 
     final lastSeenAt = DateTime.tryParse(json['lastSeenAt']?.toString() ?? '');
+    final resolvedAt = DateTime.tryParse(json['resolvedAt']?.toString() ?? '');
 
     final market = normalizeAnalysisMarket(json['market']?.toString() ?? '');
 
@@ -229,6 +239,7 @@ class SmartBetAnalysisRecord {
       actualAwayGoals: _toInt(json['actualAwayGoals']),
       firstSeenAt: firstSeenAt.toUtc(),
       lastSeenAt: lastSeenAt.toUtc(),
+      resolvedAt: resolvedAt?.toUtc(),
     );
   }
 }
