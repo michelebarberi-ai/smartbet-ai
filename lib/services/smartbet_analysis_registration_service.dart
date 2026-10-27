@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import 'dual_engine_analysis_service.dart';
 import 'smartbet_analysis_comparison_store.dart';
 import 'smartbet_analysis_history_store.dart';
+import 'smartbet_shadow_learning_store.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -65,6 +68,8 @@ class SmartBetAnalysisRegistrationService {
         smartScore: smartBet.smartScore,
         recordedAt: recordedAt,
       );
+
+      await _captureShadow(smartBetRecord);
     }
 
     // ============================================================
@@ -114,6 +119,8 @@ class SmartBetAnalysisRegistrationService {
       recordedAt: recordedAt,
     );
 
+    await _captureShadow(diegoRecord);
+
     // ============================================================
     // COPPIA SMARTBET ↔ DIEGO
     // ============================================================
@@ -136,6 +143,20 @@ class SmartBetAnalysisRegistrationService {
         source: source,
         recordedAt: recordedAt,
       );
+    }
+  }
+
+  Future<void> _captureShadow(SmartBetAnalysisRecord? record) async {
+    if (record == null) return;
+
+    try {
+      await SmartBetShadowLearningStore.instance.capture(
+        record: record,
+        history: _store.records,
+      );
+    } catch (error) {
+      // Un problema nello shadow non blocca la registrazione.
+      debugPrint('SmartBet shadow learning error: $error');
     }
   }
 
