@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_walk_forward_backtest_service.dart';
+import '../services/smartbet_shadow_learning_store.dart';
+import '../services/smartbet_shadow_outcome_service.dart';
 
 class SmartBetLearningMonitorScreen extends StatefulWidget {
   const SmartBetLearningMonitorScreen({super.key});
@@ -17,6 +19,8 @@ class _SmartBetLearningMonitorScreenState
 
   List<SmartBetAnalysisRecord> _records = [];
   SmartBetWalkForwardReport? _report;
+  SmartBetShadowOutcomeReport? _shadowReport;
+  bool _runningShadow = false;
   bool _loading = true;
   bool _running = false;
   String? _error;
@@ -32,6 +36,7 @@ class _SmartBetLearningMonitorScreenState
       _loading = true;
       _error = null;
       _report = null;
+      _shadowReport = null;
     });
 
     try {
@@ -47,6 +52,43 @@ class _SmartBetLearningMonitorScreenState
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _runShadowComparison() async {
+    if (_runningShadow) return;
+
+    setState(() {
+      _runningShadow = true;
+      _error = null;
+    });
+
+    try {
+      await _store.initialize();
+
+      final shadow = SmartBetShadowLearningStore.instance;
+      await shadow.initialize();
+
+      final history = _store.records;
+
+      final report = const SmartBetShadowOutcomeService().evaluate(
+        history: history,
+        predictions: shadow.predictions,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _records = history;
+        _shadowReport = report;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _runningShadow = false);
+      }
     }
   }
 
@@ -226,6 +268,97 @@ class _SmartBetLearningMonitorScreenState
                     'I valori non dimostrano da soli un vantaggio '
                     'statisticamente significativo.',
                   ),
+                ],
+
+                const Divider(height: 32),
+                const Text(
+                  'Apprendimento reale P13',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Confronta le previsioni originali con quelle '
+                  'adattive salvate prima delle partite. '
+                  'Utilizza soltanto risultati verificati.',
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _runningShadow ? null : _runShadowComparison,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: Text(
+                    _runningShadow
+                        ? 'Verifica in corso...'
+                        : 'Confronta risultati reali',
+                  ),
+                ),
+                if (_shadowReport != null) ...[
+                  const SizedBox(height: 12),
+                  metric(
+                    'Previsioni verificate',
+                    '${_shadowReport!.overall.evaluated}',
+                  ),
+                  metric(
+                    'Previsioni ricalibrate',
+                    '${_shadowReport!.overall.adjusted}',
+                  ),
+                  metric(
+                    'Correzioni migliorative',
+                    '${_shadowReport!.overall.improved}',
+                  ),
+                  metric(
+                    'Correzioni peggiorative',
+                    '${_shadowReport!.overall.worsened}',
+                  ),
+                  metric(
+                    'Brier originale',
+                    _number(_shadowReport!.overall.originalBrier),
+                  ),
+                  metric(
+                    'Brier adattivo',
+                    _number(_shadowReport!.overall.calibratedBrier),
+                  ),
+                  metric(
+                    'Miglioramento totale',
+                    _number(_shadowReport!.overall.improvement),
+                  ),
+                  metric(
+                    'Miglioramento sui ricalibrati',
+                    _number(_shadowReport!.overall.adjustedImprovement),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Un miglioramento positivo indica un '
+                    'Brier Score inferiore. Servono molti '
+                    'risultati indipendenti per giudicare '
+                    'affidabile una correzione.',
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Confronto per motore',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  ..._shadowReport!.byEngine.entries.map(
+                    (entry) => metric(
+                      entry.key,
+                      '${entry.value.evaluated} analisi | '
+                      'Brier ${_number(entry.value.originalBrier)}'
+                      ' → ${_number(entry.value.calibratedBrier)}',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Confronto per mercato',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  ..._shadowReport!.byMarket.entries
+                      .take(15)
+                      .map(
+                        (entry) => metric(
+                          entry.key,
+                          '${entry.value.evaluated} analisi | '
+                          'Δ ${_number(entry.value.improvement)}',
+                        ),
+                      ),
                 ],
 
                 if (_error != null)
