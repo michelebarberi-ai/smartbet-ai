@@ -4,6 +4,7 @@ import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_walk_forward_backtest_service.dart';
 import '../services/smartbet_shadow_learning_store.dart';
 import '../services/smartbet_shadow_outcome_service.dart';
+import '../services/smartbet_learning_gate_service.dart';
 
 class SmartBetLearningMonitorScreen extends StatefulWidget {
   const SmartBetLearningMonitorScreen({super.key});
@@ -20,6 +21,7 @@ class _SmartBetLearningMonitorScreenState
   List<SmartBetAnalysisRecord> _records = [];
   SmartBetWalkForwardReport? _report;
   SmartBetShadowOutcomeReport? _shadowReport;
+  SmartBetLearningGateReport? _gateReport;
   bool _runningShadow = false;
   bool _loading = true;
   bool _running = false;
@@ -37,6 +39,7 @@ class _SmartBetLearningMonitorScreenState
       _error = null;
       _report = null;
       _shadowReport = null;
+      _gateReport = null;
     });
 
     try {
@@ -78,9 +81,15 @@ class _SmartBetLearningMonitorScreenState
 
       if (!mounted) return;
 
+      final gateReport = const SmartBetLearningGateService().evaluate(
+        report,
+        asOf: DateTime.now().toUtc(),
+      );
+
       setState(() {
         _records = history;
         _shadowReport = report;
+        _gateReport = gateReport;
       });
     } catch (error) {
       if (!mounted) return;
@@ -359,6 +368,77 @@ class _SmartBetLearningMonitorScreenState
                           'Δ ${_number(entry.value.improvement)}',
                         ),
                       ),
+                ],
+
+                if (_gateReport != null) ...[
+                  const Divider(height: 32),
+                  const Text(
+                    'Learning Gate P14',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Valuta se le correzioni storiche '
+                    'sono abbastanza stabili per una '
+                    'sperimentazione controllata. '
+                    'Non modifica le schedine.',
+                  ),
+                  const SizedBox(height: 12),
+
+                  metric(
+                    'Mercati candidati al trial',
+                    '\${_gateReport!.eligibleMarkets}',
+                  ),
+
+                  if (_gateReport!.decisions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Nessuna correzione con risultati '
+                        'sufficienti per essere valutata.',
+                      ),
+                    ),
+
+                  ..._gateReport!.decisions.take(20).map((decision) {
+                    final status = switch (decision.status) {
+                      SmartBetLearningGateStatus.insufficientData =>
+                        'Dati insufficienti',
+                      SmartBetLearningGateStatus.inconsistentImprovement =>
+                        'Miglioramento non stabile',
+                      SmartBetLearningGateStatus.eligibleForTrial =>
+                        'Candidato al trial - non attivo',
+                    };
+
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '\${decision.engine} | '
+                              '\${decision.market}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(status),
+                            const SizedBox(height: 6),
+                            Text(
+                              '\${decision.adjustedSamples} '
+                              'previsioni ricalibrate | '
+                              '\${decision.distinctDays} giorni',
+                            ),
+                            Text(
+                              'Miglioramento Brier: '
+                              '\${_number(decision.overallImprovement)}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ],
 
                 if (_error != null)
