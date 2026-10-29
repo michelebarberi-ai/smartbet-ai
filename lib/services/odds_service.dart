@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'smartbet_european_handicap_odds_parser.dart';
 
 // ============================================================
 // SINGOLA QUOTA MIGLIORE
@@ -345,6 +346,41 @@ class OddsService {
             // ------------------------------------------------------
             // DOUBLE CHANCE
             // ------------------------------------------------------
+            // HANDICAP EUROPEO FULL-TIME — API ID 9.
+            if (betId == 9) {
+              for (final valueItem in values) {
+                if (valueItem is! Map<String, dynamic>) {
+                  continue;
+                }
+
+                final raw = valueItem['value']?.toString() ?? '';
+                final odd = _toDouble(valueItem['odd']);
+
+                if (!odd.isFinite || odd <= 1) {
+                  continue;
+                }
+
+                final outcome = SmartBetEuropeanHandicapOddsParser.outcomeFor(
+                  betId: betId,
+                  value: raw,
+                );
+
+                if (outcome == null) {
+                  continue;
+                }
+
+                _setBest(
+                  bestByOutcome,
+                  outcome: outcome,
+                  odd: odd,
+                  bookmakerId: bookmakerId,
+                  bookmakerName: bookmakerName,
+                );
+              }
+
+              continue;
+            }
+
             if (_isDoubleChanceBet(betId, betName)) {
               for (final valueItem in values) {
                 if (valueItem is! Map<String, dynamic>) {
