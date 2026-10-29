@@ -87,6 +87,32 @@ class SmartBetAnalysisMarketSettlement {
     // OVER / UNDER
     // ============================================================
 
+    // HANDICAP EUROPEO 1X2.
+    // Formato: HCP EURO CASA -1 X
+    final europeanHandicap = RegExp(
+      r'^HCP EURO CASA ([+-]?[0-9]+) ([1X2])$',
+    ).firstMatch(normalized);
+
+    if (europeanHandicap != null) {
+      final adjustment = int.tryParse(europeanHandicap.group(1)!);
+      final selection = europeanHandicap.group(2)!;
+
+      if (adjustment == null || adjustment < -5 || adjustment > 5) {
+        return SmartBetAnalysisSettlement.unsupported;
+      }
+
+      final adjustedDifference = homeGoals + adjustment - awayGoals;
+
+      switch (selection) {
+        case '1':
+          return _result(adjustedDifference > 0);
+        case 'X':
+          return _result(adjustedDifference == 0);
+        case '2':
+          return _result(adjustedDifference < 0);
+      }
+    }
+
     final goalsLine = RegExp(
       r'^(OVER|UNDER)\s+(\d+(?:\.\d+)?)$',
     ).firstMatch(normalized);
