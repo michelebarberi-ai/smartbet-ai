@@ -19,6 +19,7 @@ import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
+import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
   const CreateAiCouponScreen({super.key});
@@ -274,8 +275,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   List<({String market, int probability})> _sportsMarketCandidates(
-    AnalysisResult analysis,
-  ) {
+    AnalysisResult analysis, {
+    FixtureMarketOdds? odds,
+  }) {
     final probabilities = _markets(analysis);
     final candidates = <({String market, int probability, int order})>[];
 
@@ -286,6 +288,23 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       if (probability <= 0) continue;
 
       candidates.add((market: market, probability: probability, order: index));
+    }
+
+    final handicapCandidates =
+        SmartBetEuropeanHandicapCandidateService.candidates(
+          expectedHomeGoals: analysis.expectedHomeGoals,
+          expectedAwayGoals: analysis.expectedAwayGoals,
+          quotedOutcomes: odds?.bestByOutcome.keys ?? const <String>[],
+        );
+
+    for (var index = 0; index < handicapCandidates.length; index++) {
+      final candidate = handicapCandidates[index];
+
+      candidates.add((
+        market: candidate.market,
+        probability: candidate.probability,
+        order: _marketOrder.length + index,
+      ));
     }
 
     // Classifica puramente sportiva.
@@ -312,7 +331,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required FixtureMarketOdds? odds,
   }) {
     // Ordine dei mercati deciso ESCLUSIVAMENTE dai dati sportivi.
-    final sportsCandidates = _sportsMarketCandidates(preliminary.analysis);
+    final sportsCandidates = _sportsMarketCandidates(
+      preliminary.analysis,
+      odds: odds,
+    );
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -378,7 +400,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     //
     // Mostriamo quindi sempre il mercato statisticamente migliore,
     // indipendentemente dalla disponibilità o dal livello della quota.
-    final sportsCandidates = _sportsMarketCandidates(analysis);
+    final sportsCandidates = _sportsMarketCandidates(analysis, odds: odds);
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -459,6 +481,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     if (odds == null) return false;
 
     for (final market in _marketOrder) {
+      final quote = odds.oddFor(market);
+      if (quote != null && quote.odd >= _minimumOdd) {
+        return true;
+      }
+    }
+
+    for (final market in odds.bestByOutcome.keys) {
+      if (!market.startsWith('HCP EURO CASA ')) continue;
+
       final quote = odds.oddFor(market);
       if (quote != null && quote.odd >= _minimumOdd) {
         return true;
