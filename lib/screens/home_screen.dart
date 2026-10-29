@@ -500,140 +500,177 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 18),
 
-                  const Text(
-                    'Prestazioni analisi',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  const Text(
-                    'Misura nel tempo la precisione delle previsioni '
-                    'prodotte da SmartBet e Diego. Ogni selezione unica '
-                    'viene conteggiata una sola volta, indipendentemente '
-                    'da quante schermate la utilizzano.',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  _enginePerformanceCard(
-                    title: 'SMARTBET',
-                    stats: smartBetStats,
-                    accent: const Color(0xFF00C853),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  _enginePerformanceCard(
-                    title: 'DIEGO',
-                    stats: diegoStats,
-                    accent: Colors.lightBlueAccent,
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  _directComparisonCard(comparisonStats),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const SmartBetLearningMonitorScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.analytics_outlined),
-                      label: const Text('LEARNING MONITOR'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.lightBlueAccent,
-                        side: const BorderSide(color: Colors.lightBlueAccent),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AnalysisHistoryScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.history, size: 20),
-                      label: const Text('STORICO ANALISI'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white24),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F2937),
+                  ExpansionTile(
+                    initiallyExpanded: false,
+                    backgroundColor: const Color(0xFF1F2937),
+                    collapsedBackgroundColor: const Color(0xFF1F2937),
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white10),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.autorenew,
-                          color: Colors.white54,
-                          size: 20,
+                    collapsedShape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    iconColor: Colors.lightBlueAccent,
+                    collapsedIconColor: Colors.lightBlueAccent,
+                    leading: const Icon(
+                      Icons.psychology_outlined,
+                      color: Colors.lightBlueAccent,
+                    ),
+                    title: const Text(
+                      'STATISTICHE E IA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Prestazioni, confronti e apprendimento',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    childrenPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    children: [
+                      const Text(
+                        'Prestazioni analisi',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            smartBetStats.analyzed == 0 &&
-                                    diegoStats.analyzed == 0
-                                ? 'Le statistiche inizieranno a popolarsi '
-                                      'con le prossime analisi effettuate '
-                                      'nell’app.'
-                                : 'Gli esiti delle partite concluse vengono '
-                                      'controllati automaticamente. Le analisi '
-                                      'non ancora concluse restano in attesa.',
-                            style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 11.5,
-                              height: 1.4,
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      const Text(
+                        'Misura nel tempo la precisione delle previsioni '
+                        'prodotte da SmartBet e Diego. Ogni selezione unica '
+                        'viene conteggiata una sola volta, indipendentemente '
+                        'da quante schermate la utilizzano.',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      _enginePerformanceCard(
+                        title: 'SMARTBET',
+                        stats: smartBetStats,
+                        accent: const Color(0xFF00C853),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      _enginePerformanceCard(
+                        title: 'DIEGO',
+                        stats: diegoStats,
+                        accent: Colors.lightBlueAccent,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      _directComparisonCard(comparisonStats),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const SmartBetLearningMonitorScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.analytics_outlined),
+                          label: const Text('LEARNING MONITOR'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.lightBlueAccent,
+                            side: const BorderSide(
+                              color: Colors.lightBlueAccent,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AnalysisHistoryScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.history, size: 20),
+                          label: const Text('STORICO ANALISI'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white24),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1F2937),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.autorenew,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                smartBetStats.analyzed == 0 &&
+                                        diegoStats.analyzed == 0
+                                    ? 'Le statistiche inizieranno a popolarsi '
+                                          'con le prossime analisi effettuate '
+                                          'nell’app.'
+                                    : 'Gli esiti delle partite concluse vengono '
+                                          'controllati automaticamente. Le analisi '
+                                          'non ancora concluse restano in attesa.',
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 11.5,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 35),
