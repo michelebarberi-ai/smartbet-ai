@@ -18,6 +18,7 @@ import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
+import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 enum _CombinationPeriod { today, next2Days, next3Days, custom }
 
@@ -158,6 +159,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     'COMBO CHANCE',
     'CASA SEGNA',
     'OSPITE SEGNA',
+    'HANDICAP EUROPEO',
   ];
 
   @override
@@ -215,6 +217,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   List<String> _familyOptions(String market) {
     switch (market) {
+      case 'HANDICAP EUROPEO':
+        return const <String>[];
       case 'OVER':
         return const ['OVER 1.5', 'OVER 2.5', 'OVER 3.5', 'OVER 4.5'];
       case 'UNDER':
@@ -242,10 +246,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     return market == 'OVER' ||
         market == 'UNDER' ||
         market == 'CASA SEGNA' ||
-        market == 'OSPITE SEGNA';
+        market == 'OSPITE SEGNA' ||
+        market == 'HANDICAP EUROPEO';
   }
 
   int _searchProbabilityFor(AnalysisResult result, String market) {
+    // Solo proxy per la shortlist preliminare.
+    // NON rappresenta una probabilita Handicap.
+    if (market == 'HANDICAP EUROPEO') {
+      return math.max(
+        result.homeProbability,
+        math.max(result.drawProbability, result.awayProbability),
+      );
+    }
+
     if (!_isFamilyMarket(market)) {
       // Mercati normali: identico comportamento precedente.
       return _probabilityFor(result, market);
@@ -269,6 +283,22 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     required dynamic marketOdds,
     required String family,
   }) {
+    final handicapCandidates = family == 'HANDICAP EUROPEO'
+        ? SmartBetEuropeanHandicapCandidateService.candidates(
+            expectedHomeGoals: candidate.analysis.expectedHomeGoals,
+            expectedAwayGoals: candidate.analysis.expectedAwayGoals,
+            quotedOutcomes: marketOdds?.bestByOutcome.keys ?? const <String>[],
+          )
+        : const <({String market, int probability})>[];
+
+    final handicapProbabilities = <String, int>{
+      for (final item in handicapCandidates) item.market: item.probability,
+    };
+
+    final Iterable<String> options = family == 'HANDICAP EUROPEO'
+        ? handicapProbabilities.keys
+        : _familyOptions(family);
+
     final familyOptions = <_FamilyOptionDetail>[];
 
     String? selectedMarket;
@@ -276,9 +306,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     double? selectedOdd;
     String? selectedBookmaker;
 
-    for (final option in _familyOptions(family)) {
+    for (final option in options) {
       final bestOdd = marketOdds?.oddFor(option);
-      final probability = _probabilityFor(candidate.analysis, option);
+      final probability = family == 'HANDICAP EUROPEO'
+          ? (handicapProbabilities[option] ?? 0)
+          : _probabilityFor(candidate.analysis, option);
 
       // Conserviamo SEMPRE la casistica per mostrarla all'utente,
       // anche se non ha quota o la quota è sotto il minimo.
@@ -1243,7 +1275,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 // e ricalcoliamo tutte le sue varianti con il nuovo risultato.
                 final actualMarket = _selectedMarket;
 
-                final familyOptions = isFamilyMarket
+                final familyOptions =
+                    isFamilyMarket && _selectedMarket != 'HANDICAP EUROPEO'
                     ? _familyOptions(_selectedMarket)
                           .map(
                             (option) => _FamilyOptionDetail(
