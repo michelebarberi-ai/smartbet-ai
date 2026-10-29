@@ -6,6 +6,8 @@ import 'dual_engine_analysis_service.dart';
 import 'smartbet_analysis_comparison_store.dart';
 import 'smartbet_analysis_history_store.dart';
 import 'smartbet_shadow_learning_store.dart';
+import 'smartbet_adaptive_decision_service.dart';
+import 'smartbet_shadow_outcome_service.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -150,9 +152,54 @@ class SmartBetAnalysisRegistrationService {
     if (record == null) return;
 
     try {
-      await SmartBetShadowLearningStore.instance.capture(
+      if (!record.prospectiveEligible ||
+          record.status != SmartBetAnalysisStatus.pending) {
+        return;
+      }
+
+      final probability = record.probability;
+
+      if (probability == null ||
+          !probability.isFinite ||
+          probability < 0 ||
+          probability > 1) {
+        return;
+      }
+
+      final history = _store.records;
+      final shadowStore = SmartBetShadowLearningStore.instance;
+
+      await shadowStore.initialize();
+
+      // Non rivalutare una previsione già acquisita.
+      if (shadowStore.predictions.any(
+        (prediction) => prediction.key == record.key,
+      )) {
+        return;
+      }
+
+      final outcomes = const SmartBetShadowOutcomeService().evaluate(
+        history: history,
+        predictions: shadowStore.predictions,
+      );
+
+      // Il servizio adattivo applica il cutoff temporale.
+      final decision = const SmartBetAdaptiveDecisionService().evaluate(
+        engine: record.engine,
+        market: record.market,
+        probability: probability,
+        asOf: record.firstSeenAt,
+        records: history,
+        outcomes: outcomes,
+        fixtureId: record.fixtureId,
+      );
+
+      await shadowStore.capture(
         record: record,
-        history: _store.records,
+        history: history,
+        trialProbability: decision.trialProbability,
+        trialEligible: decision.eligibleForTrial,
+        decisionStatus: decision.status.name,
       );
     } catch (error) {
       // Un problema nello shadow non blocca la registrazione.

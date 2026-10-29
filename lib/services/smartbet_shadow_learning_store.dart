@@ -16,6 +16,11 @@ class SmartBetShadowPrediction {
   final int trainingSampleSize;
   final bool calibrationApplied;
 
+  // Null per gli snapshot precedenti a P15B.
+  final double? trialProbability;
+  final bool? trialEligible;
+  final String? decisionStatus;
+
   const SmartBetShadowPrediction({
     required this.key,
     required this.engine,
@@ -26,6 +31,9 @@ class SmartBetShadowPrediction {
     required this.calibratedProbability,
     required this.trainingSampleSize,
     required this.calibrationApplied,
+    this.trialProbability,
+    this.trialEligible,
+    this.decisionStatus,
   });
 
   bool get adjusted =>
@@ -41,6 +49,9 @@ class SmartBetShadowPrediction {
     'calibratedProbability': calibratedProbability,
     'trainingSampleSize': trainingSampleSize,
     'calibrationApplied': calibrationApplied,
+    'trialProbability': trialProbability,
+    'trialEligible': trialEligible,
+    'decisionStatus': decisionStatus,
   };
 
   factory SmartBetShadowPrediction.fromJson(Map<String, dynamic> json) {
@@ -54,6 +65,13 @@ class SmartBetShadowPrediction {
       calibratedProbability: (json['calibratedProbability'] as num).toDouble(),
       trainingSampleSize: (json['trainingSampleSize'] as num).toInt(),
       calibrationApplied: json['calibrationApplied'] == true,
+      trialProbability: (json['trialProbability'] as num?)?.toDouble(),
+      trialEligible: json['trialEligible'] is bool
+          ? json['trialEligible'] as bool
+          : null,
+      decisionStatus: json['decisionStatus'] is String
+          ? json['decisionStatus'] as String
+          : null,
     );
   }
 }
@@ -111,6 +129,9 @@ class SmartBetShadowLearningStore {
   Future<SmartBetShadowPrediction?> capture({
     required SmartBetAnalysisRecord record,
     required List<SmartBetAnalysisRecord> history,
+    double? trialProbability,
+    bool? trialEligible,
+    String? decisionStatus,
   }) async {
     await initialize();
 
@@ -141,6 +162,29 @@ class SmartBetShadowLearningStore {
       fixtureId: record.fixtureId,
     );
 
+    final hasDecision =
+        trialProbability != null ||
+        trialEligible != null ||
+        decisionStatus != null;
+
+    if (hasDecision) {
+      final expected = trialEligible == true
+          ? result.calibrated
+          : result.original;
+
+      if (trialProbability == null ||
+          !trialProbability.isFinite ||
+          trialProbability < 0 ||
+          trialProbability > 1 ||
+          trialEligible == null ||
+          decisionStatus == null ||
+          decisionStatus.trim().isEmpty ||
+          (trialEligible && !result.applied) ||
+          (trialProbability - expected).abs() > 1e-9) {
+        throw StateError('Decisione adattiva incoerente con lo snapshot');
+      }
+    }
+
     final snapshot = SmartBetShadowPrediction(
       key: record.key,
       engine: record.engine.name,
@@ -151,6 +195,9 @@ class SmartBetShadowLearningStore {
       calibratedProbability: result.calibrated,
       trainingSampleSize: result.sampleSize,
       calibrationApplied: result.applied,
+      trialProbability: trialProbability,
+      trialEligible: trialEligible,
+      decisionStatus: decisionStatus,
     );
 
     final prefs = _prefs ??= await SharedPreferences.getInstance();

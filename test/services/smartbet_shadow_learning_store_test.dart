@@ -169,4 +169,127 @@ void main() {
     expect(completed, isNull);
     expect(store.predictions, isEmpty);
   });
+  test('P15B: salva e ricarica la decisione adattiva', () async {
+    final store = SmartBetShadowLearningStore();
+
+    final result = await store.capture(
+      record: target(),
+      history: history(50),
+      trialProbability: 0.70,
+      trialEligible: true,
+      decisionStatus: 'eligibleForTrial',
+    );
+
+    expect(result, isNotNull);
+    expect(result!.trialEligible, true);
+    expect(result.trialProbability, closeTo(0.70, 0.0001));
+    expect(result.decisionStatus, 'eligibleForTrial');
+
+    final reopened = SmartBetShadowLearningStore();
+    await reopened.initialize();
+
+    expect(reopened.predictions.length, 1);
+
+    final saved = reopened.predictions.single;
+    expect(saved.originalProbability, 0.80);
+    expect(saved.calibratedProbability, closeTo(0.70, 0.0001));
+    expect(saved.trialProbability, closeTo(0.70, 0.0001));
+    expect(saved.trialEligible, true);
+    expect(saved.decisionStatus, 'eligibleForTrial');
+  });
+
+  test('P15B: gate bloccato conserva originale', () async {
+    final store = SmartBetShadowLearningStore();
+
+    final result = await store.capture(
+      record: target(),
+      history: history(50),
+      trialProbability: 0.80,
+      trialEligible: false,
+      decisionStatus: 'insufficientEvidence',
+    );
+
+    expect(result, isNotNull);
+    expect(result!.calibratedProbability, closeTo(0.70, 0.0001));
+    expect(result.trialProbability, 0.80);
+    expect(result.trialEligible, false);
+  });
+
+  test('P15B: vecchi snapshot restano leggibili', () async {
+    final store = SmartBetShadowLearningStore();
+
+    await store.capture(record: target(), history: history(50));
+
+    final json = store.predictions.single.toJson();
+
+    json.remove('trialProbability');
+    json.remove('trialEligible');
+    json.remove('decisionStatus');
+
+    final legacy = SmartBetShadowPrediction.fromJson(json);
+
+    expect(legacy.originalProbability, 0.80);
+    expect(legacy.trialProbability, isNull);
+    expect(legacy.trialEligible, isNull);
+    expect(legacy.decisionStatus, isNull);
+  });
+
+  test('P15B: blocca probabilita trial incoerente', () async {
+    final store = SmartBetShadowLearningStore();
+
+    await expectLater(
+      store.capture(
+        record: target(),
+        history: history(50),
+        trialProbability: 0.95,
+        trialEligible: true,
+        decisionStatus: 'eligibleForTrial',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(store.predictions, isEmpty);
+  });
+
+  test('P15B: impedisce decisioni incomplete', () async {
+    final store = SmartBetShadowLearningStore();
+
+    await expectLater(
+      store.capture(
+        record: target(),
+        history: history(50),
+        trialEligible: false,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(store.predictions, isEmpty);
+  });
+
+  test('P15B: non sovrascrive decisione iniziale', () async {
+    final store = SmartBetShadowLearningStore();
+
+    final first = await store.capture(
+      record: target(),
+      history: history(50),
+      trialProbability: 0.70,
+      trialEligible: true,
+      decisionStatus: 'eligibleForTrial',
+    );
+
+    final duplicate = await store.capture(
+      record: target(probability: 0.40),
+      history: history(50),
+      trialProbability: 0.40,
+      trialEligible: false,
+      decisionStatus: 'insufficientEvidence',
+    );
+
+    expect(first, isNotNull);
+    expect(duplicate, isNotNull);
+    expect(duplicate!.originalProbability, 0.80);
+    expect(duplicate.trialEligible, true);
+    expect(duplicate.decisionStatus, 'eligibleForTrial');
+    expect(store.predictions.length, 1);
+  });
 }
