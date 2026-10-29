@@ -29,6 +29,7 @@ class SmartBetAnalysisRegistrationService {
     required SmartBetAnalysisSource source,
     String? smartBetMarket,
     int? smartBetProbabilityPercent,
+    double? smartBetOdd,
     DualEngineAnalysis? dualAnalysis,
     DateTime? recordedAt,
   }) async {
@@ -68,6 +69,7 @@ class SmartBetAnalysisRegistrationService {
         market: resolvedSmartBetMarket,
         probability: resolvedSmartBetProbability,
         smartScore: smartBet.smartScore,
+        quotedOdd: smartBetOdd,
         recordedAt: recordedAt,
       );
 

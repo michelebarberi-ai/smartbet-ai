@@ -47,6 +47,10 @@ class SmartBetAnalysisRecord {
   final DateTime lastSeenAt;
   final DateTime? resolvedAt;
 
+  /// Quota decimale catturata alla prima registrazione.
+  /// Null per analisi senza una quota reale disponibile.
+  final double? quotedOdd;
+
   const SmartBetAnalysisRecord({
     required this.engine,
     required this.fixtureId,
@@ -69,6 +73,7 @@ class SmartBetAnalysisRecord {
     required this.firstSeenAt,
     required this.lastSeenAt,
     this.resolvedAt,
+    this.quotedOdd,
   });
 
   String get key =>
@@ -108,6 +113,7 @@ class SmartBetAnalysisRecord {
       firstSeenAt: firstSeenAt,
       lastSeenAt: seenAt,
       resolvedAt: resolvedAt,
+      quotedOdd: quotedOdd,
     );
   }
 
@@ -138,6 +144,7 @@ class SmartBetAnalysisRecord {
       actualAwayGoals: awayGoals,
       firstSeenAt: firstSeenAt,
       lastSeenAt: updatedAt,
+      quotedOdd: quotedOdd,
       resolvedAt:
           resolvedAt ??
           (this.status == SmartBetAnalysisStatus.pending
@@ -169,6 +176,7 @@ class SmartBetAnalysisRecord {
       'firstSeenAt': firstSeenAt.toUtc().toIso8601String(),
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
       'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
+      'quotedOdd': quotedOdd,
     };
   }
 
@@ -240,6 +248,7 @@ class SmartBetAnalysisRecord {
       firstSeenAt: firstSeenAt.toUtc(),
       lastSeenAt: lastSeenAt.toUtc(),
       resolvedAt: resolvedAt?.toUtc(),
+      quotedOdd: _safeSnapshotOdd(_toDouble(json['quotedOdd'])),
     );
   }
 }
@@ -324,6 +333,7 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
     String? classification,
     bool? qualified,
     DateTime? recordedAt,
+    double? quotedOdd,
   }) async {
     await initialize();
 
@@ -388,6 +398,7 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
       actualAwayGoals: null,
       firstSeenAt: now,
       lastSeenAt: now,
+      quotedOdd: _safeSnapshotOdd(quotedOdd),
     );
 
     _records.add(record);
@@ -651,4 +662,12 @@ bool? _toBool(dynamic value) {
   }
 
   return null;
+}
+
+/// Accetta soltanto quote decimali reali e finite.
+double? _safeSnapshotOdd(double? value) {
+  if (value == null || !value.isFinite || value <= 1.0) {
+    return null;
+  }
+  return value;
 }

@@ -881,6 +881,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             source: SmartBetAnalysisSource.aiCoupon,
             smartBetMarket: item.market,
             smartBetProbabilityPercent: item.probability,
+            smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
         } catch (e) {
@@ -1652,6 +1653,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             source: SmartBetAnalysisSource.aiCoupon,
             smartBetMarket: item.market,
             smartBetProbabilityPercent: item.probability,
+            smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
         } catch (e) {

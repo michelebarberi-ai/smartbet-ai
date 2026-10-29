@@ -1597,6 +1597,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               source: SmartBetAnalysisSource.combinations,
               smartBetMarket: item.market,
               smartBetProbabilityPercent: item.probability,
+              smartBetOdd: item.odd,
               dualAnalysis: item.dualAnalysis,
             );
           } catch (e) {
@@ -1658,6 +1659,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             source: SmartBetAnalysisSource.combinations,
             smartBetMarket: item.market,
             smartBetProbabilityPercent: item.probability,
+            smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
         } catch (e) {
