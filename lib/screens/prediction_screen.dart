@@ -977,6 +977,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           smartBet: item.analysis,
           smartBetMarket: item.market,
           smartBetProbability: item.probability,
+          smartBetOdd: item.odd,
         );
 
         enrichedFinalResults.add(item.withDualAnalysis(dual));

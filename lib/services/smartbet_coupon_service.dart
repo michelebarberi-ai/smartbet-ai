@@ -1,8 +1,9 @@
-import 'dart:math' as math;
-
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import 'smartbet_ai_service.dart';
+import 'smartbet_sports_market_selector.dart';
+import 'smartbet_sports_coupon_adapter.dart';
+import 'odds_service.dart';
 
 // ============================================================
 // SINGOLA SELEZIONE DELLA SCHEDINA
@@ -12,22 +13,32 @@ class SmartBetCouponSelection {
   final MatchModel match;
   final AnalysisResult analysis;
 
-  const SmartBetCouponSelection({required this.match, required this.analysis});
+  /// Pronostico selezionato dal motore sportivo.
+  /// Null mantiene la compatibilita con le vecchie selezioni.
+  final SmartBetSportsMarketPick? sportsPick;
+  final String? sportsBookmaker;
+
+  const SmartBetCouponSelection({
+    required this.match,
+    required this.analysis,
+    this.sportsPick,
+    this.sportsBookmaker,
+  });
 
   String get matchLabel {
     return '${match.homeTeam} - ${match.awayTeam}';
   }
 
   String get outcome {
-    return analysis.stakeOutcome;
+    return sportsPick?.market ?? analysis.stakeOutcome;
   }
 
   double get odd {
-    return analysis.stakeOdd;
+    return sportsPick?.odd ?? analysis.stakeOdd;
   }
 
   String get bookmaker {
-    return analysis.stakeBookmaker;
+    return sportsBookmaker ?? analysis.stakeBookmaker;
   }
 
   int get smartScore {
@@ -155,30 +166,12 @@ class _CouponProfile {
 
   final double minimumAiProbability;
 
-  final double minimumEdge;
-
-  final double maximumOdd;
-
-  final double highOddThreshold;
-
-  final int highOddMinimumSmartScore;
-
-  final double highOddMinimumProbability;
-
-  final double highOddMinimumEdge;
-
   final bool rejectHighRisk;
 
   const _CouponProfile({
     required this.name,
     required this.minimumSmartScore,
     required this.minimumAiProbability,
-    required this.minimumEdge,
-    required this.maximumOdd,
-    required this.highOddThreshold,
-    required this.highOddMinimumSmartScore,
-    required this.highOddMinimumProbability,
-    required this.highOddMinimumEdge,
     required this.rejectHighRisk,
   });
 }
@@ -212,6 +205,13 @@ class _CouponCandidate {
 // ============================================================
 
 class SmartBetCouponService {
+  /// Provider opzionali per test senza richieste API.
+  /// In produzione vengono usati i servizi originali.
+  final Future<AnalysisResult> Function(MatchModel)? analysisProvider;
+  final Future<FixtureMarketOdds?> Function(int)? oddsProvider;
+
+  SmartBetCouponService({this.analysisProvider, this.oddsProvider});
+
   static const int maximumSelections = 6;
 
   static const int minimumSelections = 2;
@@ -220,7 +220,7 @@ class SmartBetCouponService {
   // massimo 2 partite contemporaneamente.
   static const int advancedBatchSize = 2;
 
-  static const double minimumOdd = 1.18;
+  static const double minimumOdd = 1.25;
 
   static const double maximumCouponStakePercent = 0.50;
 
@@ -234,12 +234,6 @@ class SmartBetCouponService {
     name: 'PREMIUM',
     minimumSmartScore: 68,
     minimumAiProbability: 0.34,
-    minimumEdge: 0.025,
-    maximumOdd: 4.20,
-    highOddThreshold: 3.40,
-    highOddMinimumSmartScore: 72,
-    highOddMinimumProbability: 0.36,
-    highOddMinimumEdge: 0.030,
     rejectHighRisk: true,
   );
 
@@ -249,12 +243,6 @@ class SmartBetCouponService {
     name: 'BILANCIATA',
     minimumSmartScore: 62,
     minimumAiProbability: 0.27,
-    minimumEdge: 0.012,
-    maximumOdd: 5.75,
-    highOddThreshold: 4.00,
-    highOddMinimumSmartScore: 68,
-    highOddMinimumProbability: 0.29,
-    highOddMinimumEdge: 0.020,
     rejectHighRisk: false,
   );
 
@@ -265,12 +253,6 @@ class SmartBetCouponService {
     name: 'VALUE CONTROLLATO',
     minimumSmartScore: 62,
     minimumAiProbability: 0.25,
-    minimumEdge: 0.015,
-    maximumOdd: 7.50,
-    highOddThreshold: 4.25,
-    highOddMinimumSmartScore: 70,
-    highOddMinimumProbability: 0.29,
-    highOddMinimumEdge: 0.030,
     rejectHighRisk: true,
   );
 
@@ -284,12 +266,6 @@ class SmartBetCouponService {
     name: 'PREMIUM',
     minimumSmartScore: 60,
     minimumAiProbability: 0.28,
-    minimumEdge: 0.008,
-    maximumOdd: 4.50,
-    highOddThreshold: 3.60,
-    highOddMinimumSmartScore: 64,
-    highOddMinimumProbability: 0.30,
-    highOddMinimumEdge: 0.012,
     rejectHighRisk: true,
   );
 
@@ -297,12 +273,6 @@ class SmartBetCouponService {
     name: 'BILANCIATA',
     minimumSmartScore: 58,
     minimumAiProbability: 0.24,
-    minimumEdge: 0.005,
-    maximumOdd: 6.25,
-    highOddThreshold: 4.25,
-    highOddMinimumSmartScore: 62,
-    highOddMinimumProbability: 0.26,
-    highOddMinimumEdge: 0.008,
     rejectHighRisk: false,
   );
 
@@ -314,7 +284,6 @@ class SmartBetCouponService {
   // (shouldBet == true e stake valido).
   static const int _smartFallbackMinimumScore = 58;
   static const double _smartFallbackMinimumProbability = 0.24;
-  static const double _smartFallbackMaximumOdd = 6.50;
 
   // ============================================================
   // CREA SCHEDINA
@@ -364,7 +333,8 @@ class SmartBetCouponService {
       );
     }
 
-    final aiService = SmartBetAiService();
+    final aiService = analysisProvider == null ? SmartBetAiService() : null;
+    final oddsService = oddsProvider == null ? OddsService() : null;
 
     final analyzed = <SmartBetCouponSelection>[];
 
@@ -387,7 +357,13 @@ class SmartBetCouponService {
 
         final batch = matches.sublist(start, end);
 
-        final results = await Future.wait(batch.map(aiService.analyzeMatch));
+        final results = await Future.wait(
+          batch.map(
+            (match) => analysisProvider != null
+                ? analysisProvider!(match)
+                : aiService!.analyzeMatch(match, runAudit: true),
+          ),
+        );
 
         for (int i = 0; i < results.length; i++) {
           final match = batch[i];
@@ -399,7 +375,38 @@ class SmartBetCouponService {
             continue;
           }
 
-          analyzed.add(SmartBetCouponSelection(match: match, analysis: result));
+          FixtureMarketOdds? marketOdds;
+          try {
+            marketOdds = oddsProvider != null
+                ? await oddsProvider!(match.fixtureId)
+                : await oddsService!.getFixtureMarketOdds(
+                    fixtureId: match.fixtureId,
+                  );
+          } catch (_) {
+            marketOdds = null;
+          }
+
+          final sportsPick = SmartBetSportsCouponAdapter.bestPlayable(
+            analysis: result,
+            odds: marketOdds,
+          );
+
+          if (sportsPick == null) {
+            continue;
+          }
+
+          final bookmaker = marketOdds
+              ?.oddFor(sportsPick.market)
+              ?.bookmakerName;
+
+          analyzed.add(
+            SmartBetCouponSelection(
+              match: match,
+              analysis: result,
+              sportsPick: sportsPick,
+              sportsBookmaker: bookmaker,
+            ),
+          );
         }
 
         if (end < matches.length) {
@@ -407,12 +414,12 @@ class SmartBetCouponService {
         }
       }
     } finally {
-      aiService.dispose();
+      aiService?.dispose();
     }
 
     if (analyzed.isEmpty) {
       final commonMessage =
-          'Nessuna partita ha superato Value Bet e Stake Engine. '
+          'Nessuna partita ha superato i controlli sportivi. '
           'Prova ad aggiungere altre partite alla selezione.';
 
       return SmartBetCouponSet(
@@ -615,7 +622,7 @@ class SmartBetCouponService {
       profileName: profileName,
       message: usedFallback
           ? '$profileName: selezioni validate con fallback SMART '
-                'dopo i controlli Value Bet e Stake Engine.'
+                'dopo i controlli statistici e di disponibilita.'
           : usedAdaptiveProfile
           ? '$profileName: profilo adattivo attivato per usare '
                 'le migliori opportunità disponibili oggi.'
@@ -629,23 +636,9 @@ class SmartBetCouponService {
   // ============================================================
 
   bool _isBaseValid(AnalysisResult result) {
-    if (result.smartScore <= 0) {
-      return false;
-    }
-
-    if (!result.shouldBet) {
-      return false;
-    }
-
-    if (result.stakeOutcome.trim().isEmpty) {
-      return false;
-    }
-
-    if (result.stakeOdd < minimumOdd) {
-      return false;
-    }
-
-    return true;
+    return result.smartScore > 0 &&
+        result.hasVerifiedSportsAudit &&
+        !result.hasSportsAuditVeto;
   }
 
   // ============================================================
@@ -658,13 +651,9 @@ class SmartBetCouponService {
   }) {
     final result = selection.analysis;
 
-    if (result.smartScore < profile.minimumSmartScore) {
-      return null;
-    }
-
-    final odd = selection.odd;
-
-    if (odd < minimumOdd || odd > profile.maximumOdd) {
+    if (selection.sportsPick == null ||
+        selection.odd < minimumOdd ||
+        result.smartScore < profile.minimumSmartScore) {
       return null;
     }
 
@@ -674,53 +663,23 @@ class SmartBetCouponService {
       return null;
     }
 
-    final impliedProbability = 1.0 / odd;
-
-    final edge = probability - impliedProbability;
-
-    if (edge < profile.minimumEdge) {
-      return null;
-    }
-
-    // ==========================================================
-    // QUOTA ALTA
-    // ==========================================================
-
-    if (odd >= profile.highOddThreshold) {
-      if (result.smartScore < profile.highOddMinimumSmartScore) {
-        return null;
-      }
-
-      if (probability < profile.highOddMinimumProbability) {
-        return null;
-      }
-
-      if (edge < profile.highOddMinimumEdge) {
-        return null;
-      }
-
-      if (_isHighRisk(result.risk)) {
-        return null;
-      }
-    }
-
     if (profile.rejectHighRisk && _isHighRisk(result.risk)) {
       return null;
     }
 
-    final qualityScore = _calculateQualityScore(
-      selection: selection,
-      probability: probability,
-      edge: edge,
-      profile: profile,
-    );
+    // Informazioni economiche conservate, non usate nel ranking.
+    final impliedProbability = 1.0 / selection.odd;
+    final edge = probability - impliedProbability;
 
     return _CouponCandidate(
       selection: selection,
       aiProbability: probability,
       impliedProbability: impliedProbability,
       edge: edge,
-      qualityScore: qualityScore,
+      qualityScore: _calculateQualityScore(
+        selection: selection,
+        probability: probability,
+      ),
     );
   }
 
@@ -733,22 +692,9 @@ class SmartBetCouponService {
   ) {
     final result = selection.analysis;
 
-    // Il risultato deve essere già stato approvato dallo Stake Engine.
-    if (!result.shouldBet) {
-      return null;
-    }
-
-    if (selection.outcome.trim().isEmpty) {
-      return null;
-    }
-
-    final odd = selection.odd;
-
-    if (odd < minimumOdd || odd > _smartFallbackMaximumOdd) {
-      return null;
-    }
-
-    if (result.smartScore < _smartFallbackMinimumScore) {
+    if (selection.sportsPick == null ||
+        selection.odd < minimumOdd ||
+        result.smartScore < _smartFallbackMinimumScore) {
       return null;
     }
 
@@ -758,46 +704,22 @@ class SmartBetCouponService {
       return null;
     }
 
-    // Rischio alto ammesso soltanto con score molto forte.
     if (_isHighRisk(result.risk) && result.smartScore < 72) {
       return null;
     }
 
-    final impliedProbability = 1.0 / odd;
+    final impliedProbability = 1.0 / selection.odd;
     final edge = probability - impliedProbability;
-
-    // Nel fallback NON imponiamo una seconda soglia edge:
-    // il ValueBetCalculator e lo StakeEngine hanno già deciso
-    // che la giocata possiede valore sufficiente.
-    final scoreComponent = (result.smartScore / 100.0).clamp(0.0, 1.0);
-    final probabilityComponent = probability.clamp(0.0, 1.0);
-    final riskComponent = _riskQuality(result.risk);
-    final stakeComponent = (selection.stakePercent / 2.0).clamp(0.0, 1.0);
-
-    final oddComponent = odd <= 1.80
-        ? 1.00
-        : odd <= 2.40
-        ? 0.92
-        : odd <= 3.20
-        ? 0.78
-        : odd <= 4.50
-        ? 0.58
-        : 0.35;
-
-    final qualityScore =
-        ((scoreComponent * 0.34) +
-            (probabilityComponent * 0.30) +
-            (riskComponent * 0.16) +
-            (oddComponent * 0.10) +
-            (stakeComponent * 0.10)) *
-        100.0;
 
     return _CouponCandidate(
       selection: selection,
       aiProbability: probability,
       impliedProbability: impliedProbability,
       edge: edge,
-      qualityScore: qualityScore,
+      qualityScore: _calculateQualityScore(
+        selection: selection,
+        probability: probability,
+      ),
     );
   }
 
@@ -809,86 +731,41 @@ class SmartBetCouponService {
     List<_CouponCandidate> items,
     String strategy,
   ) {
-    final normalized = strategy.toUpperCase().trim();
+    final mode = strategy.toUpperCase().trim();
 
-    if (normalized == 'PREMIUM') {
-      // PREMIUM:
-      // priorità ad affidabilità, rischio e quota più prudente.
-      items.sort((a, b) {
-        final risk = _riskQuality(
+    items.sort((a, b) {
+      int comparison;
+
+      if (mode == 'PREMIUM') {
+        comparison = _riskQuality(
           b.selection.risk,
         ).compareTo(_riskQuality(a.selection.risk));
-        if (risk != 0) {
-          return risk;
-        }
+        if (comparison != 0) return comparison;
+      }
 
-        final probability = b.aiProbability.compareTo(a.aiProbability);
-        if (probability != 0) {
-          return probability;
-        }
+      if (mode == 'VALUE') {
+        comparison = b.aiProbability.compareTo(a.aiProbability);
+        if (comparison != 0) return comparison;
+      }
 
-        final smartScore = b.selection.smartScore.compareTo(
-          a.selection.smartScore,
-        );
-        if (smartScore != 0) {
-          return smartScore;
-        }
+      comparison = b.qualityScore.compareTo(a.qualityScore);
+      if (comparison != 0) return comparison;
 
-        return a.selection.odd.compareTo(b.selection.odd);
-      });
+      comparison = b.aiProbability.compareTo(a.aiProbability);
+      if (comparison != 0) return comparison;
 
-      return;
-    }
+      comparison = a.selection.match.fixtureId.compareTo(
+        b.selection.match.fixtureId,
+      );
+      if (comparison != 0) return comparison;
 
-    if (normalized == 'VALUE') {
-      // VALUE:
-      // priorità all'expected value reale e poi all'edge.
-      items.sort((a, b) {
-        final aEv = (a.aiProbability * a.selection.odd) - 1.0;
-        final bEv = (b.aiProbability * b.selection.odd) - 1.0;
-
-        final ev = bEv.compareTo(aEv);
-        if (ev != 0) {
-          return ev;
-        }
-
-        final edge = b.edge.compareTo(a.edge);
-        if (edge != 0) {
-          return edge;
-        }
-
-        return b.qualityScore.compareTo(a.qualityScore);
-      });
-
-      return;
-    }
-
-    // BILANCIATA:
-    // usa il ranking composito generale.
-    _sortCandidates(items);
+      return a.selection.outcome.compareTo(b.selection.outcome);
+    });
   }
 
   // ============================================================
   // ORDINA CANDIDATI
   // ============================================================
-
-  void _sortCandidates(List<_CouponCandidate> items) {
-    items.sort((a, b) {
-      final qualityComparison = b.qualityScore.compareTo(a.qualityScore);
-
-      if (qualityComparison != 0) {
-        return qualityComparison;
-      }
-
-      final probabilityComparison = b.aiProbability.compareTo(a.aiProbability);
-
-      if (probabilityComparison != 0) {
-        return probabilityComparison;
-      }
-
-      return a.selection.odd.compareTo(b.selection.odd);
-    });
-  }
 
   // ============================================================
   // QUALITY SCORE
@@ -897,84 +774,19 @@ class SmartBetCouponService {
   double _calculateQualityScore({
     required SmartBetCouponSelection selection,
     required double probability,
-    required double edge,
-    required _CouponProfile profile,
   }) {
-    final scoreComponent = (selection.smartScore / 100.0).clamp(0.0, 1.0);
+    final score = (selection.smartScore / 100.0).clamp(0.0, 1.0);
+    final chance = probability.clamp(0.0, 1.0);
+    final risk = _riskQuality(selection.risk);
 
-    final probabilityComponent = probability.clamp(0.0, 1.0);
-
-    // Edge massimo considerato ai fini del ranking:
-    // 15 punti percentuali.
-    //
-    // Edge enormi non devono far dominare
-    // automaticamente una quota molto alta.
-    final edgeComponent = (edge / 0.15).clamp(0.0, 1.0);
-
-    final riskComponent = _riskQuality(selection.risk);
-
-    final oddComponent = _oddQuality(selection.odd, profile);
-
-    final stakeComponent = (selection.stakePercent / 2.0).clamp(0.0, 1.0);
-
-    // ==========================================================
-    // PESI
-    // ==========================================================
-    //
-    // Smart Score      30%
-    // Probabilità AI   30%
-    // Edge             15%
-    // Rischio          12%
-    // Qualità quota     8%
-    // Stake             5%
-    // ==========================================================
-
-    final score =
-        (scoreComponent * 0.30) +
-        (probabilityComponent * 0.30) +
-        (edgeComponent * 0.15) +
-        (riskComponent * 0.12) +
-        (oddComponent * 0.08) +
-        (stakeComponent * 0.05);
-
-    return score * 100.0;
+    // Pesi provvisori da validare sui risultati storici.
+    // Nessuna dipendenza da quota, EV, edge o stake.
+    return (score * 0.45 + chance * 0.40 + risk * 0.15) * 100.0;
   }
 
   // ============================================================
   // QUALITÀ QUOTA
   // ============================================================
-
-  double _oddQuality(double odd, _CouponProfile profile) {
-    if (odd <= 1.80) {
-      return 1.00;
-    }
-
-    if (odd <= 2.40) {
-      return 0.95;
-    }
-
-    if (odd <= 3.00) {
-      return 0.85;
-    }
-
-    if (odd <= 3.80) {
-      return 0.68;
-    }
-
-    if (odd <= 4.75) {
-      return 0.48;
-    }
-
-    if (odd <= 6.00) {
-      return 0.30;
-    }
-
-    if (odd <= profile.maximumOdd) {
-      return 0.16;
-    }
-
-    return 0.0;
-  }
 
   // ============================================================
   // QUALITÀ RISCHIO
@@ -1020,6 +832,11 @@ class SmartBetCouponService {
   // ============================================================
 
   double _selectionProbability(SmartBetCouponSelection selection) {
+    final sportsPick = selection.sportsPick;
+    if (sportsPick != null) {
+      return sportsPick.probability.clamp(0, 100) / 100.0;
+    }
+
     final outcome = selection.outcome.trim().toUpperCase();
 
     int probability;
@@ -1114,17 +931,11 @@ class SmartBetCouponService {
       return 'Alto';
     }
 
-    final maximumOdd = selections.map((item) => item.odd).reduce(math.max);
-
     if (combinedProbability < 0.10) {
       return 'Alto';
     }
 
     if (combinedProbability < 0.18) {
-      return 'Medio-Alto';
-    }
-
-    if (maximumOdd >= 5.00 && combinedProbability < 0.28) {
       return 'Medio-Alto';
     }
 
@@ -1143,59 +954,13 @@ class SmartBetCouponService {
     required List<SmartBetCouponSelection> selections,
     required double combinedProbability,
   }) {
-    if (selections.length < minimumSelections) {
-      return 0.0;
-    }
-
-    if (combinedProbability <= 0.0) {
-      return 0.0;
-    }
-
-    double minimumSingleStake = selections.first.stakePercent;
-
-    for (final selection in selections.skip(1)) {
-      minimumSingleStake = math.min(minimumSingleStake, selection.stakePercent);
-    }
-
-    double multiplier;
-
-    if (selections.length <= 2) {
-      multiplier = 0.50;
-    } else if (selections.length == 3) {
-      multiplier = 0.40;
-    } else if (selections.length == 4) {
-      multiplier = 0.30;
-    } else {
-      multiplier = 0.25;
-    }
-
-    if (combinedProbability < 0.10) {
-      multiplier *= 0.50;
-    } else if (combinedProbability < 0.20) {
-      multiplier *= 0.70;
-    } else if (combinedProbability < 0.30) {
-      multiplier *= 0.85;
-    }
-
-    final hasAggressiveOdd = selections.any(
-      (selection) => selection.odd >= 4.50,
-    );
-
-    if (hasAggressiveOdd) {
-      multiplier *= 0.80;
-    }
-
-    var stake = minimumSingleStake * multiplier;
-
-    stake = math.min(stake, maximumCouponStakePercent);
-
-    if (stake < 0.05) {
-      return 0.0;
-    }
-
-    return stake;
+    // P18B2F: stake automatico temporaneamente disattivato.
+    // La vecchia raccomandazione potrebbe riferirsi
+    // a un mercato diverso dal pronostico sportivo.
+    return 0.0;
   }
 
+  // ============================================================
   // ============================================================
   // RISULTATO VUOTO
   // ============================================================

@@ -206,6 +206,8 @@ Map<String, dynamic> _resultToJson(AnalysisResult result) {
     'smartScore': result.smartScore,
     'predictionConfidence': result.predictionConfidence,
     'dataConfidence': result.dataConfidence,
+    'sportsAuditStatus': result.sportsAuditStatus,
+    'sportsAuditBlockedMarkets': result.sportsAuditBlockedMarkets,
     'homeProbability': result.homeProbability,
     'drawProbability': result.drawProbability,
     'awayProbability': result.awayProbability,
@@ -239,6 +241,14 @@ AnalysisResult _resultFromJson(Map<String, dynamic> json) {
         ? _toInt(json['predictionConfidence'])
         : _toInt(json['smartScore']),
     dataConfidence: _toInt(json['dataConfidence']),
+    sportsAuditStatus: json.containsKey('sportsAuditBlockedMarkets')
+        ? (json['sportsAuditStatus']?.toString() ?? 'NOT_RUN')
+        : 'NOT_RUN',
+    sportsAuditBlockedMarkets: json['sportsAuditBlockedMarkets'] is List
+        ? (json['sportsAuditBlockedMarkets'] as List)
+              .map((value) => value.toString())
+              .toList(growable: false)
+        : const <String>[],
     homeProbability: _toInt(json['homeProbability']),
     drawProbability: _toInt(json['drawProbability']),
     awayProbability: _toInt(json['awayProbability']),

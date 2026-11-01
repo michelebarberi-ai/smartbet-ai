@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'smartbet_analysis_market_settlement.dart';
+import 'smartbet_asian_handicap_accounting_service.dart';
+import 'smartbet_asian_handicap_market_settlement_service.dart';
+import 'smartbet_asian_handicap_settlement_service.dart';
 
 enum SmartBetAnalysisEngine { smartBet, diego }
 
@@ -51,6 +54,21 @@ class SmartBetAnalysisRecord {
   /// Null per analisi senza una quota reale disponibile.
   final double? quotedOdd;
 
+  /// Liquidazione dei mercati asiatici, separata
+  /// dallo stato usato dal learning binario.
+  final SmartBetAsianSettlement? asianSettlement;
+
+  /// Profitto per una puntata unitaria.
+  /// Null se manca la quota originale.
+  double? get asianNetProfitUnits {
+    final settlement = asianSettlement;
+    if (settlement == null) return null;
+
+    return SmartBetAsianHandicapAccountingService.fromSettlement(
+      settlement,
+    )?.profitUnitsForDecimalOdd(quotedOdd);
+  }
+
   const SmartBetAnalysisRecord({
     required this.engine,
     required this.fixtureId,
@@ -74,6 +92,7 @@ class SmartBetAnalysisRecord {
     required this.lastSeenAt,
     this.resolvedAt,
     this.quotedOdd,
+    this.asianSettlement,
   });
 
   String get key =>
@@ -114,6 +133,7 @@ class SmartBetAnalysisRecord {
       lastSeenAt: seenAt,
       resolvedAt: resolvedAt,
       quotedOdd: quotedOdd,
+      asianSettlement: asianSettlement,
     );
   }
 
@@ -122,6 +142,7 @@ class SmartBetAnalysisRecord {
     required int awayGoals,
     required SmartBetAnalysisStatus status,
     required DateTime updatedAt,
+    SmartBetAsianSettlement? asianSettlement,
   }) {
     return SmartBetAnalysisRecord(
       engine: engine,
@@ -145,6 +166,7 @@ class SmartBetAnalysisRecord {
       firstSeenAt: firstSeenAt,
       lastSeenAt: updatedAt,
       quotedOdd: quotedOdd,
+      asianSettlement: asianSettlement,
       resolvedAt:
           resolvedAt ??
           (this.status == SmartBetAnalysisStatus.pending
@@ -177,6 +199,7 @@ class SmartBetAnalysisRecord {
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
       'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
       'quotedOdd': quotedOdd,
+      'asianSettlement': asianSettlement?.name,
     };
   }
 
@@ -249,6 +272,9 @@ class SmartBetAnalysisRecord {
       lastSeenAt: lastSeenAt.toUtc(),
       resolvedAt: resolvedAt?.toUtc(),
       quotedOdd: _safeSnapshotOdd(_toDouble(json['quotedOdd'])),
+      asianSettlement: _asianSettlementFromName(
+        json['asianSettlement']?.toString(),
+      ),
     );
   }
 }
@@ -399,6 +425,7 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
       firstSeenAt: now,
       lastSeenAt: now,
       quotedOdd: _safeSnapshotOdd(quotedOdd),
+      asianSettlement: null,
     );
 
     _records.add(record);
@@ -433,24 +460,37 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
         continue;
       }
 
+      final asianSettlement =
+          SmartBetAsianHandicapMarketSettlementService.evaluate(
+            market: record.market,
+            homeGoals: homeGoals,
+            awayGoals: awayGoals,
+          );
+
       final settlement = SmartBetAnalysisMarketSettlement.evaluate(
         market: record.market,
         homeGoals: homeGoals,
         awayGoals: awayGoals,
       );
 
-      final status = switch (settlement) {
-        SmartBetAnalysisSettlement.correct => SmartBetAnalysisStatus.correct,
-        SmartBetAnalysisSettlement.wrong => SmartBetAnalysisStatus.wrong,
-        SmartBetAnalysisSettlement.unsupported =>
-          SmartBetAnalysisStatus.unsupported,
-      };
+      // Esclusione prudenziale dal learning binario.
+      // La liquidazione esatta resta nel campo asianSettlement.
+      final status = asianSettlement != null
+          ? SmartBetAnalysisStatus.unsupported
+          : switch (settlement) {
+              SmartBetAnalysisSettlement.correct =>
+                SmartBetAnalysisStatus.correct,
+              SmartBetAnalysisSettlement.wrong => SmartBetAnalysisStatus.wrong,
+              SmartBetAnalysisSettlement.unsupported =>
+                SmartBetAnalysisStatus.unsupported,
+            };
 
       _records[index] = record.withActualResult(
         homeGoals: homeGoals,
         awayGoals: awayGoals,
         status: status,
         updatedAt: now,
+        asianSettlement: asianSettlement,
       );
 
       updatedRecords++;
@@ -670,4 +710,14 @@ double? _safeSnapshotOdd(double? value) {
     return null;
   }
   return value;
+}
+
+SmartBetAsianSettlement? _asianSettlementFromName(String? value) {
+  for (final settlement in SmartBetAsianSettlement.values) {
+    if (settlement.name == value &&
+        settlement != SmartBetAsianSettlement.unsupported) {
+      return settlement;
+    }
+  }
+  return null;
 }

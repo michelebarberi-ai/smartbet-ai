@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'smartbet_analysis_history_store.dart';
 import 'smartbet_historical_calibration_service.dart';
+import 'smartbet_frozen_model_registration_store.dart';
 
 class SmartBetShadowPrediction {
   final String key;
@@ -15,6 +16,11 @@ class SmartBetShadowPrediction {
   final double calibratedProbability;
   final int trainingSampleSize;
   final bool calibrationApplied;
+
+  // Associazione alla valutazione SHADOW.
+  // Null per tutti gli snapshot precedenti.
+  final String? shadowModelId;
+  final DateTime? shadowModelLinkedAt;
 
   // Null per gli snapshot precedenti a P15B.
   final double? trialProbability;
@@ -34,6 +40,8 @@ class SmartBetShadowPrediction {
     this.trialProbability,
     this.trialEligible,
     this.decisionStatus,
+    this.shadowModelId,
+    this.shadowModelLinkedAt,
   });
 
   bool get adjusted =>
@@ -52,9 +60,21 @@ class SmartBetShadowPrediction {
     'trialProbability': trialProbability,
     'trialEligible': trialEligible,
     'decisionStatus': decisionStatus,
+    'shadowModelId': shadowModelId,
+    'shadowModelLinkedAt': shadowModelLinkedAt?.toUtc().toIso8601String(),
   };
 
   factory SmartBetShadowPrediction.fromJson(Map<String, dynamic> json) {
+    final linkedId = json['shadowModelId'];
+    final linkedTime = json['shadowModelLinkedAt'];
+
+    if ((linkedId == null) != (linkedTime == null) ||
+        (linkedId != null &&
+            (linkedId is! String || linkedId.trim().isEmpty)) ||
+        (linkedTime != null && linkedTime is! String)) {
+      throw const FormatException('Associazione modello shadow incompleta');
+    }
+
     return SmartBetShadowPrediction(
       key: json['key'] as String,
       engine: json['engine'] as String,
@@ -65,6 +85,10 @@ class SmartBetShadowPrediction {
       calibratedProbability: (json['calibratedProbability'] as num).toDouble(),
       trainingSampleSize: (json['trainingSampleSize'] as num).toInt(),
       calibrationApplied: json['calibrationApplied'] == true,
+      shadowModelId: linkedId as String?,
+      shadowModelLinkedAt: linkedTime == null
+          ? null
+          : DateTime.parse(linkedTime as String).toUtc(),
       trialProbability: (json['trialProbability'] as num?)?.toDouble(),
       trialEligible: json['trialEligible'] is bool
           ? json['trialEligible'] as bool
@@ -132,6 +156,7 @@ class SmartBetShadowLearningStore {
     double? trialProbability,
     bool? trialEligible,
     String? decisionStatus,
+    SmartBetFrozenModelRegistration? registeredShadowModel,
   }) async {
     await initialize();
 
@@ -185,6 +210,26 @@ class SmartBetShadowLearningStore {
       }
     }
 
+    // Associazione consentita solo durante la prima acquisizione.
+    // Una registrazione successiva non recupera i vecchi snapshot.
+    final linkedAt = DateTime.now().toUtc();
+    final firstSeenAt = record.firstSeenAt.toUtc();
+    final kickoff = record.matchDate.toUtc();
+
+    final model = registeredShadowModel?.model;
+
+    final validBinding =
+        model != null &&
+        model.engine == record.engine &&
+        normalizeAnalysisMarket(model.market) ==
+            normalizeAnalysisMarket(record.market) &&
+        model.frozenAt.toUtc().isBefore(firstSeenAt) &&
+        registeredShadowModel!.registeredAt.toUtc().isBefore(firstSeenAt) &&
+        !firstSeenAt.isAfter(linkedAt) &&
+        linkedAt.difference(firstSeenAt) <= const Duration(minutes: 5) &&
+        firstSeenAt.isBefore(kickoff) &&
+        linkedAt.isBefore(kickoff);
+
     final snapshot = SmartBetShadowPrediction(
       key: record.key,
       engine: record.engine.name,
@@ -198,6 +243,8 @@ class SmartBetShadowLearningStore {
       trialProbability: trialProbability,
       trialEligible: trialEligible,
       decisionStatus: decisionStatus,
+      shadowModelId: validBinding ? model.id : null,
+      shadowModelLinkedAt: validBinding ? linkedAt : null,
     );
 
     final prefs = _prefs ??= await SharedPreferences.getInstance();

@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
-import 'diego_ai_multi_market_value_service.dart';
+import 'diego_ai_sports_market_selector.dart';
 import 'diego_ai_service.dart';
 import 'smartbet_ai_service.dart';
 import 'smartbet_market_probability_service.dart';
+import 'smartbet_sports_coupon_adapter.dart';
+import 'odds_service.dart';
 
 String dualEngineMarketLabel(String market) {
   final normalized = market.trim().toUpperCase().replaceAll(
@@ -41,6 +43,8 @@ class DualEngineComparison {
 
   /// Probabilità interne 0.0 - 1.0.
   final double? smartBetProbability;
+  final String? statisticalSmartBetMarket;
+  final double? statisticalSmartBetProbability;
   final double? diegoProbability;
 
   final double? diegoOdd;
@@ -53,6 +57,8 @@ class DualEngineComparison {
     required this.smartBetMarket,
     required this.diegoMarket,
     this.smartBetProbability,
+    this.statisticalSmartBetMarket,
+    this.statisticalSmartBetProbability,
     this.diegoProbability,
     this.diegoOdd,
     this.diegoBookmaker,
@@ -72,11 +78,7 @@ class DualEngineComparison {
         return 'DIVERGENZA';
 
       case DualEngineAgreement.noSelection:
-        if (diegoClassification == 'SPECULATIVE VALUE') {
-          return 'VALUE SPECULATIVO';
-        }
-
-        return diegoOdd == null ? 'VALUE NON VERIFICABILE' : 'NESSUN VALUE';
+        return 'QUOTA NON DISPONIBILE';
 
       case DualEngineAgreement.unavailable:
         return 'CONFRONTO NON DISPONIBILE';
@@ -105,25 +107,15 @@ class DualEngineComparison {
             'Le due indicazioni sono in contrasto.';
 
       case DualEngineAgreement.noSelection:
-        if (diegoClassification == 'SPECULATIVE VALUE') {
-          return 'DiegoAI rileva valore matematico su $diegoLabel, '
-              'ma la probabilità assoluta è troppo bassa per '
-              'considerarlo una raccomandazione qualificata.';
-        }
-
-        if (diegoOdd == null) {
-          return 'DiegoAI indica $diegoLabel come lettura statistica '
-              'di riferimento. Il valore non può essere verificato '
-              'perché non è disponibile una quota utilizzabile.';
-        }
-
-        return 'DiegoAI indica $diegoLabel come lettura statistica '
-            'di riferimento, ma non rileva sufficiente valore '
-            'nella quota disponibile.';
+        return 'DiegoAI indica $diegoLabel come '
+            'lettura statistica, ma non trova '
+            'una quota utilizzabile di almeno 1,25 '
+            'nei mercati disponibili.';
 
       case DualEngineAgreement.unavailable:
-        return 'DiegoAI non è disponibile per questa partita. '
-            'Il risultato SmartBet rimane comunque utilizzabile.';
+        return 'Il confronto sportivo non è disponibile: '
+            'almeno uno dei due motori non ha prodotto '
+            'una selezione verificata e confrontabile.';
     }
   }
 }
@@ -146,7 +138,6 @@ class _EngineMarketChoice {
 
   final double? odd;
   final String? bookmaker;
-  final int? confidence;
   final String? classification;
 
   const _EngineMarketChoice({
@@ -154,7 +145,6 @@ class _EngineMarketChoice {
     required this.probability,
     this.odd,
     this.bookmaker,
-    this.confidence,
     this.classification,
   });
 }
@@ -211,6 +201,7 @@ class DualEngineAnalysisService {
     required AnalysisResult smartBet,
     String? smartBetMarket,
     int? smartBetProbability,
+    double? smartBetOdd,
   }) async {
     final diego = await _safeDiego(match);
 
@@ -219,6 +210,25 @@ class DualEngineAnalysisService {
       diego: diego,
       smartBetMarketOverride: smartBetMarket,
       smartBetProbabilityPercent: smartBetProbability,
+      smartBetOddOverride: smartBetOdd,
+    );
+  }
+
+  /// Confronta risultati già preparati, senza API.
+  @visibleForTesting
+  DualEngineAnalysis comparePrepared({
+    required AnalysisResult smartBet,
+    required DiegoAiAnalysis? diego,
+    String? smartBetMarket,
+    int? smartBetProbability,
+    double? smartBetOdd,
+  }) {
+    return _build(
+      smartBet: smartBet,
+      diego: diego,
+      smartBetMarketOverride: smartBetMarket,
+      smartBetProbabilityPercent: smartBetProbability,
+      smartBetOddOverride: smartBetOdd,
     );
   }
 
@@ -239,12 +249,55 @@ class DualEngineAnalysisService {
     required DiegoAiAnalysis? diego,
     String? smartBetMarketOverride,
     int? smartBetProbabilityPercent,
+    double? smartBetOddOverride,
   }) {
     final smartChoice = _smartBetChoice(
       smartBet,
+      marketOdds: diego?.marketOdds,
       marketOverride: smartBetMarketOverride,
       probabilityPercentOverride: smartBetProbabilityPercent,
+      oddOverride: smartBetOddOverride,
     );
+
+    // P19B2A STATISTICAL PREVIEW
+    // La selezione GoalVdLine resta informativa.
+    // NON sostituisce l'Auditor sportivo e NON abilita
+    // un confronto classificato come verificato.
+    final requestedMarket = smartBetMarketOverride?.trim();
+    final requestedProbability = smartBetProbabilityPercent;
+    final requestedOdd = smartBetOddOverride;
+
+    final normalizedRequestedMarket =
+        requestedMarket == null || requestedMarket.isEmpty
+        ? null
+        : _normalizeMarket(requestedMarket);
+
+    final auditNotExecuted =
+        smartBet.sportsAuditStatus == 'NOT_RUN' ||
+        smartBet.sportsAuditStatus == 'SKIPPED_FAST';
+
+    final previewEligible =
+        auditNotExecuted &&
+        !smartBet.hasSportsAuditVeto &&
+        normalizedRequestedMarket != null &&
+        normalizedRequestedMarket != 'N/D' &&
+        requestedProbability != null &&
+        requestedProbability >= 0 &&
+        requestedProbability <= 100 &&
+        requestedOdd != null &&
+        requestedOdd.isFinite &&
+        requestedOdd >= 1.25 &&
+        !smartBet.sportsAuditBlockedMarkets.any(
+          (item) => _normalizeMarket(item) == normalizedRequestedMarket,
+        );
+
+    final statisticalPreviewMarket = previewEligible
+        ? normalizedRequestedMarket
+        : null;
+
+    final statisticalPreviewProbability = previewEligible
+        ? requestedProbability / 100.0
+        : null;
 
     if (diego == null) {
       return DualEngineAnalysis(
@@ -252,6 +305,8 @@ class DualEngineAnalysisService {
         diego: null,
         comparison: DualEngineComparison(
           status: DualEngineAgreement.unavailable,
+          statisticalSmartBetMarket: statisticalPreviewMarket,
+          statisticalSmartBetProbability: statisticalPreviewProbability,
           smartBetMarket: smartChoice.market,
           diegoMarket: 'N/D',
           smartBetProbability: smartChoice.probability,
@@ -260,6 +315,26 @@ class DualEngineAnalysisService {
     }
 
     final diegoChoice = _diegoChoice(diego);
+
+    // Non confrontiamo un mercato SmartBet non approvato
+    // o non disponibile con una selezione Diego.
+    if (smartChoice.market == 'N/D') {
+      return DualEngineAnalysis(
+        smartBet: smartBet,
+        diego: diego,
+        comparison: DualEngineComparison(
+          status: DualEngineAgreement.unavailable,
+          statisticalSmartBetMarket: statisticalPreviewMarket,
+          statisticalSmartBetProbability: statisticalPreviewProbability,
+          smartBetMarket: 'N/D',
+          diegoMarket: diegoChoice?.market ?? 'N/D',
+          diegoProbability: diegoChoice?.probability,
+          diegoOdd: diegoChoice?.odd,
+          diegoBookmaker: diegoChoice?.bookmaker,
+          diegoClassification: diegoChoice?.classification,
+        ),
+      );
+    }
 
     if (diegoChoice == null) {
       final statisticalChoice = _diegoStatisticalChoice(diego);
@@ -275,7 +350,7 @@ class DualEngineAnalysisService {
           diegoProbability: statisticalChoice.probability,
           diegoOdd: statisticalChoice.odd,
           diegoBookmaker: statisticalChoice.bookmaker,
-          diegoMarketConfidence: statisticalChoice.confidence,
+          diegoMarketConfidence: null,
           diegoClassification: statisticalChoice.classification ?? 'NO VALUE',
         ),
       );
@@ -295,7 +370,7 @@ class DualEngineAnalysisService {
         diegoProbability: diegoChoice.probability,
         diegoOdd: diegoChoice.odd,
         diegoBookmaker: diegoChoice.bookmaker,
-        diegoMarketConfidence: diegoChoice.confidence,
+        diegoMarketConfidence: null,
         diegoClassification: diegoChoice.classification,
       ),
     );
@@ -303,11 +378,39 @@ class DualEngineAnalysisService {
 
   _EngineMarketChoice _smartBetChoice(
     AnalysisResult result, {
+    FixtureMarketOdds? marketOdds,
     String? marketOverride,
     int? probabilityPercentOverride,
+    double? oddOverride,
   }) {
+    const unavailable = _EngineMarketChoice(market: 'N/D', probability: null);
+
+    // Una previsione non verificata oppure respinta
+    // dall'Auditor non viene confrontata come selezione.
+    if (!result.hasVerifiedSportsAudit || result.hasSportsAuditVeto) {
+      return unavailable;
+    }
+
+    // Quando la schermata passa una scelta esplicita,
+    // manteniamo il mercato effettivamente selezionato.
     if (marketOverride != null && marketOverride.trim().isNotEmpty) {
       final market = _normalizeMarket(marketOverride);
+
+      final blocked = result.sportsAuditBlockedMarkets.any(
+        (item) => _normalizeMarket(item) == market,
+      );
+
+      if (blocked) return unavailable;
+
+      // La quota della schermata ha priorità su quella
+      // disponibile nel catalogo condiviso di Diego.
+      // Una quota esplicitamente insufficiente non può
+      // essere sostituita per aggirare il filtro.
+      final verifiedOdd = oddOverride ?? marketOdds?.oddFor(market)?.odd;
+
+      if (verifiedOdd == null || !verifiedOdd.isFinite || verifiedOdd < 1.25) {
+        return unavailable;
+      }
 
       final probability = probabilityPercentOverride != null
           ? (probabilityPercentOverride.clamp(0, 100) / 100.0).toDouble()
@@ -316,11 +419,29 @@ class DualEngineAnalysisService {
       return _EngineMarketChoice(market: market, probability: probability);
     }
 
-    final market = _smartBetMarketFromPrediction(result);
+    // Nessuna quota: lettura statistica informativa.
+    // Non potra' essere confrontata con una selezione
+    // Diego quotata se anche Diego non ha quote.
+    if (marketOdds == null) {
+      final market = _smartBetMarketFromPrediction(result);
+      return _EngineMarketChoice(
+        market: market,
+        probability: _smartBetProbabilityFor(result, market),
+      );
+    }
+
+    // Stessa scelta sportiva utilizzata dalle schedine.
+    // Le quote verificano solo disponibilita' e minimo 1.25.
+    final pick = SmartBetSportsCouponAdapter.bestPlayable(
+      analysis: result,
+      odds: marketOdds,
+    );
+
+    if (pick == null) return unavailable;
 
     return _EngineMarketChoice(
-      market: market,
-      probability: _smartBetProbabilityFor(result, market),
+      market: _normalizeMarket(pick.market),
+      probability: pick.probability / 100.0,
     );
   }
 
@@ -398,78 +519,59 @@ class DualEngineAnalysisService {
   }
 
   _EngineMarketChoice? _diegoChoice(DiegoAiAnalysis analysis) {
-    // DiegoAI presenta una vera selezione soltanto quando
-    // il Value Engine identifica:
-    // WEAK VALUE / VALUE / STRONG VALUE.
-    //
-    // Un mercato NO VALUE resta informazione statistica,
-    // ma non viene mostrato come raccomandazione.
-    final bestValue = analysis.bestMultiMarketValue;
+    // Prima viene valutata la probabilita' sportiva.
+    // La quota verifica soltanto disponibilita' e minimo 1.25.
+    final pick = DiegoAiSportsMarketSelector.bestPlayable(
+      markets: analysis.markets,
+      odds: analysis.marketOdds,
+    );
 
-    if (bestValue == null) {
-      return null;
-    }
+    if (pick == null) return null;
 
-    return _choiceFromValue(bestValue);
+    return _EngineMarketChoice(
+      market: _normalizeMarket(pick.market),
+      probability: pick.probability,
+      odd: pick.odd,
+      bookmaker: pick.bookmaker,
+      classification: 'SPORTS PICK',
+    );
   }
 
   _EngineMarketChoice _diegoStatisticalChoice(DiegoAiAnalysis analysis) {
-    // Se esiste un value matematico escluso soltanto perché
-    // troppo speculativo, lo mostriamo come LETTURA e non
-    // come raccomandazione DiegoAI.
-    final speculativeValue = analysis.multiMarketValue.bestSpeculativeValue;
+    // Quando non esiste una quota utilizzabile,
+    // mostriamo la lettura sportiva senza raccomandazione.
+    final ranked = analysis.markets.where((market) {
+      return market.market.trim().isNotEmpty &&
+          market.probability.isFinite &&
+          market.probability > 0.0 &&
+          market.probability <= 1.0;
+    }).toList();
 
-    if (speculativeValue != null) {
-      return _choiceFromValue(speculativeValue);
+    ranked.sort((a, b) {
+      final probability = b.probability.compareTo(a.probability);
+
+      if (probability != 0) return probability;
+
+      return a.market.compareTo(b.market);
+    });
+
+    if (ranked.isNotEmpty) {
+      final best = ranked.first;
+
+      return _EngineMarketChoice(
+        market: _normalizeMarket(best.market),
+        probability: best.probability,
+        classification: 'STATISTICAL ONLY',
+      );
     }
 
-    // Se esistono mercati con quota, prendiamo quello
-    // che Diego considera statisticamente più probabile.
-    //
-    // In questo ramo nessuno di questi mercati ha superato
-    // il filtro Value, quindi resta una LETTURA STATISTICA
-    // e non una raccomandazione di giocata.
-    final quotedMarkets = analysis.multiMarketValue.markets;
-
-    if (quotedMarkets.isNotEmpty) {
-      final ranked = [...quotedMarkets]
-        ..sort((a, b) => b.aiProbability.compareTo(a.aiProbability));
-
-      return _choiceFromValue(ranked.first);
-    }
-
-    // Se non ci sono quote multi-mercato disponibili,
-    // mostriamo comunque la lettura 1X2 più probabile.
     final oneXTwo = <_EngineMarketChoice>[
-      _EngineMarketChoice(
-        market: '1',
-        probability: analysis.homeProbability,
-        classification: 'VALUE NON VERIFICABILE',
-      ),
-      _EngineMarketChoice(
-        market: 'X',
-        probability: analysis.drawProbability,
-        classification: 'VALUE NON VERIFICABILE',
-      ),
-      _EngineMarketChoice(
-        market: '2',
-        probability: analysis.awayProbability,
-        classification: 'VALUE NON VERIFICABILE',
-      ),
+      _EngineMarketChoice(market: '1', probability: analysis.homeProbability),
+      _EngineMarketChoice(market: 'X', probability: analysis.drawProbability),
+      _EngineMarketChoice(market: '2', probability: analysis.awayProbability),
     ]..sort((a, b) => (b.probability ?? 0.0).compareTo(a.probability ?? 0.0));
 
     return oneXTwo.first;
-  }
-
-  _EngineMarketChoice _choiceFromValue(DiegoAiMarketValue value) {
-    return _EngineMarketChoice(
-      market: _normalizeMarket(value.market),
-      probability: value.aiProbability,
-      odd: value.odd,
-      bookmaker: value.bookmaker,
-      confidence: value.marketConfidence,
-      classification: value.classification,
-    );
   }
 
   DualEngineAgreement _agreement({

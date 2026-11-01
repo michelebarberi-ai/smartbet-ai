@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/dual_engine_analysis_service.dart';
+import '../services/goalvdline_market_relation_service.dart';
 
 class DualEngineSummary extends StatelessWidget {
   final DualEngineAnalysis analysis;
@@ -80,11 +81,11 @@ class DualEngineSummary extends StatelessWidget {
             Text(
               market,
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 4,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 15,
+                fontSize: market.startsWith('HANDICAP EUROPEO') ? 12 : 15,
                 height: 1.1,
                 fontWeight: FontWeight.w900,
               ),
@@ -107,6 +108,37 @@ class DualEngineSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final comparison = analysis.comparison;
+
+    // P19B2B — preview statistica separata dal confronto verificato.
+    final previewMarket = comparison.statisticalSmartBetMarket;
+    final previewProbability = comparison.statisticalSmartBetProbability;
+
+    final hasStatisticalPreview =
+        comparison.status == DualEngineAgreement.unavailable &&
+        previewMarket != null &&
+        previewProbability != null;
+
+    final sameStatisticalMarket =
+        previewMarket != null &&
+        dualEngineMarketLabel(previewMarket) ==
+            dualEngineMarketLabel(comparison.diegoMarket);
+
+    // P19B2C - raffronto logico tra mercati dei due motori.
+    final reading = GoalVdLineMarketRelationService.compare(
+      goalVdLineMarket: hasStatisticalPreview
+          ? previewMarket
+          : comparison.smartBetMarket,
+      diegoMarket: comparison.diegoMarket,
+    );
+
+    final firstProbability = hasStatisticalPreview
+        ? previewProbability
+        : comparison.smartBetProbability;
+    final secondProbability = comparison.diegoProbability;
+
+    final probabilityGap = firstProbability != null && secondProbability != null
+        ? (firstProbability - secondProbability).abs() * 100
+        : null;
 
     final diego = analysis.diego;
 
@@ -145,32 +177,33 @@ class DualEngineSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // P19B2D - titolo e stato su righe distinte, senza sovrapposizioni.
           Row(
             children: [
               Icon(_statusIcon(), color: statusColor, size: 18),
               const SizedBox(width: 7),
-              Expanded(
+              const Expanded(
                 child: Text(
-                  comparison.status == DualEngineAgreement.noSelection
-                      ? 'LETTURA INDIPENDENTE DEI MOTORI'
-                      : 'SCELTA INDIPENDENTE DEI MOTORI',
-                  style: const TextStyle(
+                  'RAFFRONTO TRA LE DUE IA',
+                  style: TextStyle(
                     color: Colors.white70,
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 0.35,
                   ),
                 ),
               ),
-              Text(
-                comparison.label,
-                style: TextStyle(
-                  color: statusColor,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
             ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            hasStatisticalPreview
+                ? 'AUDITOR SPORTIVO NON ESEGUITO'
+                : comparison.label,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
           ),
 
           const SizedBox(height: 11),
@@ -179,9 +212,17 @@ class DualEngineSummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _engineBox(
-                title: 'SMARTBET',
-                market: dualEngineMarketLabel(comparison.smartBetMarket),
-                probability: comparison.smartBetProbability,
+                title: hasStatisticalPreview ? 'GOALVDLINE' : 'SMARTBET',
+                market: GoalVdLineMarketRelationService.displayMarket(
+                  dualEngineMarketLabel(
+                    hasStatisticalPreview
+                        ? previewMarket
+                        : comparison.smartBetMarket,
+                  ),
+                ),
+                probability: hasStatisticalPreview
+                    ? previewProbability
+                    : comparison.smartBetProbability,
                 color: const Color(0xFF00C853),
               ),
               const SizedBox(width: 8),
@@ -189,11 +230,64 @@ class DualEngineSummary extends StatelessWidget {
                 title: comparison.status == DualEngineAgreement.noSelection
                     ? 'DIEGO AI • LETTURA'
                     : 'DIEGO AI',
-                market: dualEngineMarketLabel(comparison.diegoMarket),
+                market: GoalVdLineMarketRelationService.displayMarket(
+                  dualEngineMarketLabel(comparison.diegoMarket),
+                ),
                 probability: comparison.diegoProbability,
                 color: Colors.cyanAccent,
               ),
             ],
+          ),
+
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RELAZIONE LOGICA: ${reading.title}',
+                  style: const TextStyle(
+                    color: Colors.cyanAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  reading.explanation,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+                if (reading.kind == GoalVdLineMarketRelationKind.same &&
+                    probabilityGap != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    'Differenza fra le stime: '
+                    '${probabilityGap.toStringAsFixed(1)} punti percentuali.',
+                    style: const TextStyle(color: Colors.white60, fontSize: 10),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                const Text(
+                  'Raffronto logico dei mercati, non verifica '
+                  'indipendente delle probabilità o dell’Auditor.',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 9.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
           ),
 
           if (diegoMeta.isNotEmpty) ...[
@@ -227,7 +321,19 @@ class DualEngineSummary extends StatelessWidget {
           const SizedBox(height: 8),
 
           Text(
-            comparison.description,
+            hasStatisticalPreview
+                ? (comparison.diegoMarket == 'N/D'
+                      ? 'Lettura GoalVdLine disponibile. '
+                            'Diego AI non disponibile. '
+                            'Auditor sportivo SmartBet non eseguito.'
+                      : sameStatisticalMarket
+                      ? 'Stesso mercato statistico. '
+                            'Auditor sportivo SmartBet non eseguito: '
+                            'non è una conferma verificata.'
+                      : 'Mercati statistici differenti. '
+                            'Auditor sportivo SmartBet non eseguito: '
+                            'confronto non verificato.')
+                : comparison.description,
             style: const TextStyle(
               color: Colors.white38,
               fontSize: 9.5,

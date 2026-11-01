@@ -203,6 +203,7 @@ class _ReviewCouponScreenState extends State<ReviewCouponScreen> {
           final dualAnalysis = await _dualEngineService.attachDiego(
             match: selection.match,
             smartBet: analysis,
+            smartBetMarket: selection.market,
           );
 
           final selectedProbability = _probabilityFor(

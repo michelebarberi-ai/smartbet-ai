@@ -17,6 +17,9 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../services/goalvdline_market_relation_service.dart';
+import '../services/smartbet_live_calibration_service.dart';
+import '../services/smartbet_device_learning_preferences.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
@@ -51,6 +54,9 @@ class _CouponPick {
   final AnalysisResult analysis;
   final String market;
   final int probability;
+
+  /// Valore grezzo del modello, mai sostituito nello storico.
+  final int? rawProbability;
   final double? odd;
   final String bookmaker;
   final double edge;
@@ -65,6 +71,7 @@ class _CouponPick {
     required this.analysis,
     required this.market,
     required this.probability,
+    this.rawProbability,
     required this.odd,
     required this.bookmaker,
     required this.edge,
@@ -74,6 +81,11 @@ class _CouponPick {
     this.auditorStatus = 'NON VERIFICATO',
     this.dualAnalysis,
   });
+
+  int get originalProbability => rawProbability ?? probability;
+
+  bool get hasLiveCalibration =>
+      rawProbability != null && rawProbability != probability;
 
   int? get reliabilityScore => SmartBetReliabilityService.score(
     analysis: analysis,
@@ -87,6 +99,7 @@ class _CouponPick {
       analysis: analysis,
       market: market,
       probability: probability,
+      rawProbability: rawProbability,
       odd: odd,
       bookmaker: bookmaker,
       edge: edge,
@@ -123,6 +136,86 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _count = 5;
 
   bool _loading = false;
+  final SmartBetDeviceLearningPreferences _deviceLearningPreferences =
+      const SmartBetDeviceLearningPreferences();
+  bool _deviceLearningReady = false;
+  bool _deviceLearningSaving = false;
+  // Sessione sperimentale: opt-in solo per questa schermata, OFF di default.
+  bool _liveLearningOptIn = false;
+  SmartBetLiveCalibrationSession? _liveLearningSession;
+  String? _liveLearningStatus;
+
+  Future<void> _prepareLiveLearning() async {
+    _liveLearningSession = null;
+    if (!_liveLearningOptIn) {
+      _liveLearningStatus = null;
+      return;
+    }
+    try {
+      final session = await const SmartBetLiveCalibrationService().prepare(
+        optedIn: true,
+      );
+      _liveLearningSession = session;
+      _liveLearningStatus = session.eligibleMarkets == 0
+          ? 'Nessun mercato ha superato le verifiche: probabilità originali.'
+          : '${session.eligibleMarkets} mercati idonei al trial. '
+                'La correzione è applicata solo ai mercati con gate positivo.';
+    } catch (error) {
+      _liveLearningStatus =
+          'Apprendimento non disponibile: uso esclusivo delle probabilità originali.';
+      debugPrint('GOALVDLINE LIVE LEARNING FAIL CLOSED: $error');
+    }
+    if (mounted) setState(() {});
+  }
+
+  int _livePercent(String market, int original, int fixtureId) =>
+      _liveLearningSession
+          ?.evaluate(
+            market: market,
+            originalPercent: original,
+            fixtureId: fixtureId,
+          )
+          .percent ??
+      original;
+
+  /// La scelta rimane esclusivamente nel dispositivo corrente.
+  /// Se il caricamento non riesce, l'apprendimento live resta OFF.
+  Future<void> _restoreDeviceLearningPreference() async {
+    final enabled = await _deviceLearningPreferences.loadEnabled();
+    if (!mounted) return;
+    setState(() {
+      _liveLearningOptIn = enabled;
+      _deviceLearningReady = true;
+    });
+  }
+
+  Future<void> _setDeviceLearningPreference(bool enabled) async {
+    if (!_deviceLearningReady || _deviceLearningSaving || _loading) return;
+
+    setState(() {
+      _deviceLearningSaving = true;
+      _liveLearningOptIn = false;
+      _liveLearningSession = null;
+      _liveLearningStatus = null;
+      _results.clear();
+      _portfolioResults.clear();
+      _selectedPortfolioIndex = 0;
+      _error = null;
+      _notice = null;
+    });
+
+    final stored = await _deviceLearningPreferences.saveEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _deviceLearningSaving = false;
+      _liveLearningOptIn = stored && enabled;
+      _liveLearningStatus = stored
+          ? null
+          : 'Non riesco a salvare la preferenza su questo dispositivo: '
+                'le correzioni rimangono disattivate.';
+    });
+  }
+
   bool _italyScheduleOnly = true;
   final Set<String> _selectedCompetitionKeys = <String>{};
   String _phase = '';
@@ -172,6 +265,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     'GOAL + O2.5',
     'NO GOAL + U2.5',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDeviceLearningPreference();
+  }
 
   @override
   void dispose() {
@@ -344,7 +443,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     for (final candidate in sportsCandidates) {
       final market = candidate.market;
-      final probability = candidate.probability;
+      final rawProbability = candidate.probability;
+      final probability = _livePercent(
+        market,
+        rawProbability,
+        preliminary.match.fixtureId,
+      );
 
       final primary = _passesPrimary(
         probability: probability,
@@ -379,6 +483,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         analysis: preliminary.analysis,
         market: market,
         probability: probability,
+        rawProbability: rawProbability == probability ? null : rawProbability,
         odd: bestOdd.odd,
         bookmaker: bestOdd.bookmakerName,
         edge: edge,
@@ -408,7 +513,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     final sportsChoice = sportsCandidates.first;
     final market = sportsChoice.market;
-    final probability = sportsChoice.probability;
+    final rawProbability = sportsChoice.probability;
+    final probability = _livePercent(market, rawProbability, match.fixtureId);
 
     final quote = odds?.oddFor(market);
     final odd = quote?.odd;
@@ -426,6 +532,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       analysis: analysis,
       market: market,
       probability: probability,
+      rawProbability: rawProbability == probability ? null : rawProbability,
       odd: odd,
       bookmaker: quote?.bookmakerName ?? 'Quota non disponibile',
       edge: edge,
@@ -466,6 +573,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       analysis: pick.analysis,
       market: pick.market,
       probability: pick.probability,
+      rawProbability: pick.rawProbability,
       odd: pick.odd,
       bookmaker: pick.bookmaker,
       edge: pick.edge,
@@ -759,6 +867,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     });
 
     try {
+      await _prepareLiveLearning();
       final analyzed = <_CouponPick>[];
 
       // SmartBet viene eseguito a piccoli batch.
@@ -848,6 +957,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               smartBet: pick.analysis,
               smartBetMarket: pick.market,
               smartBetProbability: pick.probability,
+              smartBetOdd: pick.odd,
             );
 
             analyzed.add(pick.withDualAnalysis(dual));
@@ -880,7 +990,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             smartBet: item.analysis,
             source: SmartBetAnalysisSource.aiCoupon,
             smartBetMarket: item.market,
-            smartBetProbabilityPercent: item.probability,
+            smartBetProbabilityPercent: item.originalProbability,
             smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
@@ -963,6 +1073,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     });
 
     try {
+      await _prepareLiveLearning();
       final all = await _loadMatchesForSelectedPeriod();
       final matches = all
           .where(
@@ -1261,23 +1372,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           )
           .toList();
 
-      final hasAdvancedQuotedCandidate = audited.any(
-        (candidate) => quoteCache.containsKey(candidate.match.fixtureId),
-      );
-
-      if (!hasAdvancedQuotedCandidate && reserveQuoted.isEmpty) {
-        if (!mounted) return;
-
-        setState(() {
-          _loading = false;
-          _phase = '';
-          _error =
-              'Nessuna candidata dispone di quote reali sufficienti '
-              'per i mercati GoalVdLine.';
-        });
-
-        return;
-      }
+      // P19B1B STAGE1: non interrompere il recupero
+      // quando le prime candidate non hanno quote valide.
 
       final qualified = <_CouponPick>[];
 
@@ -1476,6 +1572,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               analysis: pick.analysis,
               market: pick.market,
               probability: pick.probability,
+              rawProbability: pick.rawProbability,
               odd: pick.odd,
               bookmaker: pick.bookmaker,
               edge: pick.edge,
@@ -1525,6 +1622,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               analysis: pick.analysis,
               market: pick.market,
               probability: pick.probability,
+              rawProbability: pick.rawProbability,
               odd: pick.odd,
               bookmaker: pick.bookmaker,
               edge: pick.edge,
@@ -1533,6 +1631,156 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               adaptive: pick.adaptive,
               auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
             ),
+          );
+        }
+      }
+
+      // P19B1B STAGE2 POST AUDITOR
+      // Cerca altre partite soltanto se gli eventi validati
+      // non raggiungono ancora il numero richiesto.
+      // P19B3A PORTFOLIO RECOVERY
+      // Per 15 eventi cerca fino a 23 candidate valide.
+      final portfolioRecoveryTarget = math.min(_count * 2, _count + 8);
+
+      if (feasible.length < portfolioRecoveryTarget) {
+        final recoveryScanLimit = math.max(_count * 3, 20);
+
+        final remaining = reservePreliminary.take(recoveryScanLimit).toList();
+
+        final previouslyProbedIds = reserveQuoteProbe
+            .map((candidate) => candidate.match.fixtureId)
+            .toSet();
+
+        if (remaining.isNotEmpty) {
+          if (!mounted) return;
+
+          setState(() {
+            _phase = 'recovery';
+            _oddsProcessed = 0;
+            _oddsTotal = remaining.length;
+          });
+
+          final usedFixtures = feasible
+              .map((pick) => pick.match.fixtureId)
+              .toSet();
+
+          var examined = 0;
+
+          for (final candidate in remaining) {
+            if (!mounted) return;
+            if (feasible.length >= portfolioRecoveryTarget) break;
+
+            examined++;
+
+            try {
+              final fixtureId = candidate.match.fixtureId;
+
+              if (usedFixtures.contains(fixtureId)) {
+                continue;
+              }
+
+              if (previouslyProbedIds.contains(fixtureId) &&
+                  !quoteCache.containsKey(fixtureId)) {
+                continue;
+              }
+
+              // Prima l'analisi sportiva.
+              final AnalysisResult analysis;
+
+              if (localAdvancedFallback) {
+                analysis = candidate.analysis;
+              } else {
+                final cached = await _analysisCache.read(fixtureId);
+
+                if (cached != null) {
+                  analysis = cached;
+                } else {
+                  analysis = await _aiService.analyzeMatch(
+                    candidate.match,
+                    runAudit: false,
+                    automaticMode: true,
+                  );
+
+                  if (analysis.smartScore > 0) {
+                    await _analysisCache.write(fixtureId, analysis);
+                  }
+                }
+              }
+
+              if (analysis.smartScore <= 0) continue;
+
+              final advanced = _PreCandidate(
+                match: candidate.match,
+                analysis: analysis,
+                bestProbability: _bestStatisticalProbability(analysis),
+              );
+
+              // Soltanto adesso intervengono le quote reali.
+              final odds =
+                  quoteCache[fixtureId] ??
+                  await _oddsService.getFixtureMarketOdds(fixtureId: fixtureId);
+
+              if (!_hasRealQuotedMarket(odds)) continue;
+
+              // La funzione prova i mercati in ordine
+              // sportivo, scartando quelli senza quota >= 1,25.
+              final pick = _bestPickForMatch(preliminary: advanced, odds: odds);
+
+              if (pick == null) continue;
+
+              // Nessuna riserva entra senza Auditor.
+              final audit = SmartBetLocalAuditor.evaluate(
+                analysis: pick.analysis,
+                market: pick.market,
+                probability: pick.probability,
+                odd: pick.odd ?? 0.0,
+              );
+
+              if (audit.isBlocked || audit.blocksMarket(pick.market)) {
+                auditRejected++;
+                continue;
+              }
+
+              feasible.add(
+                _CouponPick(
+                  match: pick.match,
+                  analysis: pick.analysis,
+                  market: pick.market,
+                  probability: pick.probability,
+                  rawProbability: pick.rawProbability,
+                  odd: pick.odd,
+                  bookmaker: pick.bookmaker,
+                  edge: pick.edge,
+                  expectedValue: pick.expectedValue,
+                  rankScore: pick.rankScore,
+                  adaptive: pick.adaptive,
+                  auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+                ),
+              );
+
+              usedFixtures.add(fixtureId);
+              quoteCache[fixtureId] = odds;
+            } catch (error) {
+              _errors++;
+              debugPrint('GOALVDLINE P19B1B $error');
+            } finally {
+              if (mounted) {
+                final current = _liveSelectionSnapshot(feasible);
+
+                setState(() {
+                  _oddsProcessed = examined;
+                  _results
+                    ..clear()
+                    ..addAll(current);
+                });
+              }
+            }
+          }
+
+          debugPrint(
+            'GOALVDLINE P19B1B: '
+            '${feasible.length}/$_count eventi validati; '
+            '$examined riserve supplementari esaminate.',
           );
         }
       }
@@ -1623,6 +1871,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             smartBet: item.analysis,
             smartBetMarket: item.market,
             smartBetProbability: item.probability,
+            smartBetOdd: item.odd,
           );
 
           enrichedByFixture[item.match.fixtureId] = item.withDualAnalysis(dual);
@@ -1652,7 +1901,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             smartBet: item.analysis,
             source: SmartBetAnalysisSource.aiCoupon,
             smartBetMarket: item.market,
-            smartBetProbabilityPercent: item.probability,
+            smartBetProbabilityPercent: item.originalProbability,
             smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
@@ -1874,12 +2123,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     // PORTFOLIO P3A.1
     //
-    // Diversificare non deve significare abbassare la qualità.
-    // Le alternative con EV o edge negativi non vengono utilizzate
-    // per riempire artificialmente le cinque schedine.
-    final eligible = source
-        .where((item) => item.expectedValue >= 0.0 && item.edge >= 0.0)
-        .toList();
+    // Diversificare non deve abbassare la qualita sportiva.
+    // Nessun filtro EV/edge: le quote sono gia state verificate
+    // durante la selezione iniziale dei pronostici.
+    final eligible = List<_CouponPick>.of(source);
 
     if (eligible.isEmpty) {
       return const <_PortfolioShadow>[];
@@ -2000,22 +2247,27 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     // 4. VALUE
     // ============================================================
     //
-    // Sempre candidate già validate e con EV/edge non negativi.
-    // Tra queste privilegia EV -> edge -> Reliability.
+    // Variante storicamente chiamata VALUE.
+    // Ora ordina soltanto per qualita e probabilita sportive.
     final valueRanked = List<_CouponPick>.of(eligible)
       ..sort((a, b) {
-        final expectedValue = b.expectedValue.compareTo(a.expectedValue);
-        if (expectedValue != 0) return expectedValue;
+        // Priorita alla qualita sportiva.
+        // Le quote non intervengono nemmeno negli spareggi.
+        final score = b.analysis.smartScore.compareTo(a.analysis.smartScore);
+        if (score != 0) return score;
 
-        final edge = b.edge.compareTo(a.edge);
-        if (edge != 0) return edge;
+        final probability = b.probability.compareTo(a.probability);
+        if (probability != 0) return probability;
 
         final reliability = _portfolioReliability(
           b,
         ).compareTo(_portfolioReliability(a));
         if (reliability != 0) return reliability;
 
-        return b.probability.compareTo(a.probability);
+        final fixture = a.match.fixtureId.compareTo(b.match.fixtureId);
+        if (fixture != 0) return fixture;
+
+        return a.market.compareTo(b.market);
       });
 
     final valueAvoid = <int>{
@@ -2078,7 +2330,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     debugPrint(
       'PORTFOLIO ELIGIBLE: '
       '${eligible.length}/${source.length} '
-      '(EV >= 0, edge >= 0)',
+      '(nessun filtro EV/edge)',
     );
 
     // P4.1 — UNIQUE SYSTEM
@@ -3493,6 +3745,33 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
           const SizedBox(height: 22),
           _modeSelector(),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            value: _liveLearningOptIn,
+            activeThumbColor: const Color(0xFF00C853),
+            title: const Text(
+              'Apprendimento reale (sperimentale)',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              _liveLearningStatus ??
+                  (_liveLearningOptIn
+                      ? 'Attivo solo su questo dispositivo. I controlli saranno eseguiti '
+                            'alla prossima analisi. Senza evidenze sufficienti '
+                            'le probabilità resteranno originali.'
+                      : 'Solo su questo dispositivo, disattivato di default. '
+                            'Usa solo dati storici conclusi e gate shadow positivo; '
+                            'limite di 10 punti percentuali per mercato.'),
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            onChanged:
+                (_loading || !_deviceLearningReady || _deviceLearningSaving)
+                ? null
+                : _setDeviceLearningPreference,
+          ),
 
           const SizedBox(height: 22),
 
@@ -3871,6 +4150,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   Widget _resultCard(_CouponPick item, int position) {
     final probabilityColor = _probabilityColor(item.probability);
+    final localAuditLabel = switch (item.auditorStatus) {
+      'CONFERMATA' => 'SUPERATO',
+      'CON RISERVA' => 'CON RISERVA',
+      'SCONSIGLIATA' => 'NON SUPERATO',
+      _ => 'NON ANCORA VERIFICATO',
+    };
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3938,7 +4223,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      item.market,
+                      GoalVdLineMarketRelationService.displayMarket(
+                        item.market,
+                      ).replaceFirst(' · CASA ', '\nCASA '),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -3968,6 +4255,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (item.hasLiveCalibration)
+                    Text(
+                      'CALIBRATA (da ${item.originalProbability}%)',
+                      style: const TextStyle(
+                        color: Colors.amberAccent,
+                        fontSize: 9,
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -4011,6 +4306,38 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           if (item.dualAnalysis != null) ...[
             const SizedBox(height: 12),
             DualEngineSummary(analysis: item.dualAnalysis!),
+          ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'RAFFRONTO TRA LE DUE IA',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    _loading
+                        ? 'In preparazione: Diego AI viene elaborata dopo '
+                              'la selezione definitiva delle partite.'
+                        : 'Non disponibile: Diego AI non ha restituito '
+                              'un confronto per questa partita.',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
           ],
 
           TeamStatsExpansion(match: item.match),
@@ -4026,7 +4353,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Auditor: ${item.auditorStatus}',
+            'Controllo locale: $localAuditLabel',
             style: TextStyle(
               color: item.auditorStatus == 'SCONSIGLIATA'
                   ? Colors.redAccent

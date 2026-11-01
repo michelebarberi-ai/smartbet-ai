@@ -15,6 +15,13 @@ class AnalysisResult {
   /// Non dipende dalle quote.
   final int dataConfidence;
 
+  /// Verdetto sportivo dell'Auditor, non decisione economica.
+  /// NOT_RUN significa che il controllo non e' stato eseguito.
+  final String sportsAuditStatus;
+
+  /// Mercati esclusi dall'Auditor sportivo.
+  final List<String> sportsAuditBlockedMarkets;
+
   // ============================================================
   // PROBABILITÀ 1X2
   // ============================================================
@@ -88,6 +95,8 @@ class AnalysisResult {
 
     this.predictionConfidence = 0,
     this.dataConfidence = 0,
+    this.sportsAuditStatus = 'NOT_RUN',
+    this.sportsAuditBlockedMarkets = const <String>[],
 
     required this.homeProbability,
     required this.drawProbability,
@@ -125,6 +134,13 @@ class AnalysisResult {
   // ============================================================
   // BANKROLL
   // ============================================================
+
+  bool get hasSportsAuditVeto => sportsAuditStatus == 'STRONG_CONTRADICTION';
+
+  bool get hasVerifiedSportsAudit =>
+      sportsAuditStatus == 'CONFIRM' ||
+      sportsAuditStatus == 'DOUBT' ||
+      sportsAuditStatus == 'STRONG_CONTRADICTION';
 
   double stakeAmountForBankroll(double bankroll) {
     if (!shouldBet || bankroll <= 0.0 || recommendedStakePercent <= 0.0) {

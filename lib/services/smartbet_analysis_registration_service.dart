@@ -8,6 +8,7 @@ import 'smartbet_analysis_history_store.dart';
 import 'smartbet_shadow_learning_store.dart';
 import 'smartbet_adaptive_decision_service.dart';
 import 'smartbet_shadow_outcome_service.dart';
+import 'smartbet_frozen_model_registration_store.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -120,6 +121,7 @@ class SmartBetAnalysisRegistrationService {
       confidence: comparison.diegoMarketConfidence,
       classification: comparison.diegoClassification,
       qualified: qualified,
+      quotedOdd: qualified ? comparison.diegoOdd : null,
       recordedAt: recordedAt,
     );
 
@@ -196,12 +198,52 @@ class SmartBetAnalysisRegistrationService {
         fixtureId: record.fixtureId,
       );
 
+      // Cerca un modello shadow realmente registrato
+      // prima della previsione. Nessuna attivazione live.
+      SmartBetFrozenModelRegistration? selectedModel;
+
+      try {
+        final registry = SmartBetFrozenModelRegistrationStore();
+        await registry.initialize();
+
+        final eligible =
+            registry.registrations
+                .where(
+                  (entry) =>
+                      entry.model.engine == record.engine &&
+                      normalizeAnalysisMarket(entry.model.market) ==
+                          normalizeAnalysisMarket(record.market) &&
+                      entry.model.frozenAt.toUtc().isBefore(
+                        record.firstSeenAt.toUtc(),
+                      ) &&
+                      entry.registeredAt.toUtc().isBefore(
+                        record.firstSeenAt.toUtc(),
+                      ),
+                )
+                .toList()
+              ..sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
+
+        // Se due modelli condividono la registrazione più
+        // recente, non scegliamo arbitrariamente.
+        if (eligible.isNotEmpty &&
+            (eligible.length == 1 ||
+                eligible.first.registeredAt.isAfter(
+                  eligible[1].registeredAt,
+                ))) {
+          selectedModel = eligible.first;
+        }
+      } catch (error) {
+        // Il registro modelli non deve bloccare lo shadow.
+        debugPrint('SmartBet model binding unavailable: $error');
+      }
+
       await shadowStore.capture(
         record: record,
         history: history,
         trialProbability: decision.trialProbability,
         trialEligible: decision.eligibleForTrial,
         decisionStatus: decision.status.name,
+        registeredShadowModel: selectedModel,
       );
     } catch (error) {
       // Un problema nello shadow non blocca la registrazione.

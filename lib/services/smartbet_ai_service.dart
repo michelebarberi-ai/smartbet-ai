@@ -299,6 +299,8 @@ class SmartBetAiService {
     if (dossier == null) {
       return AnalysisResult(
         smartScore: baseResult.smartScore,
+        sportsAuditStatus: baseResult.sportsAuditStatus,
+        sportsAuditBlockedMarkets: baseResult.sportsAuditBlockedMarkets,
         predictionConfidence: baseResult.predictionConfidence > 0
             ? baseResult.predictionConfidence
             : baseResult.smartScore,
@@ -910,6 +912,12 @@ class SmartBetAiService {
 
     final predictionResult = AnalysisResult(
       smartScore: confidence,
+      sportsAuditStatus: identical(audit, _SmartBetAudit.neutral)
+          ? 'NOT_RUN'
+          : audit.status,
+      sportsAuditBlockedMarkets: List<String>.unmodifiable(
+        audit.blockedMarkets,
+      ),
       predictionConfidence: confidence,
       dataConfidence: dossierConfidence,
       homeProbability: homeProbability,
@@ -1191,6 +1199,12 @@ $finalVerdict
 
     return AnalysisResult(
       smartScore: confidence,
+      sportsAuditStatus: identical(audit, _SmartBetAudit.neutral)
+          ? 'NOT_RUN'
+          : audit.status,
+      sportsAuditBlockedMarkets: List<String>.unmodifiable(
+        audit.blockedMarkets,
+      ),
       predictionConfidence: confidence,
       dataConfidence: dossierConfidence,
 

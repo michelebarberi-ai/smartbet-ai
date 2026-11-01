@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 import 'smartbet_european_handicap_odds_parser.dart';
+import 'smartbet_extra_markets_odds_parser.dart';
+import 'smartbet_refundable_markets_odds_parser.dart';
 
 // ============================================================
 // SINGOLA QUOTA MIGLIORE
@@ -200,14 +203,14 @@ class OddsService {
       final errors = decoded['errors'];
 
       if (errors is Map && errors.isNotEmpty) {
-        print('ODDS API ERROR: $errors');
+        debugPrint('ODDS API ERROR: $errors');
         return null;
       }
 
       final responseData = decoded['response'];
 
       if (responseData is! List || responseData.isEmpty) {
-        print('QUOTE PRE-MATCH NON DISPONIBILI');
+        debugPrint('QUOTE PRE-MATCH NON DISPONIBILI');
         return null;
       }
 
@@ -273,6 +276,46 @@ class OddsService {
 
             if (values is! List) {
               continue;
+            }
+
+            // P19H: DNB e handicap asiatici FULL-TIME con quota reale.
+            // Nessuna derivazione delle quote da altri mercati.
+            for (final valueItem in values) {
+              if (valueItem is! Map<String, dynamic>) continue;
+              final outcome = SmartBetRefundableMarketsOddsParser.outcomeFor(
+                betName: betName,
+                value: valueItem['value']?.toString() ?? '',
+              );
+              if (outcome == null) continue;
+              final odd = _toDouble(valueItem['odd']);
+              if (!odd.isFinite || odd <= 1) continue;
+              _setBest(
+                bestByOutcome,
+                outcome: outcome,
+                odd: odd,
+                bookmakerId: bookmakerId,
+                bookmakerName: bookmakerName,
+              );
+            }
+
+            // Mercati Multigol solo se il feed li quota esplicitamente.
+            // Nessuna quota stimata o derivata da Over/Under.
+            for (final valueItem in values) {
+              if (valueItem is! Map<String, dynamic>) continue;
+              final outcome = SmartBetExtraMarketsOddsParser.outcomeFor(
+                betName: betName,
+                value: valueItem['value']?.toString() ?? '',
+              );
+              if (outcome == null) continue;
+              final odd = _toDouble(valueItem['odd']);
+              if (!odd.isFinite || odd <= 1) continue;
+              _setBest(
+                bestByOutcome,
+                outcome: outcome,
+                odd: odd,
+                bookmakerId: bookmakerId,
+                bookmakerName: bookmakerName,
+              );
             }
 
             // ------------------------------------------------------
@@ -680,7 +723,7 @@ class OddsService {
       }
 
       if (normalizedBookmaker != null && !requestedBookmakerSeen) {
-        print(
+        debugPrint(
           'BOOKMAKER NON DISPONIBILE PER FIXTURE $fixtureId: $requestedBookmaker',
         );
         _marketCache[cacheKey] = null;
@@ -737,10 +780,10 @@ class OddsService {
         bookmakerCount: bookmakerIds.length,
       );
 
-      print('');
-      print('========================================');
-      print('SMARTBET - QUOTE MULTI-MERCATO');
-      print('========================================');
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('SMARTBET - QUOTE MULTI-MERCATO');
+      debugPrint('========================================');
 
       for (final key in [
         '1',
@@ -759,16 +802,18 @@ class OddsService {
         final odd = result.oddFor(key);
 
         if (odd != null) {
-          print('$key: ${odd.odd.toStringAsFixed(2)} - ${odd.bookmakerName}');
+          debugPrint(
+            '$key: ${odd.odd.toStringAsFixed(2)} - ${odd.bookmakerName}',
+          );
         }
       }
 
-      print('========================================');
+      debugPrint('========================================');
 
       _marketCache[cacheKey] = result;
       return result;
     } catch (e) {
-      print('SMARTBET ODDS EXCEPTION: $e');
+      debugPrint('SMARTBET ODDS EXCEPTION: $e');
       return null;
     }
   }

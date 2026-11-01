@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../lib/models/analysis_result.dart';
-import '../../lib/models/match_model.dart';
-import '../../lib/services/dual_engine_analysis_service.dart';
-import '../../lib/services/smartbet_analysis_comparison_store.dart';
-import '../../lib/services/smartbet_analysis_history_store.dart';
-import '../../lib/services/smartbet_analysis_registration_service.dart';
+import 'package:smartbet_ai_new/models/analysis_result.dart';
+import 'package:smartbet_ai_new/models/match_model.dart';
+import 'package:smartbet_ai_new/services/dual_engine_analysis_service.dart';
+import 'package:smartbet_ai_new/services/smartbet_analysis_comparison_store.dart';
+import 'package:smartbet_ai_new/services/smartbet_analysis_history_store.dart';
+import 'package:smartbet_ai_new/services/smartbet_analysis_registration_service.dart';
 
 void main() {
   setUp(() {
@@ -60,6 +60,120 @@ void main() {
       explanation: 'Test analysis',
     );
   }
+
+  DualEngineAnalysis comparisonWithDiegoOdd({
+    required DualEngineAgreement status,
+    required double? odd,
+  }) {
+    return DualEngineAnalysis(
+      smartBet: smartBet(),
+      diego: null,
+      comparison: DualEngineComparison(
+        status: status,
+        smartBetMarket: 'GOAL',
+        diegoMarket: 'OVER 2.5',
+        smartBetProbability: 0.61,
+        diegoProbability: 0.65,
+        diegoOdd: odd,
+      ),
+    );
+  }
+
+  test('P19A4: Diego qualificato conserva la quota', () async {
+    final store = SmartBetAnalysisHistoryStore();
+    final service = SmartBetAnalysisRegistrationService(store: store);
+
+    final dual = comparisonWithDiegoOdd(
+      status: DualEngineAgreement.partial,
+      odd: 1.80,
+    );
+
+    await service.registerSelection(
+      match: match(fixtureId: 810),
+      smartBet: dual.smartBet,
+      source: SmartBetAnalysisSource.analysis,
+      dualAnalysis: dual,
+      recordedAt: recordedAt,
+    );
+
+    final diego = store.records.singleWhere(
+      (r) => r.engine == SmartBetAnalysisEngine.diego,
+    );
+
+    expect(diego.market, 'OVER 2.5');
+    expect(diego.qualified, isTrue);
+    expect(diego.quotedOdd, 1.80);
+  });
+
+  test('P19A4: Diego non qualificato non salva la quota', () async {
+    final store = SmartBetAnalysisHistoryStore();
+    final service = SmartBetAnalysisRegistrationService(store: store);
+
+    final dual = comparisonWithDiegoOdd(
+      status: DualEngineAgreement.noSelection,
+      odd: 1.80,
+    );
+
+    await service.registerSelection(
+      match: match(fixtureId: 811),
+      smartBet: dual.smartBet,
+      source: SmartBetAnalysisSource.analysis,
+      dualAnalysis: dual,
+      recordedAt: recordedAt,
+    );
+
+    final diego = store.records.singleWhere(
+      (r) => r.engine == SmartBetAnalysisEngine.diego,
+    );
+
+    expect(diego.qualified, isFalse);
+    expect(diego.quotedOdd, isNull);
+  });
+
+  test('P19A4: ripetizione conserva la prima quota Diego', () async {
+    final store = SmartBetAnalysisHistoryStore();
+    final service = SmartBetAnalysisRegistrationService(store: store);
+
+    final first = comparisonWithDiegoOdd(
+      status: DualEngineAgreement.partial,
+      odd: 1.75,
+    );
+
+    final second = comparisonWithDiegoOdd(
+      status: DualEngineAgreement.partial,
+      odd: 2.10,
+    );
+
+    await service.registerSelection(
+      match: match(fixtureId: 812),
+      smartBet: first.smartBet,
+      source: SmartBetAnalysisSource.analysis,
+      dualAnalysis: first,
+      recordedAt: recordedAt,
+    );
+
+    await service.registerSelection(
+      match: match(fixtureId: 812),
+      smartBet: second.smartBet,
+      source: SmartBetAnalysisSource.combinations,
+      dualAnalysis: second,
+      recordedAt: recordedAt.add(const Duration(hours: 1)),
+    );
+
+    final diegoRecords = store.records
+        .where((r) => r.engine == SmartBetAnalysisEngine.diego)
+        .toList();
+
+    expect(diegoRecords.length, 1);
+    expect(diegoRecords.single.quotedOdd, 1.75);
+    expect(
+      diegoRecords.single.sources,
+      containsAll([
+        SmartBetAnalysisSource.analysis,
+        SmartBetAnalysisSource.combinations,
+      ]),
+    );
+  });
 
   test('registra SmartBet e Diego come motori distinti', () async {
     final store = SmartBetAnalysisHistoryStore();

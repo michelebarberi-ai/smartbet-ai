@@ -24,6 +24,22 @@ class SmartBetMarketProbabilityService {
     'OSPITE 3+ GOL',
     'GOAL + O2.5',
     'NO GOAL + U2.5',
+    'MULTIGOL 1-4',
+    'MULTIGOL 2-4',
+    'MULTIGOL 2-5',
+    'MULTIGOL 3-5',
+    '1X + O1.5',
+    'X2 + O1.5',
+    '1X + U3.5',
+    'X2 + U3.5',
+    '1 + O1.5',
+    '2 + O1.5',
+    '1 + U3.5',
+    '2 + U3.5',
+    '1X + O2.5',
+    'X2 + O2.5',
+    '1X + U2.5',
+    'X2 + U2.5',
   ];
 
   static int probabilityFor(AnalysisResult result, String market) {
@@ -94,6 +110,22 @@ class SmartBetMarketProbabilityService {
           return home >= away && total <= 3;
         case 'X2 + U3.5':
           return away >= home && total <= 3;
+        case '1 + O1.5':
+          return home > away && total >= 2;
+        case '2 + O1.5':
+          return away > home && total >= 2;
+        case '1 + U3.5':
+          return home > away && total <= 3;
+        case '2 + U3.5':
+          return away > home && total <= 3;
+        case '1X + O2.5':
+          return home >= away && total >= 3;
+        case 'X2 + O2.5':
+          return away >= home && total >= 3;
+        case '1X + U2.5':
+          return home >= away && total <= 2;
+        case 'X2 + U2.5':
+          return away >= home && total <= 2;
         case 'GOAL + O2.5':
           return home >= 1 && away >= 1 && total >= 3;
         case 'NO GOAL + U2.5':

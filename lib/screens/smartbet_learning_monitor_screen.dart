@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_market_intelligence_audit_service.dart';
+import '../services/smartbet_paired_calibration_service.dart';
+import '../services/smartbet_cross_market_audit_service.dart';
+import '../services/smartbet_analysis_comparison_store.dart';
 import '../services/smartbet_walk_forward_backtest_service.dart';
 import '../services/smartbet_shadow_learning_store.dart';
 import '../services/smartbet_shadow_outcome_service.dart';
@@ -44,6 +48,7 @@ class _SmartBetLearningMonitorScreenState
 
     try {
       await _store.initialize();
+      await SmartBetAnalysisComparisonStore.instance.initialize();
       if (!mounted) return;
       setState(() {
         _records = _store.records;
@@ -122,6 +127,275 @@ class _SmartBetLearningMonitorScreenState
         setState(() => _running = false);
       }
     }
+  }
+
+  Widget _marketIntelligenceSection() {
+    final report = const MarketIntelligenceAuditService().evaluate(_records);
+    final groups = report.groups.toList()
+      ..sort((a, b) => b.samples.compareTo(a.samples));
+
+    String pct(double value) => '${(value * 100).toStringAsFixed(1)}%';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Market Intelligence Auditor • SHADOW',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Analisi diagnostica delle probabilità originali. '
+          'Solo previsioni precedenti alla partita e risolte; '
+          'Diego AI soltanto se qualificato. '
+          'Nessuna modifica a pronostici o schedine.',
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Campioni validi: ${report.includedRecords}  •  '
+          'Esclusi: ${report.excludedRecords}',
+        ),
+        const SizedBox(height: 8),
+        if (groups.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Non ci sono ancora risultati storici '
+              'sufficientemente verificati da visualizzare.',
+            ),
+          ),
+        ...groups.take(12).map((m) {
+          final isDiego = m.engine == SmartBetAnalysisEngine.diego;
+          final sufficient = m.samples >= 30;
+
+          final gap = m.marketGap == null
+              ? 'N/D'
+              : '${(m.marketGap! * 100).toStringAsFixed(1)} pp';
+
+          final roi = m.hypotheticalUnitRoi == null
+              ? 'N/D'
+              : pct(m.hypotheticalUnitRoi!);
+
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${isDiego ? "Diego AI" : "SmartBet"} • ${m.market}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${m.samples} previsioni • '
+                    '${m.correct} corrette • '
+                    '${sufficient ? "Campione da approfondire" : "Campione piccolo"}',
+                  ),
+                  Text(
+                    'Probabilità media: ${pct(m.meanProbability)} • '
+                    'Frequenza reale: ${pct(m.observedFrequency)}',
+                  ),
+                  Text('Brier Score: ${m.brierScore.toStringAsFixed(4)}'),
+                  Text(
+                    'Quote disponibili: ${m.quotedSamples} • '
+                    'Scostamento implicito: $gap',
+                  ),
+                  Text('ROI teorico su quote registrate: $roi'),
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 8),
+        const Text(
+          'La probabilità implicita è grezza, non depurata '
+          'dal margine bookmaker. Il ROI è simulato e '
+          'non rappresenta guadagni effettivi. '
+          'Campioni piccoli non dimostrano affidabilità.',
+          style: TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _crossMarketSection() {
+    final report = const SmartBetCrossMarketAuditService().evaluate(
+      records: _records,
+      links: SmartBetAnalysisComparisonStore.instance.links,
+    );
+
+    String pct(double value) => '${(value * 100).toStringAsFixed(1)}%';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Confronto tra mercati differenti • SHADOW',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'SmartBet e Diego AI sulla stessa partita '
+          'con mercati differenti. Solo coppie storiche '
+          'valide. Nessuna modifica alle schedine.',
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Coppie valide: ${report.totalPairs} • '
+          'Partite distinte: ${report.distinctFixtures}',
+        ),
+        Text(
+          'Coppie escluse: ${report.excludedLinks} • '
+          'Gruppi: ${report.groups.length}',
+        ),
+        const SizedBox(height: 10),
+        if (report.groups.isEmpty)
+          const Text(
+            'Nessuna coppia valida con mercati differenti '
+            'ancora disponibile.',
+          ),
+        ...report.groups
+            .take(12)
+            .map(
+              (m) => Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SmartBet: ${m.smartBetMarket}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text('Diego AI: ${m.diegoMarket}'),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${m.pairs} coppie • '
+                        '${m.distinctDays} giorni distinti',
+                      ),
+                      Text(
+                        'Accuratezza SmartBet: '
+                        '${pct(m.smartBetAccuracy)}',
+                      ),
+                      Text(
+                        'Accuratezza Diego: '
+                        '${pct(m.diegoAccuracy)}',
+                      ),
+                      Text(
+                        'Brier SmartBet: '
+                        '${m.smartBetBrier.toStringAsFixed(4)}',
+                      ),
+                      Text(
+                        'Brier Diego: '
+                        '${m.diegoBrier.toStringAsFixed(4)}',
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Entrambi corretti: ${m.bothCorrect}'),
+                      Text(
+                        'Solo SmartBet corretto: '
+                        '${m.smartBetOnlyCorrect}',
+                      ),
+                      Text(
+                        'Solo Diego corretto: '
+                        '${m.diegoOnlyCorrect}',
+                      ),
+                      Text('Entrambi errati: ${m.bothWrong}'),
+                      const SizedBox(height: 8),
+                      Text(
+                        m.enoughForExploratoryReview
+                            ? 'Campione da approfondire'
+                            : 'Campione ancora limitato',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        const SizedBox(height: 8),
+        const Text(
+          'Mercati differenti rappresentano eventi '
+          'differenti. I risultati non dimostrano '
+          'automaticamente la superiorità di un motore.',
+          style: TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _pairedCalibrationSection() {
+    final report = const SmartBetPairedCalibrationService().evaluate(_records);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Confronto omogeneo SmartBet / Diego AI',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Stessa partita, stesso mercato e risultati '
+          'verificati. Solo previsioni registrate prima '
+          'del calcio d’inizio. Modalità shadow.',
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Coppie valide: ${report.totalPairs} • '
+          'Mercati: ${report.markets.length}',
+        ),
+        if (report.markets.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Nessuna coppia confrontabile disponibile.'),
+          ),
+        ...report.markets.take(12).map((m) {
+          final delta = m.smartBetBrierAdvantage;
+
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    m.market,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${m.pairedFixtures} coppie • '
+                    '${m.distinctDays} giorni distinti',
+                  ),
+                  Text(
+                    'Brier SmartBet: '
+                    '${m.smartBetBrier.toStringAsFixed(4)}',
+                  ),
+                  Text(
+                    'Brier Diego: '
+                    '${m.diegoBrier.toStringAsFixed(4)}',
+                  ),
+                  Text(
+                    'Differenza Diego − SmartBet: '
+                    '${delta.toStringAsFixed(4)}',
+                  ),
+                  Text(
+                    m.enoughForExploratoryReview
+                        ? 'Campione da approfondire'
+                        : 'Campione ancora limitato',
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const Text(
+          'Un Brier inferiore è migliore sul campione '
+          'osservato. La soglia esplorativa non dimostra '
+          'superiorità statistica.',
+          style: TextStyle(fontSize: 12),
+        ),
+      ],
+    );
   }
 
   String _number(double? value) =>
@@ -279,6 +553,11 @@ class _SmartBetLearningMonitorScreenState
                   ),
                 ],
 
+                _marketIntelligenceSection(),
+                const Divider(height: 32),
+                _pairedCalibrationSection(),
+                const Divider(height: 32),
+                _crossMarketSection(),
                 const Divider(height: 32),
                 const Text(
                   'Apprendimento reale P13',

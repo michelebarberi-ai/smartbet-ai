@@ -44,6 +44,10 @@ class DiegoAiAnalysis {
   /// con il ValueBetCalculator esistente.
   final MatchOdds? odds;
 
+  /// Snapshot completo delle quote disponibili.
+  /// Non viene utilizzato per calcolare le probabilita'.
+  final FixtureMarketOdds? marketOdds;
+
   /// Value Engine storico limitato all'1X2.
   final ValueBetResult value;
 
@@ -56,6 +60,7 @@ class DiegoAiAnalysis {
     required this.engine,
     required this.markets,
     required this.odds,
+    this.marketOdds,
     required this.value,
     required this.multiMarketValue,
   });
@@ -348,6 +353,7 @@ class DiegoAiService {
       engine: engine,
       markets: markets,
       odds: odds,
+      marketOdds: fixtureOdds,
       value: value,
       multiMarketValue: multiMarketValue,
     );
