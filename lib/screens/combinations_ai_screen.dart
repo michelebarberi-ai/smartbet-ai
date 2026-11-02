@@ -9,6 +9,7 @@ import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
+import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_refundable_market_candidate_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
@@ -61,6 +62,9 @@ class _CombinationCandidate {
   final AnalysisResult analysis;
   final String market;
   final int probability;
+
+  /// La stima non calibrata, conservata per lo storico e per il learning.
+  final int? originalProbability;
   final double? odd;
   final String? bookmaker;
   final String auditorStatus;
@@ -72,6 +76,7 @@ class _CombinationCandidate {
     required this.analysis,
     required this.market,
     required this.probability,
+    this.originalProbability,
     this.odd,
     this.bookmaker,
     this.auditorStatus = 'NON VERIFICATO',
@@ -91,6 +96,7 @@ class _CombinationCandidate {
       analysis: analysis,
       market: market,
       probability: probability,
+      originalProbability: originalProbability,
       odd: odd,
       bookmaker: bookmaker,
       auditorStatus: auditorStatus,
@@ -1131,6 +1137,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
 
     try {
+      // Legge la STESSA preferenza sul dispositivo gia usata da GoalVdLine.
+      // Nessuna chiamata AI aggiuntiva e nessuna modifica allo storico.
+      final learningSession = await const SmartBetSharedLocalLearningService()
+          .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
       final scheduleMatches = _italyScheduleOnly
@@ -1557,6 +1567,55 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         oddsService.dispose();
       }
 
+      // P20A: correzioni locali SOLO sulle selezioni con quote reali.
+      // Il modello, l'API e lo storico continuano a usare la stima originale.
+      // Non correggiamo Combo Chance o mercati con rimborsi.
+      if (learningSession != null && _selectedMarket != 'COMBO CHANCE') {
+        final adjusted = <_CombinationCandidate>[];
+        var appliedCount = 0;
+        for (final pick in validCandidates) {
+          final correction = SmartBetSharedLocalLearningService.evaluate(
+            session: learningSession,
+            market: pick.market,
+            originalPercent: pick.probability,
+            fixtureId: pick.match.fixtureId,
+            hasRealOdd:
+                pick.odd != null &&
+                pick.odd!.isFinite &&
+                pick.odd! >= _minimumOdd,
+          );
+          if (!correction.applied) {
+            adjusted.add(pick);
+            continue;
+          }
+          appliedCount++;
+          adjusted.add(
+            _CombinationCandidate(
+              match: pick.match,
+              analysis: pick.analysis,
+              market: pick.market,
+              probability: correction.percent,
+              originalProbability: correction.originalPercent,
+              odd: pick.odd,
+              bookmaker: pick.bookmaker,
+              auditorStatus: pick.auditorStatus,
+              familyOptions: pick.familyOptions,
+              dualAnalysis: pick.dualAnalysis,
+            ),
+          );
+        }
+        if (appliedCount > 0) {
+          adjusted.sort(_combinationSportsCompare);
+          validCandidates
+            ..clear()
+            ..addAll(adjusted);
+          debugPrint(
+            'COMBINAZIONI: $appliedCount correzioni locali '
+            'autorizzate dal learning gate',
+          );
+        }
+      }
+
       // Auditor finale di fattibilità: SmartBet ha già deciso tutto.
       //
       // In modalità SISTEMA conserviamo un pool più ampio:
@@ -1599,6 +1658,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 analysis: item.analysis,
                 market: item.market,
                 probability: item.probability,
+                originalProbability: item.originalProbability,
                 odd: item.odd,
                 bookmaker: item.bookmaker,
                 auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
@@ -1700,7 +1760,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               smartBet: item.analysis,
               source: SmartBetAnalysisSource.combinations,
               smartBetMarket: item.market,
-              smartBetProbabilityPercent: item.probability,
+              smartBetProbabilityPercent:
+                  item.originalProbability ?? item.probability,
               smartBetOdd: item.odd,
               dualAnalysis: item.dualAnalysis,
             );
@@ -1763,7 +1824,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             smartBet: item.analysis,
             source: SmartBetAnalysisSource.combinations,
             smartBetMarket: item.market,
-            smartBetProbabilityPercent: item.probability,
+            smartBetProbabilityPercent:
+                item.originalProbability ?? item.probability,
             smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
@@ -3100,6 +3162,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (item.originalProbability != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          'Calibrata da ${item.originalProbability}%',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

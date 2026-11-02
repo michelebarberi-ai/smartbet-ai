@@ -14,7 +14,11 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
+import '../services/smartbet_daily_learning_choice_service.dart';
+import '../services/smartbet_shared_local_learning_service.dart';
+import '../services/smartbet_live_calibration_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../services/smartbet_prediction_quantity_policy.dart';
 
 enum _PredictionPeriod { today, next2Days, next3Days, custom }
 
@@ -44,7 +48,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   final List<_DailyPick> _results = [];
 
-  static const int _wantedResults = 3;
+  static const int _wantedResults =
+      SmartBetPredictionQuantityPolicy.dailyTarget;
   static const int _maximumMatchesToAnalyze = 36;
   static const int _preBatchSize = 6;
   static const int _oddsBatchSize = 6;
@@ -358,6 +363,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     required MatchModel match,
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
+    SmartBetLiveCalibrationSession? learningSession,
   }) {
     if (_auditStrongContradiction(analysis) || odds == null) {
       return null;
@@ -381,22 +387,32 @@ class _PredictionScreenState extends State<PredictionScreen> {
         continue;
       }
 
-      final p = probability / 100.0;
-      final impliedProbability = 1.0 / bestOdd.odd;
-      final edge = p - impliedProbability;
-      final expectedValue = (p * bestOdd.odd) - 1.0;
+      // P20C: confronto con lo storico locale solo quando il gate
+      // prospettico approva. Il valore originale resta immutato.
+      final choice = SmartBetDailyLearningChoiceService.evaluate(
+        session: learningSession,
+        market: market,
+        fixtureId: match.fixtureId,
+        originalPercent: probability,
+        odd: bestOdd.odd,
+      );
+      final selectedPercent = choice.percent;
+      final edge = choice.edge;
+      final expectedValue = choice.expectedValue;
 
       final pick = _DailyPick(
         match: match,
         analysis: analysis,
         market: market,
-        probability: probability,
+        probability: selectedPercent,
+        originalProbability: choice.applied ? choice.originalPercent : null,
+        learningSamples: choice.samples,
         odd: bestOdd.odd,
         bookmaker: bestOdd.bookmakerName,
         edge: edge,
         expectedValue: expectedValue,
         rankScore: _rankScore(
-          probability: probability,
+          probability: selectedPercent,
           smartScore: analysis.smartScore,
           edge: edge,
           expectedValue: expectedValue,
@@ -409,7 +425,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       );
 
       if (_passesPrimary(
-        probability: probability,
+        probability: selectedPercent,
         smartScore: analysis.smartScore,
         odd: bestOdd.odd,
         expectedValue: expectedValue,
@@ -419,7 +435,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       }
 
       if (_passesAdaptive(
-        probability: probability,
+        probability: selectedPercent,
         smartScore: analysis.smartScore,
         odd: bestOdd.odd,
         expectedValue: expectedValue,
@@ -654,6 +670,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
     });
 
     try {
+      // Uno snapshot per generazione, senza nuove chiamate AI.
+      final learningSession = await const SmartBetSharedLocalLearningService()
+          .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
       final matches = allMatches
@@ -760,15 +779,18 @@ class _PredictionScreenState extends State<PredictionScreen> {
       // SmartCore locale -> quote -> shortlist ->
       // SmartBet automatico economico -> Auditor locale.
       //
-      // Massimo 6 chiamate AI.
-      // Stop immediato appena abbiamo 3 risultati validi.
+      // Massimo 8 analisi AI (5 risultati + 3 riserve).
+      // Stop appena abbiamo 5 risultati validi, senza forzarli.
       // ========================================================
 
       final quoteQualified = <_DailyPick>[];
 
       // Questa fase NON usa OpenAI.
       // Controlliamo prima che esistano quote realmente utili.
-      final quoteScanSize = math.min(preliminary.length, 18);
+      final quoteScanSize = math.min(
+        preliminary.length,
+        SmartBetPredictionQuantityPolicy.dailyQuoteScanLimit,
+      );
 
       final quoteScan = preliminary.take(quoteScanSize).toList();
 
@@ -834,9 +856,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
-      // TOP 3 + massimo 3 riserve.
-      // Quindi massimo assoluto: 6 chiamate AI.
-      final aiPoolSize = math.min(quoteQualified.length, 6);
+      // TOP 5 + massimo 3 riserve; il costo resta esplicitamente limitato.
+      final aiPoolSize = SmartBetPredictionQuantityPolicy.dailyAiPoolSize(
+        quoteQualified.length,
+      );
 
       final aiPool = quoteQualified.take(aiPoolSize).toList();
 
@@ -904,6 +927,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
             match: seed.match,
             analysis: advancedResult,
             odds: odds,
+            learningSession: learningSession,
           );
 
           if (pick == null) {
@@ -923,13 +947,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
             continue;
           }
 
-          // Preserviamo anche i 3 risultati esatti
+          // Preserviamo anche le 3 stime dei punteggi esatti
           // già calcolati da _bestPickForMatch().
           final checkedPick = _DailyPick(
             match: pick.match,
             analysis: pick.analysis,
             market: pick.market,
             probability: pick.probability,
+            originalProbability: pick.originalProbability,
+            learningSamples: pick.learningSamples,
             odd: pick.odd,
             bookmaker: pick.bookmaker,
             edge: pick.edge,
@@ -990,7 +1016,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
             smartBet: item.analysis,
             source: SmartBetAnalysisSource.dailyResults,
             smartBetMarket: item.market,
-            smartBetProbabilityPercent: item.probability,
+            smartBetProbabilityPercent:
+                item.originalProbability ?? item.probability,
+            smartBetOdd: item.odd,
             dualAnalysis: item.dualAnalysis,
           );
         } catch (e) {
@@ -1201,13 +1229,23 @@ class _PredictionScreenState extends State<PredictionScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _mainValueBox(
-                  label: 'PROBABILITÀ',
+                  label: item.originalProbability == null
+                      ? 'PROBABILITÀ'
+                      : 'PROB. CALIBRATA',
                   value: '${item.probability}%',
                   valueColor: const Color(0xFF00C853),
                 ),
               ),
             ],
           ),
+          if (item.originalProbability != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Apprendimento locale: ${item.originalProbability}% → '
+              '${item.probability}% · ${item.learningSamples} campioni',
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+          ],
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -1679,7 +1717,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                       Icon(Icons.auto_awesome, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        'TOP 3 • ${_periodLabel.toUpperCase()}',
+                        'TOP 5 • ${_periodLabel.toUpperCase()}',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 17,
@@ -1690,7 +1728,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'GoalVdLine cerca le 3 selezioni più solide nel periodo selezionato '
+                    'GoalVdLine cerca fino a 5 selezioni solide nel periodo selezionato '
                     'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
                     'e quota bookmaker reale almeno 1.25.',
                     style: TextStyle(color: Colors.white, height: 1.35),
@@ -1744,7 +1782,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   Text(
                     _loading
                         ? 'SELEZIONI PROVVISORIE • ${_results.length}/$_wantedResults'
-                        : 'LE 3 SELEZIONI • ${_periodLabel.toUpperCase()}',
+                        : 'RISULTATI • ${_results.length}/$_wantedResults',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -1765,6 +1803,18 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 _results.length,
                 (index) => _resultCard(_results[index], index + 1),
               ),
+              if (!_loading && _results.length < _wantedResults) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Trovate ${_results.length} selezioni valide su '
+                  '$_wantedResults richieste. Le altre non superano '
+                  'i controlli o non hanno quote idonee.',
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 6),
             const Text(
@@ -1806,6 +1856,10 @@ class _DailyPick {
   final AnalysisResult analysis;
   final String market;
   final int probability;
+
+  /// Stima prima della calibrazione, per il learning storico.
+  final int? originalProbability;
+  final int learningSamples;
   final double odd;
   final String bookmaker;
   final double edge;
@@ -1822,6 +1876,8 @@ class _DailyPick {
     required this.analysis,
     required this.market,
     required this.probability,
+    this.originalProbability,
+    this.learningSamples = 0,
     required this.odd,
     required this.bookmaker,
     required this.edge,
@@ -1840,6 +1896,8 @@ class _DailyPick {
       analysis: analysis,
       market: market,
       probability: probability,
+      originalProbability: originalProbability,
+      learningSamples: learningSamples,
       odd: odd,
       bookmaker: bookmaker,
       edge: edge,

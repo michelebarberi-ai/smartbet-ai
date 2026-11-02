@@ -480,6 +480,17 @@ class _CouponScreenState extends State<CouponScreen> {
             ],
           ),
 
+          if (selection.hasLocalCalibration) ...[
+            const SizedBox(height: 9),
+            Text(
+              'Apprendimento locale: '
+              '${selection.originalProbabilityPercent}% → '
+              '${selection.effectiveProbabilityPercent}% '
+              '(storico verificato)',
+              style: const TextStyle(color: Color(0xFF69F0AE), fontSize: 11),
+            ),
+          ],
+
           const SizedBox(height: 13),
 
           Row(

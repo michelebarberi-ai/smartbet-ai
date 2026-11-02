@@ -139,13 +139,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   final SmartBetDeviceLearningPreferences _deviceLearningPreferences =
       const SmartBetDeviceLearningPreferences();
   bool _deviceLearningReady = false;
-  bool _deviceLearningSaving = false;
-  // Sessione sperimentale: opt-in solo per questa schermata, OFF di default.
+  // Sessione sperimentale: preferenza globale locale, OFF di default.
   bool _liveLearningOptIn = false;
   SmartBetLiveCalibrationSession? _liveLearningSession;
   String? _liveLearningStatus;
 
   Future<void> _prepareLiveLearning() async {
+    // La preferenza può essere stata cambiata nelle Impostazioni.
+    // Rileggerla per ogni nuova generazione evita stati obsoleti.
+    _liveLearningOptIn = await _deviceLearningPreferences.loadEnabled();
     _liveLearningSession = null;
     if (!_liveLearningOptIn) {
       _liveLearningStatus = null;
@@ -186,33 +188,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     setState(() {
       _liveLearningOptIn = enabled;
       _deviceLearningReady = true;
-    });
-  }
-
-  Future<void> _setDeviceLearningPreference(bool enabled) async {
-    if (!_deviceLearningReady || _deviceLearningSaving || _loading) return;
-
-    setState(() {
-      _deviceLearningSaving = true;
-      _liveLearningOptIn = false;
-      _liveLearningSession = null;
-      _liveLearningStatus = null;
-      _results.clear();
-      _portfolioResults.clear();
-      _selectedPortfolioIndex = 0;
-      _error = null;
-      _notice = null;
-    });
-
-    final stored = await _deviceLearningPreferences.saveEnabled(enabled);
-    if (!mounted) return;
-    setState(() {
-      _deviceLearningSaving = false;
-      _liveLearningOptIn = stored && enabled;
-      _liveLearningStatus = stored
-          ? null
-          : 'Non riesco a salvare la preferenza su questo dispositivo: '
-                'le correzioni rimangono disattivate.';
     });
   }
 
@@ -3746,11 +3721,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           const SizedBox(height: 22),
           _modeSelector(),
           const SizedBox(height: 12),
-          SwitchListTile(
-            value: _liveLearningOptIn,
-            activeThumbColor: const Color(0xFF00C853),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(
+              Icons.psychology_outlined,
+              color: Color(0xFF00C853),
+            ),
             title: const Text(
-              'Apprendimento reale (sperimentale)',
+              'Apprendimento locale (sperimentale)',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -3758,19 +3736,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
             subtitle: Text(
               _liveLearningStatus ??
-                  (_liveLearningOptIn
-                      ? 'Attivo solo su questo dispositivo. I controlli saranno eseguiti '
-                            'alla prossima analisi. Senza evidenze sufficienti '
-                            'le probabilità resteranno originali.'
-                      : 'Solo su questo dispositivo, disattivato di default. '
-                            'Usa solo dati storici conclusi e gate shadow positivo; '
-                            'limite di 10 punti percentuali per mercato.'),
+                  (!_deviceLearningReady
+                      ? 'Verifica preferenza locale in corso...'
+                      : _liveLearningOptIn
+                      ? 'Abilitato sul dispositivo. Le correzioni sono '
+                            'soggette ai controlli statistici. '
+                            'Puoi cambiarlo nelle Impostazioni.'
+                      : 'Disabilitato. Puoi attivarlo nelle Impostazioni.'),
               style: const TextStyle(color: Colors.white54, fontSize: 11),
             ),
-            onChanged:
-                (_loading || !_deviceLearningReady || _deviceLearningSaving)
-                ? null
-                : _setDeviceLearningPreference,
           ),
 
           const SizedBox(height: 22),

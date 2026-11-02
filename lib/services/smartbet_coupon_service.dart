@@ -3,6 +3,9 @@ import '../models/match_model.dart';
 import 'smartbet_ai_service.dart';
 import 'smartbet_sports_market_selector.dart';
 import 'smartbet_sports_coupon_adapter.dart';
+import 'smartbet_shared_local_learning_service.dart';
+import 'smartbet_live_calibration_service.dart';
+import 'smartbet_analysis_registration_service.dart';
 import 'odds_service.dart';
 
 // ============================================================
@@ -18,11 +21,25 @@ class SmartBetCouponSelection {
   final SmartBetSportsMarketPick? sportsPick;
   final String? sportsBookmaker;
 
+  /// Solo per la schedina live. Non sostituisce la previsione originaria
+  /// del modello, che resta in sportsPick ed e' quella salvata nello storico.
+  final int? calibratedProbabilityPercent;
+  final int learningSamples;
+
+  int get originalProbabilityPercent => sportsPick?.probability ?? 0;
+  int get effectiveProbabilityPercent =>
+      calibratedProbabilityPercent ?? originalProbabilityPercent;
+  bool get hasLocalCalibration =>
+      calibratedProbabilityPercent != null &&
+      calibratedProbabilityPercent != originalProbabilityPercent;
+
   const SmartBetCouponSelection({
     required this.match,
     required this.analysis,
     this.sportsPick,
     this.sportsBookmaker,
+    this.calibratedProbabilityPercent,
+    this.learningSamples = 0,
   });
 
   String get matchLabel {
@@ -209,8 +226,24 @@ class SmartBetCouponService {
   /// In produzione vengono usati i servizi originali.
   final Future<AnalysisResult> Function(MatchModel)? analysisProvider;
   final Future<FixtureMarketOdds?> Function(int)? oddsProvider;
+  final Future<SmartBetLiveCalibrationSession?> Function()? learningProvider;
+  final SmartBetSharedLearningProbability Function({
+    required SmartBetLiveCalibrationSession? session,
+    required String market,
+    required int originalPercent,
+    required int fixtureId,
+    required bool hasRealOdd,
+  })?
+  learningEvaluator;
+  final Future<void> Function(SmartBetCouponSelection)? registrationProvider;
 
-  SmartBetCouponService({this.analysisProvider, this.oddsProvider});
+  SmartBetCouponService({
+    this.analysisProvider,
+    this.oddsProvider,
+    this.learningProvider,
+    this.learningEvaluator,
+    this.registrationProvider,
+  });
 
   static const int maximumSelections = 6;
 
@@ -333,6 +366,12 @@ class SmartBetCouponService {
       );
     }
 
+    // La stessa preferenza locale di GoalVdLine e Combinazioni AI.
+    // Uno snapshot per generazione: fail-closed se OFF o gate non idoneo.
+    final learningSession = learningProvider != null
+        ? await learningProvider!()
+        : await const SmartBetSharedLocalLearningService().prepare();
+
     final aiService = analysisProvider == null ? SmartBetAiService() : null;
     final oddsService = oddsProvider == null ? OddsService() : null;
 
@@ -399,12 +438,28 @@ class SmartBetCouponService {
               ?.oddFor(sportsPick.market)
               ?.bookmakerName;
 
+          // Non alteriamo il mercato deciso dall'Auditor sportivo.
+          // Le correzioni sono applicabili solo a una scelta con quota reale.
+          final evaluateLearning =
+              learningEvaluator ?? SmartBetSharedLocalLearningService.evaluate;
+          final learning = evaluateLearning(
+            session: learningSession,
+            market: sportsPick.market,
+            originalPercent: sportsPick.probability,
+            fixtureId: match.fixtureId,
+            hasRealOdd: sportsPick.odd.isFinite && sportsPick.odd >= minimumOdd,
+          );
+
           analyzed.add(
             SmartBetCouponSelection(
               match: match,
               analysis: result,
               sportsPick: sportsPick,
               sportsBookmaker: bookmaker,
+              calibratedProbabilityPercent: learning.applied
+                  ? learning.percent
+                  : null,
+              learningSamples: learning.applied ? learning.samples : 0,
             ),
           );
         }
@@ -489,16 +544,52 @@ class SmartBetCouponService {
       strategy: 'VALUE',
     );
 
-    return SmartBetCouponSet(
+    final coupons = SmartBetCouponSet(
       premium: premium,
       balanced: balanced,
       value: value,
     );
+
+    // Memorizza le previsioni effettivamente selezionate una sola volta
+    // per fixture e mercato. SEMPRE la probabilita' originale del modello:
+    // una calibrazione non puo' diventare il proprio dato di training.
+    await _registerOriginalPredictions(coupons);
+    return coupons;
   }
 
   // ============================================================
   // COSTRUISCE UNA STRATEGIA DA RISULTATI GIÀ ANALIZZATI
   // ============================================================
+
+  Future<void> _registerOriginalPredictions(SmartBetCouponSet coupons) async {
+    final unique = <String, SmartBetCouponSelection>{};
+    for (final result in [coupons.premium, coupons.balanced, coupons.value]) {
+      for (final selection in result.selections) {
+        unique.putIfAbsent(
+          '${selection.match.fixtureId}|${selection.outcome}',
+          () => selection,
+        );
+      }
+    }
+    for (final selection in unique.values) {
+      try {
+        if (registrationProvider != null) {
+          await registrationProvider!(selection);
+        } else if (analysisProvider == null && oddsProvider == null) {
+          await SmartBetAnalysisRegistrationService().registerSelection(
+            match: selection.match,
+            smartBet: selection.analysis,
+            source: SmartBetAnalysisSource.aiCoupon,
+            smartBetMarket: selection.outcome,
+            smartBetProbabilityPercent: selection.originalProbabilityPercent,
+            smartBetOdd: selection.odd,
+          );
+        }
+      } catch (_) {
+        // Il salvataggio dello storico non blocca la generazione.
+      }
+    }
+  }
 
   SmartBetCouponResult _buildProfileResult({
     required List<SmartBetCouponSelection> analyzed,
@@ -834,7 +925,7 @@ class SmartBetCouponService {
   double _selectionProbability(SmartBetCouponSelection selection) {
     final sportsPick = selection.sportsPick;
     if (sportsPick != null) {
-      return sportsPick.probability.clamp(0, 100) / 100.0;
+      return selection.effectiveProbabilityPercent.clamp(0, 100) / 100.0;
     }
 
     final outcome = selection.outcome.trim().toUpperCase();

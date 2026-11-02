@@ -742,28 +742,9 @@ class SmartBetAutoCouponService {
   // ============================================================
 
   double _selectionProbability(SmartBetCouponSelection selection) {
-    final outcome = selection.outcome.trim().toUpperCase();
-
-    int probability;
-
-    switch (outcome) {
-      case '1':
-        probability = selection.analysis.homeProbability;
-        break;
-
-      case 'X':
-        probability = selection.analysis.drawProbability;
-        break;
-
-      case '2':
-        probability = selection.analysis.awayProbability;
-        break;
-
-      default:
-        return 0.0;
-    }
-
-    return probability.clamp(0, 100) / 100.0;
+    // Il limite impostato dall'utente non deve azzerare la stima di
+    // Goal, Over e altri mercati diversi da 1/X/2.
+    return selection.effectiveProbabilityPercent.clamp(0, 100) / 100.0;
   }
 
   // ============================================================

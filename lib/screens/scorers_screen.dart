@@ -6,6 +6,9 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/scorer_candidate_service.dart';
+import '../services/smartbet_prediction_quantity_policy.dart';
+import '../services/smartbet_device_learning_preferences.dart';
+import '../services/smartbet_scorer_learning_service.dart';
 
 enum _ScorerPeriod { today, next2Days, next3Days, custom }
 
@@ -17,12 +20,15 @@ class ScorersScreen extends StatefulWidget {
 }
 
 class _ScorersScreenState extends State<ScorersScreen> {
-  static const int _wantedScorers = 5;
+  int _wantedScorers = SmartBetPredictionQuantityPolicy.scorerMin;
   static const int _maximumMatchesToPreAnalyze = 12;
-  static const int _matchesForPlayerScan = 6;
+  int get _matchesForPlayerScan =>
+      SmartBetPredictionQuantityPolicy.scorerMatchesToScan(_wantedScorers);
   static const int _preBatchSize = 3;
 
   final ScorerCandidateService _service = ScorerCandidateService();
+  final SmartBetScorerLearningStore _scorerLearning =
+      SmartBetScorerLearningStore();
 
   final List<ScorerCandidate> _results = [];
 
@@ -242,6 +248,22 @@ class _ScorersScreenState extends State<ScorersScreen> {
     });
 
     try {
+      // Nessuna chiamata AI per l'apprendimento. Al massimo 3 fixture
+      // pregresse: verifica solo match terminati con eventi coerenti.
+      var learningRecords = <SmartBetScorerLearningRecord>[];
+      try {
+        await _scorerLearning.initialize();
+        await SmartBetScorerResultResolver(
+          store: _scorerLearning,
+        ).resolvePending(maximumFixtures: 3);
+        learningRecords = _scorerLearning.records;
+      } catch (error) {
+        debugPrint('SCORER LOCAL LEARNING UNAVAILABLE: $error');
+      }
+      final learningEnabled = await const SmartBetDeviceLearningPreferences()
+          .loadEnabled();
+      final learningCutoff = DateTime.now().toUtc();
+
       final allMatches = await _loadMatchesForSelectedPeriod();
 
       final matches =
@@ -370,7 +392,48 @@ class _ScorersScreenState extends State<ScorersScreen> {
         });
       }
 
-      final finalResults = _selectFinalCandidates(allCandidates);
+      // Correzioni marcatori indipendenti dai mercati di partita.
+      // Un solo split temporale validato e nessuna correzione se OFF.
+      final calibratedCandidates = <ScorerCandidate>[];
+      for (final candidate in allCandidates) {
+        final correction = SmartBetScorerCalibrationService.evaluate(
+          records: learningRecords,
+          startedAt: learningCutoff,
+          currentFixtureId: candidate.match.fixtureId,
+          originalProbability: candidate.probability,
+          optedIn: learningEnabled,
+        );
+        calibratedCandidates.add(
+          correction.applied
+              ? candidate.withCalibratedProbability(
+                  calibrated: correction.probability,
+                  validatedFixtures: correction.validatedFixtures,
+                )
+              : candidate,
+        );
+      }
+      final finalResults = _selectFinalCandidates(calibratedCandidates);
+
+      // Salva SOLO le stime originali, prima della partita e una volta
+      // per coppia fixture/giocatore. Le analisi precedenti non si toccano.
+      try {
+        final recordedAt = DateTime.now().toUtc();
+        await _scorerLearning.capture([
+          for (final candidate in finalResults)
+            if (DateTime.tryParse(candidate.match.date) != null)
+              SmartBetScorerLearningRecord(
+                fixtureId: candidate.match.fixtureId,
+                playerId: candidate.playerId,
+                playerName: candidate.playerName,
+                kickoffAt: DateTime.parse(candidate.match.date).toUtc(),
+                predictedAt: recordedAt,
+                originalProbability:
+                    candidate.originalProbability ?? candidate.probability,
+              ),
+        ]);
+      } catch (error) {
+        debugPrint('SCORER HISTORY CAPTURE ERROR: $error');
+      }
 
       if (!mounted) return;
 
@@ -431,7 +494,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
       }
 
       // Con formazione ufficiale disponibile non mostriamo un panchinaro
-      // nella Top 5 finale.
+      // nella selezione finale.
       if (candidate.officialLineupKnown && !candidate.confirmedStarter) {
         continue;
       }
@@ -488,6 +551,63 @@ class _ScorersScreenState extends State<ScorersScreen> {
       default:
         return 'Preparazione della shortlist marcatori.';
     }
+  }
+
+  Widget _scorerCountSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'NUMERO DI MARCATORI',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final number in SmartBetPredictionQuantityPolicy.scorerCounts)
+              ChoiceChip(
+                label: Text('$number'),
+                selected: _wantedScorers == number,
+                selectedColor: const Color(0xFF00C853),
+                backgroundColor: const Color(0xFF1F2937),
+                side: BorderSide(
+                  color: _wantedScorers == number
+                      ? const Color(0xFF00C853)
+                      : Colors.white12,
+                ),
+                labelStyle: TextStyle(
+                  color: _wantedScorers == number
+                      ? Colors.white
+                      : Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: _loading
+                    ? null
+                    : (selected) {
+                        if (!selected || _wantedScorers == number) return;
+                        setState(() => _wantedScorers = number);
+                        // Un obiettivo più ampio richiede più partite candidate;
+                        // l'aggiornamento avvia esplicitamente una nuova ricerca.
+                        _generate();
+                      },
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Se cambi il numero viene eseguita una nuova ricerca. '
+          'Vengono mostrati solo giocatori con dati sufficienti.',
+          style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.3),
+        ),
+      ],
+    );
   }
 
   Widget _periodSelector() {
@@ -600,7 +720,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
           ),
           SizedBox(height: 11),
           Text(
-            'GoalVdLine cerca fino a 5 giocatori con il profilo più '
+            'GoalVdLine cerca fino a $_wantedScorers giocatori con il profilo più '
             'interessante nelle partite del periodo selezionato. Nessun marcatore '
             'viene inserito solo per raggiungere il numero richiesto.',
             style: TextStyle(color: Colors.white, fontSize: 13, height: 1.45),
@@ -792,8 +912,10 @@ class _ScorersScreenState extends State<ScorersScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'PROBABILITÀ GOALVDLINE',
+                      Text(
+                        item.originalProbability == null
+                            ? 'PROBABILITÀ GOALVDLINE'
+                            : 'PROB. MARCATORE CALIBRATA',
                         style: TextStyle(
                           color: Colors.white54,
                           fontSize: 9.5,
@@ -809,6 +931,19 @@ class _ScorersScreenState extends State<ScorersScreen> {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
+                      if (item.originalProbability != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Originale: '
+                          '${(item.originalProbability! * 100).round()}% · '
+                          'Validazione: ${item.learningValidationFixtures} partite',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 7),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1025,6 +1160,8 @@ class _ScorersScreenState extends State<ScorersScreen> {
 
           const SizedBox(height: 16),
 
+          _scorerCountSelector(),
+          const SizedBox(height: 15),
           _periodSelector(),
 
           if (_loading) _progressCard(),

@@ -21,6 +21,10 @@ class ScorerCandidate {
   final String teamName;
   final String position;
   final double probability;
+
+  /// Probabilita iniziale, sempre usata per lo storico.
+  final double? originalProbability;
+  final int learningValidationFixtures;
   final double braceProbability;
   final double rankScore;
   final int seasonGoals;
@@ -42,6 +46,8 @@ class ScorerCandidate {
     required this.teamName,
     required this.position,
     required this.probability,
+    this.originalProbability,
+    this.learningValidationFixtures = 0,
     required this.braceProbability,
     required this.rankScore,
     required this.seasonGoals,
@@ -56,6 +62,42 @@ class ScorerCandidate {
     required this.rating,
     required this.odd,
   });
+
+  ScorerCandidate withCalibratedProbability({
+    required double calibrated,
+    required int validatedFixtures,
+  }) {
+    final initial = originalProbability ?? probability;
+    if (!calibrated.isFinite ||
+        calibrated < 0 ||
+        calibrated > 1 ||
+        (calibrated - initial).abs() < 0.005) {
+      return this;
+    }
+    return ScorerCandidate(
+      match: match,
+      playerId: playerId,
+      playerName: playerName,
+      teamName: teamName,
+      position: position,
+      probability: calibrated,
+      originalProbability: initial,
+      learningValidationFixtures: validatedFixtures,
+      braceProbability: braceProbability,
+      rankScore: rankScore + (calibrated - probability) * 100.0,
+      seasonGoals: seasonGoals,
+      goalsPer90: goalsPer90,
+      shotsOnTargetPer90: shotsOnTargetPer90,
+      appearances: appearances,
+      minutes: minutes,
+      officialLineupKnown: officialLineupKnown,
+      confirmedStarter: confirmedStarter,
+      starterRate: starterRate,
+      teamExpectedGoals: teamExpectedGoals,
+      rating: rating,
+      odd: odd,
+    );
+  }
 
   String get availabilityLabel {
     if (officialLineupKnown) {

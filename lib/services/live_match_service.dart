@@ -271,6 +271,13 @@ class LiveMatchService {
     return matches;
   }
 
+  /// Eventi verificabili di una singola partita conclusa.
+  /// Usa il proxy gia utilizzato dalla sezione Live, senza nuove credenziali.
+  Future<List<dynamic>> getFixtureEvents(int fixtureId) async {
+    if (fixtureId <= 0) return const [];
+    return _get('fixtures/events', {'fixture': '$fixtureId'});
+  }
+
   Future<LiveMatchSnapshot> getSnapshot(LiveMatchSummary match) async {
     final results = await Future.wait([
       _get('fixtures/statistics', {'fixture': match.fixtureId.toString()}),

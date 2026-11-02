@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/settings_store.dart';
 import '../services/smartbet_ai_service.dart';
+import '../widgets/smartbet_learning_settings_card.dart';
 
 Future<void> _editSmartBetUserName(BuildContext context) async {
   final profile = UserProfileStore.instance;
@@ -241,6 +242,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 24),
+
+              _sectionTitle('Intelligenza e apprendimento'),
+              const SmartBetLearningSettingsCard(),
 
               const SizedBox(height: 24),
 
