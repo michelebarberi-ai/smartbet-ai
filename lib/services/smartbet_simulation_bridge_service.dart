@@ -219,6 +219,38 @@ class SmartBetSimulationBridgeService {
       expectedAwayGoals: result.expectedAwayGoals,
       dataQuality: dataQuality,
       existingProbabilities: {
+        // P21C: includiamo i mercati NATIVI, specialmente la X.
+        // Non interpretiamo una coppia 0/0 (valore di default) come dato.
+        if (_probabilitiesSumToOne([
+          result.homeProbability,
+          result.drawProbability,
+          result.awayProbability,
+        ])) ...{
+          '1': result.homeProbability / 100.0,
+          'X': result.drawProbability / 100.0,
+          '2': result.awayProbability / 100.0,
+        },
+        if (_probabilitiesSumToOne([
+          result.over15Probability,
+          result.under15Probability,
+        ])) ...{
+          'OVER 1.5': result.over15Probability / 100.0,
+          'UNDER 1.5': result.under15Probability / 100.0,
+        },
+        if (_probabilitiesSumToOne([
+          result.over25Probability,
+          result.under25Probability,
+        ])) ...{
+          'OVER 2.5': result.over25Probability / 100.0,
+          'UNDER 2.5': result.under25Probability / 100.0,
+        },
+        if (_probabilitiesSumToOne([
+          result.goalProbability,
+          result.noGoalProbability,
+        ])) ...{
+          'GOAL': result.goalProbability / 100.0,
+          'NO GOAL': result.noGoalProbability / 100.0,
+        },
         for (final market in SmartBetMarketProbabilityService.extendedMarkets)
           market:
               SmartBetMarketProbabilityService.probabilityFor(result, market) /
@@ -273,6 +305,13 @@ class SmartBetSimulationBridgeService {
         'GOAL': snapshot.goalProbability / 100.0,
       },
     );
+  }
+
+  // Dati percentuali interi. Piccoli arrotondamenti sono tollerati.
+  static bool _probabilitiesSumToOne(List<int> values) {
+    if (values.any((value) => value < 0 || value > 100)) return false;
+    final total = values.fold<int>(0, (sum, value) => sum + value);
+    return total >= 98 && total <= 102;
   }
 
   static void _requireObservedGoals(double h, double a) {
