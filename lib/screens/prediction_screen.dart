@@ -37,6 +37,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       DualEngineAnalysisService();
 
   bool _loading = false;
+  bool _hasStartedAnalysis = false;
   String? _error;
 
   _PredictionPeriod _period = _PredictionPeriod.today;
@@ -77,15 +78,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
     'GOAL + O2.5',
     'NO GOAL + U2.5',
   ];
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _generate();
-    });
-  }
 
   @override
   void dispose() {
@@ -643,12 +635,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
       _results.clear();
       _error = null;
+      _hasStartedAnalysis = false;
       _phase = '';
       _processed = 0;
       _total = 0;
     });
-
-    await _generate();
   }
 
   // ============================================================
@@ -661,6 +652,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     }
 
     setState(() {
+      _hasStartedAnalysis = true;
       _loading = true;
       _error = null;
       _phase = 'matches';
@@ -1523,12 +1515,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   _results.clear();
                   _error = null;
+                  _hasStartedAnalysis = false;
                   _phase = '';
                   _processed = 0;
                   _total = 0;
                 });
-
-                await _generate();
               },
       );
     }
@@ -1659,6 +1650,49 @@ class _PredictionScreenState extends State<PredictionScreen> {
     );
   }
 
+  Widget _manualStartCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 18),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x6600C853)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.play_circle_outline,
+            color: Color(0xFF00C853),
+            size: 32,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'ANALISI SU RICHIESTA',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Nessuna analisi viene avviata automaticamente. '
+            'Controlla le opzioni e premi il pulsante quando sei pronto.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _loading ? null : _generate,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('AVVIA ANALISI'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -1690,14 +1724,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
             )
           else
             IconButton(
-              tooltip: 'Rigenera',
+              tooltip: _hasStartedAnalysis ? 'Rigenera' : 'Avvia analisi',
               onPressed: _generate,
               icon: const Icon(Icons.refresh),
             ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _generate,
+        onRefresh: _hasStartedAnalysis ? _generate : () async {},
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
@@ -1740,6 +1774,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
             _periodSelector(),
 
+            if (!_loading && _results.isEmpty && _error == null)
+              _manualStartCard(),
             if (_loading) ...[const SizedBox(height: 16), _progressCard()],
             if (_error != null && _results.isEmpty) ...[
               const SizedBox(height: 18),
