@@ -19,6 +19,7 @@ import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../services/smartbet_prediction_quantity_policy.dart';
+import '../services/goalvdline_competition_order.dart';
 import '../widgets/goalvdline_competition_groups.dart';
 
 enum _PredictionPeriod { today, next2Days, next3Days, custom }
@@ -1071,7 +1072,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   String _competitionLabel(MatchModel match) {
-    final country = match.country.trim();
+    final country = GoalVdLineCompetitionOrder.displayCountry(
+      match.country,
+      match.league,
+    );
     final league = match.league.trim();
 
     if (country.isNotEmpty && league.isNotEmpty) {

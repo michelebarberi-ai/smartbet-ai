@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/match_model.dart';
+import '../services/goalvdline_competition_order.dart';
 
 class CompetitionFilterSheet {
   const CompetitionFilterSheet._();
@@ -23,9 +24,12 @@ class CompetitionFilterSheet {
     final byCountry = <String, Map<String, String>>{};
 
     for (final match in matches) {
-      final country = match.country.trim().isEmpty
-          ? 'Altro'
-          : match.country.trim();
+      // La classificazione e' soltanto visiva. keyFor resta invariata:
+      // non invalida filtri o selezioni preesistenti.
+      final country = GoalVdLineCompetitionOrder.displayCountry(
+        match.country,
+        match.league,
+      );
       final league = match.league.trim().isEmpty
           ? 'Competizione'
           : match.league.trim();
@@ -34,7 +38,7 @@ class CompetitionFilterSheet {
     }
 
     final countries = byCountry.keys.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      ..sort(GoalVdLineCompetitionOrder.compareCountries);
     final allKeys = <String>{
       for (final leagues in byCountry.values) ...leagues.keys,
     };

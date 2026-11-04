@@ -560,7 +560,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         continue;
       }
 
-      final country = GoalVdLineCompetitionOrder.country(match.country);
+      final country = GoalVdLineCompetitionOrder.displayCountry(
+        match.country,
+        match.league,
+      );
 
       grouped.putIfAbsent(country, () => []);
       grouped[country]!.add(match);

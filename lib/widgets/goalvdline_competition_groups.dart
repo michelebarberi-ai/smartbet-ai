@@ -28,8 +28,14 @@ class GoalVdLineCompetitionGroups<T> extends StatelessWidget {
     final ordered = items.asMap().entries.toList()
       ..sort((a, b) {
         final country = GoalVdLineCompetitionOrder.compareCountries(
-          countryOf(a.value),
-          countryOf(b.value),
+          GoalVdLineCompetitionOrder.displayCountry(
+            countryOf(a.value),
+            leagueOf(a.value),
+          ),
+          GoalVdLineCompetitionOrder.displayCountry(
+            countryOf(b.value),
+            leagueOf(b.value),
+          ),
         );
         if (country != 0) return country;
         final league = GoalVdLineCompetitionOrder.compareLeagues(
@@ -47,7 +53,10 @@ class GoalVdLineCompetitionGroups<T> extends StatelessWidget {
     final grouped = <String, Map<String, List<T>>>{};
     for (final entry in ordered) {
       final item = entry.value;
-      final country = GoalVdLineCompetitionOrder.country(countryOf(item));
+      final country = GoalVdLineCompetitionOrder.displayCountry(
+        countryOf(item),
+        leagueOf(item),
+      );
       final league = GoalVdLineCompetitionOrder.league(leagueOf(item));
       grouped
           .putIfAbsent(country, () => <String, List<T>>{})

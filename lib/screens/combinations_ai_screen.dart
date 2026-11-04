@@ -24,6 +24,7 @@ import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
+import '../services/goalvdline_competition_order.dart';
 import '../widgets/goalvdline_competition_groups.dart';
 import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
@@ -3847,7 +3848,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${match.country} • '
+                      '${GoalVdLineCompetitionOrder.displayCountry(match.country, match.league)} • '
                       '${match.league} • '
                       '${_formatDate(match.date)}',
                       maxLines: 1,

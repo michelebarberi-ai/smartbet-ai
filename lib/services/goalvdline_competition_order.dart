@@ -127,6 +127,19 @@ class GoalVdLineCompetitionOrder {
   static String league(String raw) =>
       raw.trim().isEmpty ? 'ALTRA COMPETIZIONE' : raw.trim();
 
+  /// Area visuale della competizione, senza toccare il paese originale.
+  /// AFC e una confederazione asiatica; alcune API associano erroneamente
+  /// la AFC Champions League alla categoria Europa.
+  static String displayCountry(String rawCountry, String rawLeague) {
+    final upper = rawLeague.toUpperCase();
+    if (RegExp(r'\b(?:AFC|AGCFF)\b').hasMatch(upper) ||
+        upper.contains('GULF CLUB CHAMPIONS LEAGUE') ||
+        upper.contains('GULF CHAMPIONS LEAGUE')) {
+      return 'ASIA';
+    }
+    return country(rawCountry);
+  }
+
   static int compareCountries(String a, String b) {
     final first = country(a);
     final second = country(b);

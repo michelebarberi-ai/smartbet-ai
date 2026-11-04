@@ -45,4 +45,67 @@ void main() {
     expect(GoalVdLineCompetitionOrder.country(''), 'ALTRI');
     expect(GoalVdLineCompetitionOrder.country('Ecuador'), 'ECUADOR');
   });
+
+  test('P23B1A: AFC visualizzata in Asia anche se API dice Europa', () {
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europa',
+        'AFC Champions League Elite',
+      ),
+      'ASIA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry('Giappone', 'J1 League'),
+      'GIAPPONE',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europe',
+        'UEFA Champions League',
+      ),
+      'EUROPA',
+    );
+  });
+
+  test('P23B1A2: AGCFF e Gulf Champions League sono ASIA', () {
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europa',
+        'AGCFF Gulf Champions League',
+      ),
+      'ASIA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europe',
+        'AGCFF Gulf Club Champions League',
+      ),
+      'ASIA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europa',
+        'Gulf Club Champions League',
+      ),
+      'ASIA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europa',
+        'AFC Champions League Elite',
+      ),
+      'ASIA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry(
+        'Europa',
+        'UEFA Champions League',
+      ),
+      'EUROPA',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.displayCountry('Europa', 'US Gulf Coast Cup'),
+      'EUROPA',
+    );
+  });
 }
