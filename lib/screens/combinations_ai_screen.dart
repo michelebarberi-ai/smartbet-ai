@@ -18,6 +18,7 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
+import '../services/smartbet_x_premium_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
@@ -113,6 +114,13 @@ class _CombinationSystemShadow {
   const _CombinationSystemShadow({required this.name, required this.picks});
 }
 
+class _XPremiumDisplayItem {
+  final MatchModel match;
+  final SmartBetXPremiumAssessment assessment;
+
+  const _XPremiumDisplayItem({required this.match, required this.assessment});
+}
+
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -132,6 +140,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   _CombinationOutputMode _outputMode = _CombinationOutputMode.single;
   _CombinationSystemRisk _systemRisk = _CombinationSystemRisk.balanced;
   int _systemCombinationCount = 5;
+
+  // P21F: percorso separato, mai attivato automaticamente.
+  bool _xPremiumEnabled = false;
+  bool _xPremiumChoosing = false;
+  final Map<int, MatchModel> _xPremiumSelectedMatches = <int, MatchModel>{};
+  final List<_XPremiumDisplayItem> _xPremiumResults = <_XPremiumDisplayItem>[];
+  final SmartBetXPremiumService _xPremiumService =
+      const SmartBetXPremiumService();
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
@@ -870,6 +886,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _selectedCompetitionKeys.clear();
       _expandedComboFixtures.clear();
       _results.clear();
+      _xPremiumSelectedMatches.clear();
+      _xPremiumResults.clear();
 
       _errorMessage = null;
       _processed = 0;
@@ -1107,6 +1125,437 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     debugPrint('');
 
     return unique;
+  }
+
+  // ============================================================
+  // P21F — X PREMIUM (selezione manuale e risultati completi)
+  // ============================================================
+
+  Future<void> _chooseXPremiumMatches() async {
+    if (_loading || _xPremiumChoosing) return;
+    setState(() => _xPremiumChoosing = true);
+    try {
+      final fixtures = (await _loadMatchesForSelectedPeriod())
+          .where(
+            (match) =>
+                _isUpcoming(match) &&
+                (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
+                (_selectedCompetitionKeys.isEmpty ||
+                    _selectedCompetitionKeys.contains(
+                      CompetitionFilterSheet.keyFor(match),
+                    )),
+          )
+          .toList();
+      if (!mounted) return;
+      if (fixtures.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nessuna partita futura nel periodo scelto.'),
+          ),
+        );
+        return;
+      }
+      // La scelta e' esplicita e limitata a 15 fixture per controllare i costi.
+      final selected = _xPremiumSelectedMatches.keys
+          .where((id) => fixtures.any((match) => match.fixtureId == id))
+          .toSet();
+      final confirmed = await showDialog<Set<int>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, updateDialog) => AlertDialog(
+            backgroundColor: const Color(0xFF1F2937),
+            title: const Text(
+              'Scegli fino a 15 partite',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: MediaQuery.sizeOf(dialogContext).height * 0.57,
+              child: Column(
+                children: [
+                  Text(
+                    '${selected.length} selezionate • nessuna analisi automatica',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: fixtures.length,
+                      itemBuilder: (context, index) {
+                        final match = fixtures[index];
+                        final checked = selected.contains(match.fixtureId);
+                        return CheckboxListTile(
+                          value: checked,
+                          activeColor: const Color(0xFF00C853),
+                          checkColor: Colors.black,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(
+                            '${match.homeTeam} - ${match.awayTeam}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${match.league} • ${_formatDate(match.date)}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 10,
+                            ),
+                          ),
+                          onChanged: (checked || selected.length < 15)
+                              ? (value) => updateDialog(() {
+                                  if (value == true) {
+                                    selected.add(match.fixtureId);
+                                  } else {
+                                    selected.remove(match.fixtureId);
+                                  }
+                                })
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('ANNULLA'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.pop(dialogContext, Set<int>.of(selected)),
+                child: const Text('CONFERMA'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || confirmed == null) return;
+      setState(() {
+        _xPremiumSelectedMatches
+          ..clear()
+          ..addEntries(
+            fixtures
+                .where((match) => confirmed.contains(match.fixtureId))
+                .map((match) => MapEntry(match.fixtureId, match)),
+          );
+        _xPremiumResults.clear();
+        _processed = 0;
+        _total = 0;
+        _errors = 0;
+        _errorMessage = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_friendlyErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _xPremiumChoosing = false);
+    }
+  }
+
+  Future<void> _findXPremium() async {
+    if (_loading || _xPremiumSelectedMatches.isEmpty) return;
+    final matches = _xPremiumSelectedMatches.values.toList(growable: false);
+    setState(() {
+      _loading = true;
+      _processed = 0;
+      _total = matches.length;
+      _errors = 0;
+      _errorMessage = null;
+      _xPremiumResults.clear();
+      _results.clear();
+      _systemResults.clear();
+    });
+    final resultByFixture = <int, _XPremiumDisplayItem>{};
+    try {
+      for (var start = 0; start < matches.length; start += _batchSize) {
+        final end = math.min(start + _batchSize, matches.length);
+        final batch = matches.sublist(start, end);
+        final analyzed = await Future.wait(
+          batch.map((match) async {
+            if (!_isUpcoming(match)) {
+              return _XPremiumDisplayItem(
+                match: match,
+                assessment: SmartBetXPremiumAssessment.unavailable(
+                  fixtureId: match.fixtureId,
+                  reason:
+                      'Partita gia iniziata: non generiamo previsioni retroattive.',
+                ),
+              );
+            }
+            try {
+              // L'utente ha premuto AVVIA: cache, oppure una sola analisi
+              // avanzata per partita. Niente richieste quote o Diego.
+              var result = await _analysisCache.read(match.fixtureId);
+              if (result == null) {
+                result = await _aiService.analyzeMatch(
+                  match,
+                  runAudit: false,
+                  automaticMode: false,
+                );
+                if (result.smartScore > 0) {
+                  await _analysisCache.write(match.fixtureId, result);
+                }
+              }
+              final assessment = _xPremiumService.assess(
+                fixtureId: match.fixtureId,
+                analysis: result,
+              );
+              // Registra anche le X meno favorevoli, soltanto con probabilita
+              // nativa 1X2 verificabile. P21C conserva la prima previsione.
+              if (assessment.nativeDraw != null && _isUpcoming(match)) {
+                try {
+                  await SmartBetAnalysisRegistrationService().registerSelection(
+                    match: match,
+                    smartBet: result,
+                    source: SmartBetAnalysisSource.combinations,
+                    smartBetMarket: 'X',
+                    smartBetProbabilityPercent: result.drawProbability,
+                  );
+                } catch (error) {
+                  debugPrint(
+                    'X PREMIUM: registrazione shadow non riuscita: $error',
+                  );
+                }
+              }
+              return _XPremiumDisplayItem(match: match, assessment: assessment);
+            } catch (error) {
+              debugPrint(
+                'X PREMIUM: analisi fixture ${match.fixtureId}: $error',
+              );
+              return _XPremiumDisplayItem(
+                match: match,
+                assessment: SmartBetXPremiumAssessment.unavailable(
+                  fixtureId: match.fixtureId,
+                ),
+              );
+            }
+          }),
+        );
+        for (final item in analyzed) {
+          resultByFixture[item.match.fixtureId] = item;
+        }
+        if (!mounted) return;
+        setState(() {
+          _processed = end;
+          _errors = resultByFixture.values
+              .where((item) => !item.assessment.hasSimulation)
+              .length;
+        });
+      }
+      final sorted = _xPremiumService.rank(
+        resultByFixture.values.map((item) => item.assessment),
+      );
+      if (!mounted) return;
+      setState(() {
+        _xPremiumResults
+          ..clear()
+          ..addAll(sorted.map((entry) => resultByFixture[entry.fixtureId]!));
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage = _friendlyErrorMessage(error));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _xPremiumControls() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.38)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'X PREMIUM — INTELLIGENZA PAREGGI',
+            style: TextStyle(
+              color: Colors.orangeAccent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Seleziona esplicitamente fino a 15 partite nel periodo e nei campionati scelti. '
+            'Il motore le mostrera tutte, divise in X prioritarie e altre X. '
+            'La prima valutazione usa xG e qualita dati, non ancora tattiche minuto per minuto.',
+            style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: (_loading || _xPremiumChoosing)
+                  ? null
+                  : _chooseXPremiumMatches,
+              icon: _xPremiumChoosing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.checklist),
+              label: Text(
+                _xPremiumChoosing
+                    ? 'CARICAMENTO PARTITE...'
+                    : 'SCEGLI PARTITE (${_xPremiumSelectedMatches.length}/15)',
+              ),
+            ),
+          ),
+          if (_xPremiumSelectedMatches.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              _xPremiumSelectedMatches.values
+                  .map((match) => '${match.homeTeam} - ${match.awayTeam}')
+                  .join(' • '),
+              style: const TextStyle(color: Colors.white60, fontSize: 10),
+            ),
+          ],
+          const SizedBox(height: 7),
+          const Text(
+            'L’analisi parte solo premendo AVVIA. Cache riutilizzata; '
+            'nuove analisi avanzate possono consumare richieste API. '
+            'Nessun filtro sulle quote.',
+            style: TextStyle(color: Colors.white54, fontSize: 10, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _xPremiumCard(_XPremiumDisplayItem item, int rank) {
+    final assessment = item.assessment;
+    final green = assessment.priority;
+    final color = green ? const Color(0xFF00C853) : Colors.orangeAccent;
+    String display(double? probability) => probability == null
+        ? 'N/D'
+        : '${(probability * 100).toStringAsFixed(1)}%';
+    final alternativesLabel = assessment.alternatives.entries
+        .map(
+          (entry) => '${entry.key} ${(entry.value * 100).toStringAsFixed(1)}%',
+        )
+        .join(' • ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$rank. ${item.match.homeTeam} - ${item.match.awayTeam}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${item.match.league} • ${_formatDate(item.match.date)}',
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'X simulata: ${display(assessment.simulatedDraw)}',
+            style: TextStyle(
+              color: color,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'X del motore attuale: ${display(assessment.nativeDraw)} '
+            '• Qualita dati: ${display(assessment.dataQuality)}',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            assessment.reason,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          if (assessment.alternatives.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Altri mercati per probabilita (non per convenienza): '
+              '$alternativesLabel',
+              style: const TextStyle(color: Colors.white60, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _xPremiumResultList() {
+    final preferred = _xPremiumResults
+        .where((item) => item.assessment.priority)
+        .toList();
+    final others = _xPremiumResults
+        .where((item) => !item.assessment.priority)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 23),
+        Text(
+          'X PREMIUM: ${_xPremiumResults.length} partite esaminate',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Probabilita statistiche, non garanzie; '
+          'il livello prioritario richiede X stimata >=30% e qualita dati >=60%.',
+          style: TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'X PRIORITARIE (${preferred.length})',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (preferred.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              'Nessuna X supera entrambe le soglie.',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+        for (final item in preferred)
+          _xPremiumCard(item, _xPremiumResults.indexOf(item) + 1),
+        const SizedBox(height: 10),
+        Text(
+          'ALTRE PARTITE (${others.length})',
+          style: const TextStyle(
+            color: Colors.orangeAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        for (final item in others)
+          _xPremiumCard(item, _xPremiumResults.indexOf(item) + 1),
+      ],
+    );
   }
 
   // ============================================================
@@ -1961,6 +2410,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ..clear()
           ..addAll(selected);
         _results.clear();
+        _xPremiumSelectedMatches.clear();
+        _xPremiumResults.clear();
         _errorMessage = null;
       });
     } catch (_) {
@@ -2006,6 +2457,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   _selectedCompetitionKeys.clear();
                   _expandedComboFixtures.clear();
                   _results.clear();
+                  _xPremiumSelectedMatches.clear();
+                  _xPremiumResults.clear();
 
                   _errorMessage = null;
                   _processed = 0;
@@ -3323,19 +3776,22 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 8),
 
-          const Text(
-            'Scegli un mercato e GoalVdLine '
-            'scansionerà le partite del periodo '
-            'selezionato, mostrando quelle con '
-            'la probabilità più alta '
-            'nella pre-analisi.',
-            style: TextStyle(color: Colors.white54, height: 1.4),
+          Text(
+            _xPremiumEnabled
+                ? 'Scegli fino a 15 partite e avvia manualmente la simulazione '
+                      'dei pareggi. Nessuna partita selezionata viene nascosta.'
+                : 'Scegli un mercato e GoalVdLine scansionera le partite del periodo '
+                      'selezionato, mostrando quelle con la probabilita piu alta '
+                      'nella pre-analisi.',
+            style: const TextStyle(color: Colors.white54, height: 1.4),
           ),
 
           const SizedBox(height: 8),
 
           Text(
-            _selectedMarket == 'COMBO CHANCE'
+            _xPremiumEnabled
+                ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
+                : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
                 : 'Filtro automatico: solo selezioni con quota reale almeno 1.25.',
             style: TextStyle(
@@ -3379,6 +3835,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                       setState(() {
                         _italyScheduleOnly = value;
                         _results.clear();
+                        _xPremiumSelectedMatches.clear();
+                        _xPremiumResults.clear();
                         _errorMessage = null;
                         _processed = 0;
                         _total = 0;
@@ -3405,9 +3863,39 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 10),
 
-          _marketSelector(),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'X PREMIUM — INTELLIGENZA PAREGGI',
+              style: TextStyle(
+                color: Colors.orangeAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: const Text(
+              'Modalita dedicata, senza alterare le combinazioni classiche.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            value: _xPremiumEnabled,
+            activeThumbColor: Colors.orangeAccent,
+            onChanged: (_loading || _xPremiumChoosing)
+                ? null
+                : (value) {
+                    setState(() {
+                      _xPremiumEnabled = value;
+                      _xPremiumResults.clear();
+                      _results.clear();
+                      _systemResults.clear();
+                      _errorMessage = null;
+                      _processed = 0;
+                      _total = 0;
+                      _errors = 0;
+                    });
+                  },
+          ),
+          if (_xPremiumEnabled) _xPremiumControls() else _marketSelector(),
 
-          if (_selectedMarket == 'COMBO CHANCE') ...[
+          if (!_xPremiumEnabled && _selectedMarket == 'COMBO CHANCE') ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -3445,116 +3933,130 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          const SizedBox(height: 20),
+          if (!_xPremiumEnabled) ...[
+            const SizedBox(height: 20),
 
-          const Text(
-            'AFFIDABILITÀ MINIMA',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
+            const Text(
+              'AFFIDABILITÀ MINIMA',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
 
-          _smartScoreSelector(),
+            _smartScoreSelector(),
 
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          const Text(
-            'MODALITÀ RISULTATO',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
+            const Text(
+              'MODALITÀ RISULTATO',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
-          const SizedBox(height: 9),
-          _outputModeSelector(),
+            const SizedBox(height: 9),
+            _outputModeSelector(),
 
-          if (_outputMode == _CombinationOutputMode.system) ...[
-            const SizedBox(height: 12),
-            _systemControls(),
+            if (_outputMode == _CombinationOutputMode.system) ...[
+              const SizedBox(height: 12),
+              _systemControls(),
+            ],
+
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _outputMode == _CombinationOutputMode.system
+                        ? 'EVENTI PER COMBINAZIONE'
+                        : 'NUMERO RISULTATI',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F2937),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF00C853).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    '$_topCount partite',
+                    style: const TextStyle(
+                      color: Color(0xFF00C853),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 6),
+
+            Slider(
+              value: _topCount.toDouble(),
+              min: 3,
+              max: 15,
+              divisions: 12,
+              label: '$_topCount',
+              onChanged: _loading
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _topCount = value.round();
+                        _results.clear();
+                      });
+                    },
+            ),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text(
+                  '3',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                Text(
+                  '15',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
           ],
-
-          const SizedBox(height: 20),
-
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _outputMode == _CombinationOutputMode.system
-                      ? 'EVENTI PER COMBINAZIONE'
-                      : 'NUMERO RISULTATI',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF00C853).withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Text(
-                  '$_topCount partite',
-                  style: const TextStyle(
-                    color: Color(0xFF00C853),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 6),
-
-          Slider(
-            value: _topCount.toDouble(),
-            min: 3,
-            max: 15,
-            divisions: 12,
-            label: '$_topCount',
-            onChanged: _loading
-                ? null
-                : (value) {
-                    setState(() {
-                      _topCount = value.round();
-                      _results.clear();
-                    });
-                  },
-          ),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('3', style: TextStyle(color: Colors.white38, fontSize: 11)),
-              Text('15', style: TextStyle(color: Colors.white38, fontSize: 11)),
-            ],
-          ),
 
           const SizedBox(height: 20),
 
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: (_loading || _checkingOdds || _selectedMarkets.isEmpty)
+              onPressed:
+                  (_loading ||
+                      _checkingOdds ||
+                      _xPremiumChoosing ||
+                      (_xPremiumEnabled
+                          ? _xPremiumSelectedMatches.isEmpty
+                          : _selectedMarkets.isEmpty))
                   ? null
-                  : _findCombinations,
+                  : (_xPremiumEnabled ? _findXPremium : _findCombinations),
               icon: _loading
                   ? const SizedBox(
                       width: 18,
@@ -3565,6 +4067,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               label: Text(
                 _loading
                     ? 'RICERCA IN CORSO...'
+                    : _xPremiumEnabled
+                    ? 'AVVIA X PREMIUM • ${_xPremiumSelectedMatches.length} PARTITE'
                     : _outputMode == _CombinationOutputMode.system
                     ? 'CREA SISTEMA $_selectedMarketLabel'
                     : 'TROVA LE MIGLIORI '
@@ -3621,7 +4125,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (_results.isNotEmpty) ...[
+          if (_xPremiumEnabled && _xPremiumResults.isNotEmpty)
+            _xPremiumResultList(),
+
+          if (!_xPremiumEnabled && _results.isNotEmpty) ...[
             const SizedBox(height: 24),
 
             if (_outputMode == _CombinationOutputMode.system &&
@@ -3665,7 +4172,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ..._groupedResultWidgets(),
           ],
 
-          if (!_loading &&
+          if (!_xPremiumEnabled &&
+              !_loading &&
               _results.isEmpty &&
               _processed > 0 &&
               _errorMessage == null) ...[
@@ -3686,7 +4194,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (!_loading && _errors > 0) ...[
+          if (!_xPremiumEnabled && !_loading && _errors > 0) ...[
             const SizedBox(height: 10),
             Text(
               '$_errors partite non sono state '
