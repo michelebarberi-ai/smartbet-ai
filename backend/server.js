@@ -925,6 +925,13 @@ app.get(/^\/football\/api\/(.+)$/, async (req, res) => {
 });
 
 // ============================================================
+// P19E: CENTRAL LEARNING (admin staging, disabled by default)
+// ============================================================
+require('./learning/learning_routes').registerLearningRoutes(app, {
+  requestApiFootball,
+});
+
+// ============================================================
 // ANALISI AI
 // ============================================================
 
