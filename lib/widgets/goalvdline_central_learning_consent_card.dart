@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../services/goalvdline_central_learning_outbox.dart';
 import '../services/goalvdline_historical_learning_review.dart';
 import '../services/smartbet_analysis_history_store.dart';
+import 'goalvdline_central_learning_server_panel.dart';
 
 /// Consenso esplicito alla raccolta locale P23B1.
-/// Nessun dato e inviato ad alcun server in questa fase.
+/// P23B2B aggiunge invio manuale separato, mai automatico.
 class GoalVdLineCentralLearningConsentCard extends StatefulWidget {
   const GoalVdLineCentralLearningConsentCard({super.key});
 
@@ -78,15 +79,14 @@ class _GoalVdLineCentralLearningConsentCardState
         ),
         content: Text(
           next
-              ? 'Saranno conservati sul dispositivo soltanto i nuovi '
-                    'pronostici originali, con partita, mercato, probabilita e '
-                    'orario. Nessun dato viene inviato al server in questa '
-                    'versione. Lo storico precedente richiede una autorizzazione '
-                    'separata qui sotto.'
-              : 'La raccolta si fermera e le bozze locali ancora '
-                    'in attesa saranno cancellate. Le analisi personali '
-                    'resteranno inalterate. La copia storica eventualmente '
-                    'preparata si gestisce separatamente.',
+              ? 'La raccolta locale conserva soltanto nuove previsioni originali. '
+                    'Non c\'e invio automatico: ogni trasmissione richiede una '
+                    'conferma separata nel pannello server, e una credenziale '
+                    'dispositivo. Lo storico precedente resta separato.'
+              : 'Questa revoca cancella la sola coda locale. Non elimina i '
+                    'dati eventualmente gia inviati al server. Per la cancellazione '
+                    'remota usa il comando dedicato, con credenziale valida. '
+                    'Lo Storico Analisi e le copie retrospettive restano intatti.',
         ),
         actions: [
           TextButton(
@@ -219,7 +219,7 @@ class _GoalVdLineCentralLearningConsentCardState
                 style: TextStyle(color: Colors.white),
               ),
               subtitle: const Text(
-                'P23B: raccolta solo locale, nessun invio',
+                'P23B: raccolta locale; invio manuale separato',
                 style: TextStyle(color: Colors.white70),
               ),
               value: _enabled,
@@ -229,7 +229,7 @@ class _GoalVdLineCentralLearningConsentCardState
             Text(
               _enabled
                   ? 'Consenso attivo · $_count nuove previsioni in coda. '
-                        'La trasmissione e disattivata.'
+                        'Nessun invio automatico.'
                   : 'Nuove previsioni: raccolta disattivata. '
                         'Coda live separata dallo storico.',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -313,6 +313,8 @@ class _GoalVdLineCentralLearningConsentCardState
                 ],
               ),
             ],
+            const Divider(color: Colors.white24, height: 24),
+            GoalVdLineCentralLearningServerPanel(onLocalChanged: _load),
           ],
         ),
       ),

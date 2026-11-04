@@ -43,12 +43,18 @@ class GoalVdLineLearningDraft {
     final first = DateTime.tryParse(raw['firstSeenAt']?.toString() ?? '');
     final kickoff = DateTime.tryParse(raw['kickoffAt']?.toString() ?? '');
 
-    if (id is! int || id <= 0 ||
+    if (id is! int ||
+        id <= 0 ||
         (engine != 'smartBet' && engine != 'diego') ||
-        market is! String || market.trim().isEmpty ||
-        probability is! num || !probability.isFinite ||
-        probability < 0 || probability > 1 ||
-        first == null || kickoff == null || !first.isBefore(kickoff)) {
+        market is! String ||
+        market.trim().isEmpty ||
+        probability is! num ||
+        !probability.isFinite ||
+        probability < 0 ||
+        probability > 1 ||
+        first == null ||
+        kickoff == null ||
+        !first.isBefore(kickoff)) {
       return null;
     }
 
@@ -116,7 +122,8 @@ class GoalVdLineCentralLearningOutbox {
             final draft = GoalVdLineLearningDraft.fromJson(entry);
             if (draft != null &&
                 !draft.firstSeenAt.isBefore(_consentSince!) &&
-                seen.add(draft.key) && _pending.length < _maxPending) {
+                seen.add(draft.key) &&
+                _pending.length < _maxPending) {
               _pending.add(draft);
             }
           }
@@ -163,12 +170,16 @@ class GoalVdLineCentralLearningOutbox {
     final probability = record.probability;
     if (!record.prospectiveEligible ||
         record.status != SmartBetAnalysisStatus.pending ||
-        probability == null || !probability.isFinite ||
-        probability < 0 || probability > 1 ||
+        probability == null ||
+        !probability.isFinite ||
+        probability < 0 ||
+        probability > 1 ||
         record.fixtureId <= 0 ||
         record.market.trim().isEmpty ||
         record.firstSeenAt.toUtc().isBefore(_consentSince!) ||
-        record.firstSeenAt.toUtc().isAfter(now.add(const Duration(minutes: 1))) ||
+        record.firstSeenAt.toUtc().isAfter(
+          now.add(const Duration(minutes: 1)),
+        ) ||
         !record.matchDate.toUtc().isAfter(now.add(_kickoffMargin))) {
       return false;
     }
@@ -176,14 +187,16 @@ class GoalVdLineCentralLearningOutbox {
     if (_pending.any((draft) => draft.key == record.key)) return false;
     if (_pending.length >= _maxPending) return false;
 
-    _pending.add(GoalVdLineLearningDraft(
-      fixtureId: record.fixtureId,
-      engine: record.engine.name,
-      market: record.market,
-      probability: probability,
-      firstSeenAt: record.firstSeenAt.toUtc(),
-      kickoffAt: record.matchDate.toUtc(),
-    ));
+    _pending.add(
+      GoalVdLineLearningDraft(
+        fixtureId: record.fixtureId,
+        engine: record.engine.name,
+        market: record.market,
+        probability: probability,
+        firstSeenAt: record.firstSeenAt.toUtc(),
+        kickoffAt: record.matchDate.toUtc(),
+      ),
+    );
     await _saveDrafts();
     return true;
   }
@@ -195,6 +208,36 @@ class GoalVdLineCentralLearningOutbox {
     if (!_consent) return const [];
     await _removeExpiredAndPersist();
     return List.unmodifiable(_pending);
+  }
+
+  /// Rimuove solo draft esattamente confermati dall'endpoint mobile.
+  /// Prima persiste il nuovo stato; se fallisce, la vecchia coda resta intatta.
+  Future<void> confirmDelivered(
+    Iterable<GoalVdLineLearningDraft> confirmed,
+  ) async {
+    await initialize();
+    if (!_consent) return;
+    final accepted = confirmed
+        .map((draft) => jsonEncode(draft.toJson()))
+        .toSet();
+    final retained = _pending
+        .where((draft) => !accepted.contains(jsonEncode(draft.toJson())))
+        .toList();
+    if (retained.length == _pending.length) return;
+    final prefs = _preferences!;
+    final bool saved;
+    if (retained.isEmpty) {
+      saved = await prefs.remove(_draftsKey);
+    } else {
+      saved = await prefs.setString(
+        _draftsKey,
+        jsonEncode(retained.map((draft) => draft.toJson()).toList()),
+      );
+    }
+    if (!saved) throw StateError('Conferma locale non persistita.');
+    _pending
+      ..clear()
+      ..addAll(retained);
   }
 
   Future<void> _removeExpiredAndPersist() async {
