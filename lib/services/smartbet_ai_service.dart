@@ -10,6 +10,8 @@ import '../ai/decision_engine.dart';
 import 'goalvdline_comparison_store.dart';
 import 'goalvdline_shadow_service.dart';
 import 'match_dossier_builder.dart';
+import 'smartbet_contextual_shadow_capture_service.dart';
+import 'smartbet_simulation_shadow_store.dart';
 import 'odds_service.dart';
 import 'stake_engine.dart';
 import 'value_bet_calculator.dart';
@@ -186,17 +188,25 @@ class SmartBetAiService {
 
   final StakeEngine _stakeEngine;
 
+  final SmartBetContextualShadowCaptureService _contextualShadow;
+
   SmartBetAiService({
     http.Client? client,
     MatchDossierBuilder? dossierBuilder,
     OddsService? oddsService,
     ValueBetCalculator? valueBetCalculator,
     StakeEngine? stakeEngine,
+    SmartBetContextualShadowCaptureService? contextualShadow,
   }) : _client = client ?? http.Client(),
        _dossierBuilder = dossierBuilder ?? MatchDossierBuilder(),
        _oddsService = oddsService ?? OddsService(),
        _valueBetCalculator = valueBetCalculator ?? const ValueBetCalculator(),
-       _stakeEngine = stakeEngine ?? const StakeEngine();
+       _stakeEngine = stakeEngine ?? const StakeEngine(),
+       _contextualShadow =
+           contextualShadow ??
+           SmartBetContextualShadowCaptureService(
+             store: SmartBetSimulationShadowStore.instance,
+           );
 
   // ============================================================
   // BACKEND
@@ -596,7 +606,7 @@ class SmartBetAiService {
         );
       }
 
-      return _parseAnalysisResult(
+      final official = _parseAnalysisResult(
         analysis: analysis,
         match: match,
         dossierConfidence: dossier.dataConfidence,
@@ -604,6 +614,15 @@ class SmartBetAiService {
         baseResult: baseResult,
         audit: audit,
       );
+
+      // P21V: confrontiamo il contesto soltanto con dati gia' disponibili.
+      // Non cambia l'analisi ufficiale, non aggiunge API, non apprende live.
+      await _contextualShadow.capture(
+        fixtureId: match.fixtureId,
+        dossier: dossier,
+        baseline: official,
+      );
+      return official;
     } catch (e) {
       print('');
       print('========================================');

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_simulation_learning_validation_service.dart';
 import '../services/smartbet_simulation_shadow_store.dart';
+import '../services/smartbet_simulation_shadow_policy_service.dart';
+import '../services/smartbet_simulation_shadow_projection_service.dart';
 
 /// P21H: lettura locale su richiesta. Non applica pesi alle previsioni.
 class SmartBetSimulationLearningPanel extends StatefulWidget {
@@ -20,6 +22,117 @@ class _SmartBetSimulationLearningPanelState
   bool _running = false;
   String? _error;
   SmartBetSimulationLearningReport? _report;
+  bool _policyBusy = false;
+  String? _policyMessage;
+  List<SmartBetSimulationShadowPolicy> _activePolicies = const [];
+  List<SmartBetSimulationShadowProjection> _forwardPreview = const [];
+
+  Future<void> _reloadPolicyPreview() async {
+    final policies = await SmartBetSimulationShadowPolicyService()
+        .readPolicies();
+    await SmartBetSimulationShadowStore.instance.initialize();
+    final preview = const SmartBetSimulationShadowProjectionService().preview(
+      snapshots: SmartBetSimulationShadowStore.instance.snapshots,
+      policies: policies,
+      asOf: DateTime.now(),
+    );
+    if (!mounted) return;
+    setState(() {
+      _activePolicies = policies;
+      _forwardPreview = preview;
+    });
+  }
+
+  Future<void> _promoteShadow() async {
+    if (_policyBusy || _running || _report == null) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Attivare esperimenti SHADOW?'),
+        content: const Text(
+          'Le correzioni saranno salvate solo nel monitor sperimentale. '
+          'Non cambieranno schedine, quote o pronostici ufficiali. '
+          'Saranno approvate soltanto con i campioni e i controlli richiesti.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Conferma SHADOW'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || approved != true) return;
+    setState(() {
+      _policyBusy = true;
+      _policyMessage = null;
+    });
+    try {
+      final outcome = await SmartBetSimulationShadowPolicyService().refresh(
+        report: _report!,
+        optedIn: true,
+        asOf: DateTime.now(),
+      );
+      await _reloadPolicyPreview();
+      if (!mounted) return;
+      setState(
+        () => _policyMessage =
+            'Policy SHADOW: ${outcome.promoted} approvate, '
+            '${outcome.rolledBack} ritirate, ${outcome.rejected} respinte.',
+      );
+    } catch (error) {
+      if (mounted)
+        setState(() => _policyMessage = 'Policy non disponibili: $error');
+    } finally {
+      if (mounted) setState(() => _policyBusy = false);
+    }
+  }
+
+  Future<void> _disablePolicies() async {
+    if (_policyBusy || _running) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ritirare tutte le policy SHADOW?'),
+        content: const Text(
+          'Questa operazione cancella soltanto i pesi sperimentali locali. '
+          'Non modifica storico, snapshot o schedine ufficiali.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Ritira policy'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || approved != true) return;
+    setState(() {
+      _policyBusy = true;
+      _policyMessage = null;
+    });
+    try {
+      await SmartBetSimulationShadowPolicyService().disableAll();
+      await _reloadPolicyPreview();
+      if (mounted)
+        setState(
+          () => _policyMessage = 'Tutte le policy SHADOW sono state ritirate.',
+        );
+    } catch (error) {
+      if (mounted)
+        setState(() => _policyMessage = 'Rollback non riuscito: $error');
+    } finally {
+      if (mounted) setState(() => _policyBusy = false);
+    }
+  }
 
   Future<void> _runLocalValidation() async {
     if (_running) return;
@@ -36,6 +149,19 @@ class _SmartBetSimulationLearningPanelState
               ).evaluateStored());
       if (!mounted) return;
       setState(() => _report = report);
+      // Nei test con report iniettato non leggere gli archivi locali.
+      // Nel flusso reale le policy SHADOW restano attive.
+      if (widget.loadReport == null) {
+        try {
+          await _reloadPolicyPreview();
+        } catch (error) {
+          if (mounted) {
+            setState(
+              () => _policyMessage = 'Lettura policy non disponibile: $error',
+            );
+          }
+        }
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -91,6 +217,55 @@ class _SmartBetSimulationLearningPanelState
           if (_report != null) ...[
             const SizedBox(height: 12),
             SmartBetSimulationLearningReportView(report: _report!),
+            const SizedBox(height: 10),
+            const Divider(),
+            const Text(
+              'Policy sperimentali P21L • approvazione manuale, '
+              'solo SHADOW. Nessun effetto sui pronostici ufficiali.',
+              key: ValueKey('p21v_policy_heading'),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('p21v_promote_shadow'),
+                  onPressed: (_running || _policyBusy) ? null : _promoteShadow,
+                  icon: const Icon(Icons.science_outlined),
+                  label: const Text('Valuta e approva policy SHADOW'),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('p21v_disable_shadow'),
+                  onPressed: (_running || _policyBusy)
+                      ? null
+                      : _disablePolicies,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Ritira tutte le policy'),
+                ),
+              ],
+            ),
+            if (_policyBusy) const LinearProgressIndicator(),
+            if (_policyMessage != null)
+              Text(_policyMessage!, key: const ValueKey('p21v_policy_message')),
+            Text('Policy sperimentali attuali: ${_activePolicies.length}'),
+            if (_forwardPreview.isNotEmpty) ...[
+              const Text(
+                'Proiezioni SHADOW su partite ancora da iniziare '
+                '(policy promossa prima dello snapshot):',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              for (final p in _forwardPreview)
+                Text(
+                  '#${p.fixtureId} ${p.engine} • ${p.market}: '
+                  '${(p.projected * 100).toStringAsFixed(1)}% SHADOW '
+                  '(originale ${(p.original * 100).toStringAsFixed(1)}%)',
+                ),
+            ] else
+              const Text(
+                'Nessuna proiezione futura valida per le policy attuali. '
+                'Servono nuovi snapshot prepartita acquisiti DOPO la promozione.',
+              ),
           ] else if (!_running)
             const Padding(
               padding: EdgeInsets.only(top: 8),
