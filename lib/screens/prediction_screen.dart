@@ -19,6 +19,7 @@ import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../services/smartbet_prediction_quantity_policy.dart';
+import '../widgets/goalvdline_competition_groups.dart';
 
 enum _PredictionPeriod { today, next2Days, next3Days, custom }
 
@@ -1835,9 +1836,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              ...List.generate(
-                _results.length,
-                (index) => _resultCard(_results[index], index + 1),
+              GoalVdLineCompetitionGroups<_DailyPick>(
+                namespace: 'daily-top-picks',
+                items: _results,
+                countryOf: (item) => item.match.country,
+                leagueOf: (item) => item.match.league,
+                dateOf: (item) => item.match.date,
+                itemBuilder: (_, item) =>
+                    _resultCard(item, _results.indexOf(item) + 1),
               ),
               if (!_loading && _results.length < _wantedResults) ...[
                 const SizedBox(height: 10),

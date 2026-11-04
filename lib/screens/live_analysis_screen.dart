@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../ai/live_analysis_engine.dart';
 import '../services/live_match_service.dart';
+import '../widgets/goalvdline_competition_groups.dart';
 
 class LiveAnalysisScreen extends StatefulWidget {
   const LiveAnalysisScreen({super.key});
@@ -418,8 +419,13 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
                       ],
                     ),
                   ),
-                ...visibleMatches.map(
-                  (match) => Padding(
+                GoalVdLineCompetitionGroups<LiveMatchSummary>(
+                  namespace: 'live-matches',
+                  items: visibleMatches,
+                  countryOf: (match) => match.country,
+                  leagueOf: (match) => match.leagueName,
+                  // Il DTO Live non espone il kickoff: conserva l'ordine API.
+                  itemBuilder: (_, match) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
