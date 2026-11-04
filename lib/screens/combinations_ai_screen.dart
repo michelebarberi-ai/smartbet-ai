@@ -19,6 +19,8 @@ import '../services/smartbet_reliability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_x_premium_service.dart';
+import '../services/smartbet_multimarket_ranking_service.dart';
+import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
@@ -121,6 +123,12 @@ class _XPremiumDisplayItem {
   const _XPremiumDisplayItem({required this.match, required this.assessment});
 }
 
+class _MultiMarketDisplayItem {
+  final MatchModel match;
+  final SmartBetRankedMultiMarketFixture ranking;
+  const _MultiMarketDisplayItem({required this.match, required this.ranking});
+}
+
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -142,7 +150,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   int _systemCombinationCount = 5;
 
   // P21F: percorso separato, mai attivato automaticamente.
+  bool _multiMarketRankingEnabled = false;
+  final Set<String> _multiMarketFamilies = <String>{'1X2', 'GOAL', 'OVER'};
+  final List<_MultiMarketDisplayItem> _multiMarketResults = [];
+  final SmartBetMultiMarketRankingService _multiMarketRanker =
+      const SmartBetMultiMarketRankingService();
   bool _xPremiumEnabled = false;
+  // P21U: l'utente indica soltanto il numero di risultati, mai le fixture.
+  // I candidati si caricano esclusivamente dopo AVVIA.
+  int _autoAvailableCount = 0;
+  int _autoExaminedCount = 0;
+  int _autoDeepCount = 0;
   bool _xPremiumChoosing = false;
   final Map<int, MatchModel> _xPremiumSelectedMatches = <int, MatchModel>{};
   final List<_XPremiumDisplayItem> _xPremiumResults = <_XPremiumDisplayItem>[];
@@ -888,6 +906,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _results.clear();
       _xPremiumSelectedMatches.clear();
       _xPremiumResults.clear();
+      _multiMarketResults.clear();
 
       _errorMessage = null;
       _processed = 0;
@@ -1128,144 +1147,116 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   }
 
   // ============================================================
-  // P21F — X PREMIUM (selezione manuale e risultati completi)
+  // P21U — X PREMIUM (numero richiesto e selezione automatica)
   // ============================================================
 
-  Future<void> _chooseXPremiumMatches() async {
-    if (_loading || _xPremiumChoosing) return;
-    setState(() => _xPremiumChoosing = true);
-    try {
-      final fixtures = (await _loadMatchesForSelectedPeriod())
-          .where(
-            (match) =>
-                _isUpcoming(match) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
-                (_selectedCompetitionKeys.isEmpty ||
-                    _selectedCompetitionKeys.contains(
-                      CompetitionFilterSheet.keyFor(match),
-                    )),
-          )
-          .toList();
-      if (!mounted) return;
-      if (fixtures.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nessuna partita futura nel periodo scelto.'),
-          ),
-        );
-        return;
-      }
-      // La scelta e' esplicita e limitata a 15 fixture per controllare i costi.
-      final selected = _xPremiumSelectedMatches.keys
-          .where((id) => fixtures.any((match) => match.fixtureId == id))
-          .toSet();
-      final confirmed = await showDialog<Set<int>>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, updateDialog) => AlertDialog(
-            backgroundColor: const Color(0xFF1F2937),
-            title: const Text(
-              'Scegli fino a 15 partite',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: MediaQuery.sizeOf(dialogContext).height * 0.57,
-              child: Column(
-                children: [
-                  Text(
-                    '${selected.length} selezionate • nessuna analisi automatica',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: fixtures.length,
-                      itemBuilder: (context, index) {
-                        final match = fixtures[index];
-                        final checked = selected.contains(match.fixtureId);
-                        return CheckboxListTile(
-                          value: checked,
-                          activeColor: const Color(0xFF00C853),
-                          checkColor: Colors.black,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          title: Text(
-                            '${match.homeTeam} - ${match.awayTeam}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '${match.league} • ${_formatDate(match.date)}',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 10,
-                            ),
-                          ),
-                          onChanged: (checked || selected.length < 15)
-                              ? (value) => updateDialog(() {
-                                  if (value == true) {
-                                    selected.add(match.fixtureId);
-                                  } else {
-                                    selected.remove(match.fixtureId);
-                                  }
-                                })
-                              : null,
-                        );
-                      },
+  /// P21U — Preselezione automatica, senza quote e senza pop-up di fixture.
+  /// Il filtro del palinsesto e quello dei campionati rimangono dell'utente.
+  /// Esegue le valutazioni solo dopo il tap sul pulsante AVVIA.
+  Future<List<MatchModel>> _automaticCandidatePool({
+    required bool drawOnly,
+  }) async {
+    final fixtures = (await _loadMatchesForSelectedPeriod())
+        .where(
+          (match) =>
+              match.fixtureId > 0 &&
+              _isUpcoming(match) &&
+              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
+              (_selectedCompetitionKeys.isEmpty ||
+                  _selectedCompetitionKeys.contains(
+                    CompetitionFilterSheet.keyFor(match),
+                  )),
+        )
+        .toList();
+    _autoAvailableCount = fixtures.length;
+    _autoExaminedCount = 0;
+    _autoDeepCount = 0;
+    if (fixtures.isEmpty) return const <MatchModel>[];
+
+    // Budget esplicito: la ricerca non puo' produrre centinaia di
+    // analisi avanzate in un solo tocco. Ordinamento iniziale per data,
+    // senza pregiudizi legati alle quote o ai campionati.
+    const maxPreliminary = 45;
+    const maxDeep = 30;
+    final preliminaryFixtures = fixtures.take(maxPreliminary).toList();
+    final preliminary = <SmartBetAutomaticFixtureEstimate>[];
+    final byId = <int, MatchModel>{};
+    for (
+      var start = 0;
+      start < preliminaryFixtures.length;
+      start += _batchSize
+    ) {
+      final end = math.min(start + _batchSize, preliminaryFixtures.length);
+      final batch = preliminaryFixtures.sublist(start, end);
+      final estimates = await Future.wait(
+        batch.map((match) async {
+          AnalysisResult? base;
+          try {
+            base = await _analysisCache.read(match.fixtureId);
+            base ??= await SmartCore.analyze(match);
+          } catch (error) {
+            debugPrint('P21U preliminare ${match.fixtureId}: $error');
+          }
+          double? probability;
+          final quality = base == null || base.dataConfidence <= 0
+              ? null
+              : (base.dataConfidence / 100).clamp(0.0, 1.0).toDouble();
+          if (base != null) {
+            if (drawOnly) {
+              final estimate = base.drawProbability;
+              if (estimate > 0 && estimate <= 100) probability = estimate / 100;
+            } else {
+              try {
+                final preliminaryRank = _multiMarketRanker.rank(
+                  selectedMatches: [
+                    SmartBetMultiMarketFixture(
+                      fixtureId: match.fixtureId,
+                      analysis: base,
                     ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('ANNULLA'),
-              ),
-              FilledButton(
-                onPressed: () =>
-                    Navigator.pop(dialogContext, Set<int>.of(selected)),
-                child: const Text('CONFERMA'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (!mounted || confirmed == null) return;
-      setState(() {
-        _xPremiumSelectedMatches
-          ..clear()
-          ..addEntries(
-            fixtures
-                .where((match) => confirmed.contains(match.fixtureId))
-                .map((match) => MapEntry(match.fixtureId, match)),
+                  ],
+                  families: _multiMarketFamilies.toList(growable: false),
+                );
+                probability = preliminaryRank.single.selection?.probability;
+              } catch (error) {
+                debugPrint(
+                  'P21U ranking preliminare ${match.fixtureId}: $error',
+                );
+              }
+            }
+          }
+          return SmartBetAutomaticFixtureEstimate(
+            fixtureId: match.fixtureId,
+            probability: probability,
+            dataQuality: quality,
           );
-        _xPremiumResults.clear();
-        _processed = 0;
-        _total = 0;
-        _errors = 0;
-        _errorMessage = null;
+        }),
+      );
+      preliminary.addAll(estimates);
+      _autoExaminedCount = preliminary.length;
+      if (!mounted) return const <MatchModel>[];
+      setState(() {
+        _processed = _autoExaminedCount;
+        _total = preliminaryFixtures.length;
       });
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_friendlyErrorMessage(error))));
-      }
-    } finally {
-      if (mounted) setState(() => _xPremiumChoosing = false);
     }
+    for (final match in preliminaryFixtures) {
+      byId[match.fixtureId] = match;
+    }
+    final shortlist = const SmartBetAutoFixtureSelectionService().shortlist(
+      candidates: preliminary,
+      requestedCount: _topCount,
+      maxDeepAnalyses: maxDeep,
+    );
+    _autoDeepCount = shortlist.length;
+    return [for (final id in shortlist) byId[id]!];
   }
 
   Future<void> _findXPremium() async {
-    if (_loading || _xPremiumSelectedMatches.isEmpty) return;
-    final matches = _xPremiumSelectedMatches.values.toList(growable: false);
+    if (_loading) return;
     setState(() {
       _loading = true;
       _processed = 0;
-      _total = matches.length;
+      _total = 0;
       _errors = 0;
       _errorMessage = null;
       _xPremiumResults.clear();
@@ -1274,6 +1265,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final resultByFixture = <int, _XPremiumDisplayItem>{};
     try {
+      final matches = await _automaticCandidatePool(drawOnly: true);
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(
+          () => _errorMessage =
+              'Nessuna partita futura disponibile nei filtri scelti.',
+        );
+        return;
+      }
+      setState(() {
+        _processed = 0;
+        _total = matches.length;
+      });
       for (var start = 0; start < matches.length; start += _batchSize) {
         final end = math.min(start + _batchSize, matches.length);
         final batch = matches.sublist(start, end);
@@ -1356,7 +1360,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       setState(() {
         _xPremiumResults
           ..clear()
-          ..addAll(sorted.map((entry) => resultByFixture[entry.fixtureId]!));
+          ..addAll(
+            sorted
+                .take(_topCount)
+                .map((entry) => resultByFixture[entry.fixtureId]!),
+          );
       });
     } catch (error) {
       if (mounted) {
@@ -1365,6 +1373,56 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Widget _automaticCountSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'QUANTE PARTITE VUOI?',
+              style: TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              '$_topCount',
+              style: const TextStyle(
+                color: Color(0xFF00C853),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: _topCount.toDouble(),
+          min: 3,
+          max: 15,
+          divisions: 12,
+          label: '$_topCount partite',
+          onChanged: _loading
+              ? null
+              : (value) => setState(() {
+                  _topCount = value.round();
+                  _xPremiumResults.clear();
+                  _multiMarketResults.clear();
+                }),
+        ),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('3', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            Text('15', style: TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _xPremiumControls() {
@@ -1387,46 +1445,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ),
           const SizedBox(height: 7),
           const Text(
-            'Seleziona esplicitamente fino a 15 partite nel periodo e nei campionati scelti. '
-            'Il motore le mostrera tutte, divise in X prioritarie e altre X. '
-            'La prima valutazione usa xG e qualita dati, non ancora tattiche minuto per minuto.',
+            'Scegli solo il numero di partite. GoalVdLine ricerca automaticamente '
+            'le X piu favorevoli nel periodo e nei campionati impostati, '
+            'poi mostra anche quelle meno affidabili fino al numero richiesto.',
             style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: (_loading || _xPremiumChoosing)
-                  ? null
-                  : _chooseXPremiumMatches,
-              icon: _xPremiumChoosing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.checklist),
-              label: Text(
-                _xPremiumChoosing
-                    ? 'CARICAMENTO PARTITE...'
-                    : 'SCEGLI PARTITE (${_xPremiumSelectedMatches.length}/15)',
-              ),
-            ),
-          ),
-          if (_xPremiumSelectedMatches.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              _xPremiumSelectedMatches.values
-                  .map((match) => '${match.homeTeam} - ${match.awayTeam}')
-                  .join(' • '),
-              style: const TextStyle(color: Colors.white60, fontSize: 10),
-            ),
-          ],
-          const SizedBox(height: 7),
+          _automaticCountSelector(),
+          const SizedBox(height: 8),
           const Text(
-            'L’analisi parte solo premendo AVVIA. Cache riutilizzata; '
-            'nuove analisi avanzate possono consumare richieste API. '
-            'Nessun filtro sulle quote.',
+            'L’analisi parte solo premendo AVVIA. Esamina fino a 45 '
+            'candidate preliminari e ne approfondisce al massimo 30. '
+            'Nuove analisi possono consumare richieste API; nessuna quota guida il modello.',
             style: TextStyle(color: Colors.white54, fontSize: 10, height: 1.4),
           ),
         ],
@@ -1513,12 +1542,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       children: [
         const SizedBox(height: 23),
         Text(
-          'X PREMIUM: ${_xPremiumResults.length} partite esaminate',
+          'X PREMIUM: ${_xPremiumResults.length} partite richieste',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 19,
             fontWeight: FontWeight.bold,
           ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const SizedBox(height: 6),
         const Text(
@@ -1554,6 +1589,338 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         ),
         for (final item in others)
           _xPremiumCard(item, _xPremiumResults.indexOf(item) + 1),
+      ],
+    );
+  }
+
+  // ============================================================
+  // P21K — RANKING MULTIMERCATO DELLE PARTITE SCELTE
+  // ============================================================
+
+  Future<void> _findMultiMarketRanking() async {
+    if (_loading || _multiMarketFamilies.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _processed = 0;
+      _total = 0;
+      _errors = 0;
+      _errorMessage = null;
+      _multiMarketResults.clear();
+      _results.clear();
+      _systemResults.clear();
+    });
+    final analyzed = <int, SmartBetMultiMarketFixture>{};
+    try {
+      final matches = await _automaticCandidatePool(drawOnly: false);
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(
+          () => _errorMessage =
+              'Nessuna partita futura disponibile nei filtri scelti.',
+        );
+        return;
+      }
+      setState(() {
+        _processed = 0;
+        _total = matches.length;
+      });
+      for (var start = 0; start < matches.length; start += _batchSize) {
+        final end = math.min(start + _batchSize, matches.length);
+        final batch = matches.sublist(start, end);
+        final items = await Future.wait(
+          batch.map((match) async {
+            if (!_isUpcoming(match)) {
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: null,
+              );
+            }
+            try {
+              var result = await _analysisCache.read(match.fixtureId);
+              if (result == null) {
+                result = await _aiService.analyzeMatch(
+                  match,
+                  runAudit: false,
+                  automaticMode: false,
+                );
+                if (result.smartScore > 0) {
+                  await _analysisCache.write(match.fixtureId, result);
+                }
+              }
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: result,
+              );
+            } catch (error) {
+              debugPrint('P21K: fixture ${match.fixtureId}: $error');
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: null,
+              );
+            }
+          }),
+        );
+        for (final item in items) {
+          analyzed[item.fixtureId] = item;
+        }
+        if (!mounted) return;
+        setState(() {
+          _processed = end;
+          _errors = analyzed.values
+              .where((item) => item.analysis == null)
+              .length;
+        });
+      }
+      // La ranking API limita un singolo gruppo a 15 fixture: confrontiamo
+      // separatamente le candidate della shortlist (fino a 30) e ordiniamo
+      // globalmente con gli stessi criteri, senza modificare il contratto.
+      final ranked = <SmartBetRankedMultiMarketFixture>[];
+      for (final match in matches) {
+        ranked.addAll(
+          _multiMarketRanker.rank(
+            selectedMatches: [analyzed[match.fixtureId]!],
+            families: _multiMarketFamilies.toList(growable: false),
+          ),
+        );
+      }
+      ranked.sort((a, b) {
+        final band = a.band.index.compareTo(b.band.index);
+        if (band != 0) return band;
+        final probability = (b.selection?.probability ?? -1).compareTo(
+          a.selection?.probability ?? -1,
+        );
+        if (probability != 0) return probability;
+        final quality = (b.dataQuality ?? -1).compareTo(a.dataQuality ?? -1);
+        return quality != 0 ? quality : a.fixtureId.compareTo(b.fixtureId);
+      });
+      final matchesById = {for (final match in matches) match.fixtureId: match};
+
+      // Usa la registrazione gia esistente per le selezioni supportate.
+      // Lo snapshot P21C salva anche le probabilita delle alternative note.
+      for (final item in ranked) {
+        final match = matchesById[item.fixtureId]!;
+        final analysis = analyzed[item.fixtureId]?.analysis;
+        final selection = item.selection;
+        if (analysis == null || selection == null || !_isUpcoming(match))
+          continue;
+        try {
+          final originalProbability = _probabilityFor(
+            analysis,
+            selection.market,
+          );
+          if (originalProbability > 0 && originalProbability <= 100) {
+            await SmartBetAnalysisRegistrationService().registerSelection(
+              match: match,
+              smartBet: analysis,
+              source: SmartBetAnalysisSource.combinations,
+              smartBetMarket: selection.market,
+              smartBetProbabilityPercent: originalProbability,
+            );
+          }
+        } catch (error) {
+          debugPrint('P21K shadow registration ${match.fixtureId}: $error');
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _multiMarketResults
+          ..clear()
+          ..addAll(
+            ranked
+                .take(_topCount)
+                .map(
+                  (item) => _MultiMarketDisplayItem(
+                    match: matchesById[item.fixtureId]!,
+                    ranking: item,
+                  ),
+                ),
+          );
+      });
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = _friendlyErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _multiMarketControls() {
+    const allFamilies = [
+      '1X2',
+      'DOPPIA CHANCE',
+      'OVER',
+      'UNDER',
+      'GOAL',
+      'MULTIGOL',
+      'SEGNA',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF00C853).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ANALISI MULTIMERCATO — MAX 3 FAMIGLIE',
+            style: TextStyle(
+              color: Color(0xFF00C853),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Scegli quante partite vuoi. GoalVdLine le individua '
+            'automaticamente nei campionati e nel periodo selezionati. '
+            'Le stime sono sportive, senza quote.',
+            style: TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 7,
+            runSpacing: 6,
+            children: [
+              for (final family in allFamilies)
+                FilterChip(
+                  label: Text(family),
+                  selected: _multiMarketFamilies.contains(family),
+                  onSelected: _loading
+                      ? null
+                      : (selected) {
+                          if (selected && _multiMarketFamilies.length >= 3)
+                            return;
+                          setState(() {
+                            if (selected) {
+                              _multiMarketFamilies.add(family);
+                            } else {
+                              _multiMarketFamilies.remove(family);
+                            }
+                            _multiMarketResults.clear();
+                          });
+                        },
+                ),
+            ],
+          ),
+          _automaticCountSelector(),
+          const SizedBox(height: 8),
+          const Text(
+            'Il pulsante AVVIA e l unico che avvia nuove analisi. '
+            'Senza quote si ordina per probabilita stimata, non per rendimento.',
+            style: TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _multiMarketResultList() {
+    final primary = _multiMarketResults
+        .where((x) => x.ranking.band == SmartBetFixtureBand.priority)
+        .toList();
+    final others = _multiMarketResults
+        .where((x) => x.ranking.band != SmartBetFixtureBand.priority)
+        .toList();
+    Widget card(_MultiMarketDisplayItem item) {
+      final selection = item.ranking.selection;
+      final quality = item.ranking.dataQuality;
+      final priority = item.ranking.band == SmartBetFixtureBand.priority;
+      final color = priority ? const Color(0xFF00C853) : Colors.orangeAccent;
+      final alternatives = item.ranking.alternatives
+          .map(
+            (option) =>
+                '${option.market} '
+                '${(option.probability * 100).toStringAsFixed(1)}%',
+          )
+          .join(' • ');
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${item.match.homeTeam} - ${item.match.awayTeam}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              item.match.league,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              selection == null
+                  ? 'Nessuna simulazione valida'
+                  : '${selection.market} • '
+                        '${(selection.probability * 100).toStringAsFixed(1)}%',
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Qualita dati: ${quality == null ? 'N/D' : '${(quality * 100).toStringAsFixed(0)}%'} '
+              '• ${item.ranking.reason}',
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            if (alternatives.isNotEmpty)
+              Text(
+                'Alternative: $alternatives',
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Text(
+          'MULTIMERCATO: ${_multiMarketResults.length} partite richieste',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        const Text(
+          'Livelli operativi, non probabilita di vincita garantita.',
+          style: TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'PIU FAVOREVOLI (${primary.length})',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        for (final item in primary) card(item),
+        const SizedBox(height: 12),
+        Text(
+          'ALTRE PARTITE (${others.length})',
+          style: const TextStyle(
+            color: Colors.orangeAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        for (final item in others) card(item),
       ],
     );
   }
@@ -3777,9 +4144,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           const SizedBox(height: 8),
 
           Text(
-            _xPremiumEnabled
-                ? 'Scegli fino a 15 partite e avvia manualmente la simulazione '
-                      'dei pareggi. Nessuna partita selezionata viene nascosta.'
+            _multiMarketRankingEnabled
+                ? 'Indica quante partite vuoi: GoalVdLine cerca automaticamente le migliori per i mercati consentiti.'
+                : _xPremiumEnabled
+                ? 'Indica quante partite vuoi e premi AVVIA: GoalVdLine individua automaticamente le X piu favorevoli.'
                 : 'Scegli un mercato e GoalVdLine scansionera le partite del periodo '
                       'selezionato, mostrando quelle con la probabilita piu alta '
                       'nella pre-analisi.',
@@ -3789,7 +4157,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           const SizedBox(height: 8),
 
           Text(
-            _xPremiumEnabled
+            _multiMarketRankingEnabled
+                ? 'Ranking multimercato: probabilita sportive senza quote.'
+                : _xPremiumEnabled
                 ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
                 : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
@@ -3866,6 +4236,35 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text(
+              'RANKING MULTIMERCATO — AUTOMATICO',
+              style: TextStyle(
+                color: Color(0xFF00C853),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: const Text(
+              'Scegli fino a 3 famiglie e il numero di partite.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            value: _multiMarketRankingEnabled,
+            activeThumbColor: const Color(0xFF00C853),
+            onChanged: (_loading || _xPremiumChoosing)
+                ? null
+                : (value) {
+                    setState(() {
+                      _multiMarketRankingEnabled = value;
+                      if (value) _xPremiumEnabled = false;
+                      _multiMarketResults.clear();
+                      _xPremiumResults.clear();
+                      _results.clear();
+                      _systemResults.clear();
+                      _errorMessage = null;
+                    });
+                  },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
               'X PREMIUM — INTELLIGENZA PAREGGI',
               style: TextStyle(
                 color: Colors.orangeAccent,
@@ -3883,6 +4282,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 : (value) {
                     setState(() {
                       _xPremiumEnabled = value;
+                      if (value) _multiMarketRankingEnabled = false;
+                      _multiMarketResults.clear();
                       _xPremiumResults.clear();
                       _results.clear();
                       _systemResults.clear();
@@ -3893,9 +4294,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     });
                   },
           ),
-          if (_xPremiumEnabled) _xPremiumControls() else _marketSelector(),
+          if (_xPremiumEnabled)
+            _xPremiumControls()
+          else if (_multiMarketRankingEnabled)
+            _multiMarketControls()
+          else
+            _marketSelector(),
 
-          if (!_xPremiumEnabled && _selectedMarket == 'COMBO CHANCE') ...[
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              _selectedMarket == 'COMBO CHANCE') ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -3933,7 +4341,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (!_xPremiumEnabled) ...[
+          if (!_xPremiumEnabled && !_multiMarketRankingEnabled) ...[
             const SizedBox(height: 20),
 
             const Text(
@@ -4051,12 +4459,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               onPressed:
                   (_loading ||
                       _checkingOdds ||
-                      _xPremiumChoosing ||
-                      (_xPremiumEnabled
-                          ? _xPremiumSelectedMatches.isEmpty
-                          : _selectedMarkets.isEmpty))
+                      (_multiMarketRankingEnabled &&
+                          _multiMarketFamilies.isEmpty) ||
+                      (!_xPremiumEnabled &&
+                          !_multiMarketRankingEnabled &&
+                          _selectedMarkets.isEmpty))
                   ? null
-                  : (_xPremiumEnabled ? _findXPremium : _findCombinations),
+                  : (_xPremiumEnabled
+                        ? _findXPremium
+                        : _multiMarketRankingEnabled
+                        ? _findMultiMarketRanking
+                        : _findCombinations),
               icon: _loading
                   ? const SizedBox(
                       width: 18,
@@ -4068,7 +4481,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 _loading
                     ? 'RICERCA IN CORSO...'
                     : _xPremiumEnabled
-                    ? 'AVVIA X PREMIUM • ${_xPremiumSelectedMatches.length} PARTITE'
+                    ? 'AVVIA X PREMIUM • $_topCount PARTITE'
+                    : _multiMarketRankingEnabled
+                    ? 'AVVIA MULTIMERCATO • $_topCount PARTITE'
                     : _outputMode == _CombinationOutputMode.system
                     ? 'CREA SISTEMA $_selectedMarketLabel'
                     : 'TROVA LE MIGLIORI '
@@ -4128,7 +4543,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           if (_xPremiumEnabled && _xPremiumResults.isNotEmpty)
             _xPremiumResultList(),
 
-          if (!_xPremiumEnabled && _results.isNotEmpty) ...[
+          if (_multiMarketRankingEnabled && _multiMarketResults.isNotEmpty)
+            _multiMarketResultList(),
+
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              _results.isNotEmpty) ...[
             const SizedBox(height: 24),
 
             if (_outputMode == _CombinationOutputMode.system &&
