@@ -29,6 +29,54 @@ class LearningRepository {
     return result.rowCount === 1;
   }
 
+  async insertClientCredential({clientId, tokenHash, expiresAt}) {
+    await this.pool.query(
+      `INSERT INTO sb_learning_clients_v1 (client_id, token_hash, expires_at)
+       VALUES ($1,$2,$3)`, [clientId, tokenHash, expiresAt]
+    );
+  }
+
+  async findValidClient(tokenHash, now) {
+    const result = await this.pool.query(
+      `SELECT client_id FROM sb_learning_clients_v1
+       WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL
+       LIMIT 1`, [tokenHash, now]
+    );
+    return result.rows.length ? result.rows[0].client_id : null;
+  }
+
+  async revokeClient(clientId) {
+    const result = await this.pool.query(
+      `UPDATE sb_learning_clients_v1 SET revoked_at=now()
+       WHERE client_id=$1 AND revoked_at IS NULL`, [clientId]
+    );
+    return result.rowCount > 0;
+  }
+
+  // Authenticated deletion: predictions and device credential are revoked
+  // atomically. Original app history is unaffected.
+  async eraseClient({clientId, subjectHash}) {
+    const connection = await this.pool.connect();
+    try {
+      await connection.query('BEGIN');
+      const deleted = await connection.query(
+        `DELETE FROM sb_learning_predictions_v1 WHERE subject_hash=$1`,
+        [subjectHash]
+      );
+      await connection.query(
+        `UPDATE sb_learning_clients_v1 SET revoked_at=now()
+         WHERE client_id=$1 AND revoked_at IS NULL`, [clientId]
+      );
+      await connection.query('COMMIT');
+      return deleted.rowCount;
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async pendingFixtureIds(limit, now) {
     const result = await this.pool.query(
       `SELECT fixture_id FROM sb_learning_predictions_v1

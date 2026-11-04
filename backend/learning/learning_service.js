@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const {
   validateBatch, hashClientId, fixtureBeforeKickoff, finishedScore, settleMarket,
 } = require('./learning_core');
@@ -46,6 +48,44 @@ class LearningService {
     return {status: 200, body: {success: true, accepted: inserted, duplicates: validated.predictions.length - inserted}};
   }
 
+  // P23B2A: admin creates opaque, scoped device credentials; the admin key
+  // must never be distributed to any mobile app.
+  async provisionMobileClient() {
+    await this.repository.initialize();
+    const clientId = crypto.randomUUID();
+    const token = crypto.randomBytes(32).toString('base64url');
+    const expiresAt = new Date(this.now().getTime() + 30 * 24 * 60 * 60 * 1000);
+    await this.repository.insertClientCredential({
+      clientId, tokenHash: mobileTokenHash(token), expiresAt,
+    });
+    return {success: true, clientId, token, expiresAt: expiresAt.toISOString(),
+      scope: 'learning:predictions', expiresInDays: 30};
+  }
+
+  async authenticateMobileToken(token) {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token || '')) return null;
+    await this.repository.initialize();
+    return this.repository.findValidClient(mobileTokenHash(token), this.now());
+  }
+
+  async revokeMobileClient(clientId) {
+    if (typeof clientId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+      return {status: 400, body: {success: false, error: 'Client non valido.'}};
+    }
+    await this.repository.initialize();
+    const revoked = await this.repository.revokeClient(clientId);
+    return {status: 200, body: {success: true, revoked}};
+  }
+
+  async eraseMobileClient(clientId) {
+    await this.repository.initialize();
+    const deleted = await this.repository.eraseClient({
+      clientId, subjectHash: hashClientId(clientId, this.subjectSalt),
+    });
+    return {success: true, deleted};
+  }
+
   async resolve(maxFixtures = 20) {
     await this.repository.initialize();
     const ids = await this.repository.pendingFixtureIds(Math.min(Math.max(maxFixtures, 1), 20), this.now());
@@ -88,4 +128,8 @@ class LearningService {
   }
 }
 
-module.exports = {LearningService};
+function mobileTokenHash(token) {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+module.exports = {LearningService, mobileTokenHash};

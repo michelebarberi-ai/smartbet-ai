@@ -23,3 +23,17 @@ CREATE INDEX IF NOT EXISTS sb_learning_pending_check_v1
   WHERE status='pending';
 CREATE INDEX IF NOT EXISTS sb_learning_pending_v1 ON sb_learning_predictions_v1 (kickoff_at, fixture_id) WHERE status='pending';
 CREATE INDEX IF NOT EXISTS sb_learning_market_v1 ON sb_learning_predictions_v1 (engine, market, fixture_id) WHERE status!='pending';
+
+-- P23B2A: opaque, admin-provisioned mobile credentials.
+-- No raw access tokens are stored (only SHA-256 digests of 256-bit tokens).
+-- No public self-enrollment, and no identity or contact information.
+CREATE TABLE IF NOT EXISTS sb_learning_clients_v1 (
+  client_id UUID PRIMARY KEY,
+  token_hash CHAR(64) UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS sb_learning_clients_valid_v1
+  ON sb_learning_clients_v1 (expires_at)
+  WHERE revoked_at IS NULL;
