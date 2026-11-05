@@ -42,15 +42,6 @@ class _ScorersScreenState extends State<ScorersScreen> {
   int _total = 0;
 
   @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _generate();
-    });
-  }
-
-  @override
   void dispose() {
     _service.dispose();
     super.dispose();
@@ -231,8 +222,6 @@ class _ScorersScreenState extends State<ScorersScreen> {
       _processed = 0;
       _total = 0;
     });
-
-    await _generate();
   }
 
   Future<void> _generate() async {
@@ -592,18 +581,22 @@ class _ScorersScreenState extends State<ScorersScreen> {
                     ? null
                     : (selected) {
                         if (!selected || _wantedScorers == number) return;
-                        setState(() => _wantedScorers = number);
-                        // Un obiettivo più ampio richiede più partite candidate;
-                        // l'aggiornamento avvia esplicitamente una nuova ricerca.
-                        _generate();
+                        setState(() {
+                          _wantedScorers = number;
+                          _results.clear();
+                          _error = null;
+                          _phase = 'idle';
+                          _processed = 0;
+                          _total = 0;
+                        });
                       },
               ),
           ],
         ),
         const SizedBox(height: 6),
         const Text(
-          'Se cambi il numero viene eseguita una nuova ricerca. '
-          'Vengono mostrati solo giocatori con dati sufficienti.',
+          'Cambiare il numero non avvia analisi. '
+          'Premi AVVIA ANALISI per cercare i marcatori.',
           style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.3),
         ),
       ],
@@ -649,8 +642,6 @@ class _ScorersScreenState extends State<ScorersScreen> {
                   _processed = 0;
                   _total = 0;
                 });
-
-                await _generate();
               },
       );
     }
@@ -1088,6 +1079,49 @@ class _ScorersScreenState extends State<ScorersScreen> {
     );
   }
 
+  Widget _manualStartCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 18),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x6600C853)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.play_circle_outline,
+            color: Color(0xFF00C853),
+            size: 32,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'ANALISI SU RICHIESTA',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Nessuna analisi viene avviata automaticamente. '
+            'Controlla le opzioni e premi il pulsante quando sei pronto.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _loading ? null : _generate,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('AVVIA ANALISI'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _emptyOrError() {
     if (_error == null) {
       return const SizedBox.shrink();
@@ -1147,7 +1181,9 @@ class _ScorersScreenState extends State<ScorersScreen> {
             )
           else
             IconButton(
-              tooltip: 'Rigenera',
+              tooltip: _results.isNotEmpty || _error != null
+                  ? 'Rigenera'
+                  : 'Avvia analisi',
               onPressed: _generate,
               icon: const Icon(Icons.refresh),
             ),
@@ -1164,6 +1200,8 @@ class _ScorersScreenState extends State<ScorersScreen> {
           const SizedBox(height: 15),
           _periodSelector(),
 
+          if (!_loading && _results.isEmpty && _error == null)
+            _manualStartCard(),
           if (_loading) _progressCard(),
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 22),

@@ -21,6 +21,16 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
 
   _HistoryStatusFilter _statusFilter = _HistoryStatusFilter.all;
 
+  // Ricerca locale: nessuna interrogazione di rete e nessuna modifica allo storico.
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -28,8 +38,27 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
   }
 
   List<SmartBetAnalysisRecord> _filteredRecords() {
+    final terms = _searchQuery
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((term) => term.isNotEmpty)
+        .toList(growable: false);
+
     return _store.records
         .where((record) {
+          // Termini liberi combinabili: squadra, campionato, paese e mercato.
+          // I filtri motore/esito restano sempre operativi.
+          if (terms.isNotEmpty) {
+            final searchable = <String>[
+              record.matchLabel,
+              record.league,
+              record.country,
+              record.market,
+            ].join(' ').toLowerCase();
+            if (!terms.every(searchable.contains)) return false;
+          }
+
           if (_engineFilter == _HistoryEngineFilter.smartBet &&
               record.engine != SmartBetAnalysisEngine.smartBet) {
             return false;
@@ -133,6 +162,39 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _searchQuery = value),
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Cerca squadra, campionato o mercato',
+              hintStyle: const TextStyle(color: Colors.white54),
+              prefixIcon: const Icon(Icons.search, color: Colors.white54),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Cancella ricerca',
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    ),
+              filled: true,
+              fillColor: const Color(0xFF1F2937),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           const Text(
             'Motore',
             style: TextStyle(
@@ -541,8 +603,10 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.history_toggle_off,
+            Icon(
+              _searchQuery.trim().isEmpty
+                  ? Icons.history_toggle_off
+                  : Icons.search_off,
               color: Colors.white24,
               size: 54,
             ),
@@ -561,7 +625,10 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
               _store.records.isEmpty
                   ? 'Lo storico si popolerà automaticamente '
                         'con le prossime analisi.'
-                  : 'Prova a modificare i filtri selezionati.',
+                  : _searchQuery.trim().isNotEmpty
+                      ? 'Nessun risultato per "${_searchQuery.trim()}". '
+                            'Prova a cambiare la ricerca o i filtri.'
+                      : 'Prova a modificare i filtri selezionati.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white38,

@@ -13,6 +13,7 @@ import '../repositories/match_repository.dart';
 import 'analysis_detail_screen.dart';
 import 'smart_score_filtered_screen.dart';
 import '../services/goalvdline_comparison_sync_service.dart';
+import '../services/goalvdline_competition_order.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -503,67 +504,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // BANDIERE
   // ============================================================
 
-  String _countryFlag(String country) {
-    const flags = <String, String>{
-      "Italia": "🇮🇹",
-      "Inghilterra": "🏴",
-      "Spagna": "🇪🇸",
-      "Germania": "🇩🇪",
-      "Francia": "🇫🇷",
-      "Olanda": "🇳🇱",
-      "Paesi Bassi": "🇳🇱",
-      "Portogallo": "🇵🇹",
-      "Belgio": "🇧🇪",
-      "Turchia": "🇹🇷",
-      "USA": "🇺🇸",
-      "United States": "🇺🇸",
-      "Brasile": "🇧🇷",
-      "Argentina": "🇦🇷",
-      "Messico": "🇲🇽",
-      "Giappone": "🇯🇵",
-      "Corea del Sud": "🇰🇷",
-      "Australia": "🇦🇺",
-      "Canada": "🇨🇦",
-      "Grecia": "🇬🇷",
-      "Svizzera": "🇨🇭",
-      "Austria": "🇦🇹",
-      "Danimarca": "🇩🇰",
-      "Svezia": "🇸🇪",
-      "Norvegia": "🇳🇴",
-      "Finlandia": "🇫🇮",
-      "Polonia": "🇵🇱",
-      "Croazia": "🇭🇷",
-      "Serbia": "🇷🇸",
-      "Romania": "🇷🇴",
-      "Ucraina": "🇺🇦",
-      "Scozia": "🏴",
-      "Irlanda": "🇮🇪",
-      "Irlanda del Nord": "🇬🇧",
-      "Repubblica Ceca": "🇨🇿",
-      "Slovacchia": "🇸🇰",
-      "Ungheria": "🇭🇺",
-      "Slovenia": "🇸🇮",
-      "Bulgaria": "🇧🇬",
-      "Israele": "🇮🇱",
-      "Arabia Saudita": "🇸🇦",
-      "Emirati Arabi Uniti": "🇦🇪",
-      "Qatar": "🇶🇦",
-      "Cina": "🇨🇳",
-      "India": "🇮🇳",
-      "Sudafrica": "🇿🇦",
-      "Colombia": "🇨🇴",
-      "Cile": "🇨🇱",
-      "Perù": "🇵🇪",
-      "Ecuador": "🇪🇨",
-      "Uruguay": "🇺🇾",
-      "Paraguay": "🇵🇾",
-      "Bolivia": "🇧🇴",
-      "Costa Rica": "🇨🇷",
-    };
-
-    return flags[country] ?? "🌍";
-  }
-
   // ============================================================
   // DATA
   // ============================================================
@@ -620,16 +560,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         continue;
       }
 
-      final country = match.country.trim().isEmpty
-          ? "Altri"
-          : match.country.trim();
+      final country = GoalVdLineCompetitionOrder.displayCountry(
+        match.country,
+        match.league,
+      );
 
       grouped.putIfAbsent(country, () => []);
       grouped[country]!.add(match);
     }
 
     final entries = grouped.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+      ..sort(
+        (a, b) => GoalVdLineCompetitionOrder.compareCountries(a.key, b.key),
+      );
 
     return Map.fromEntries(entries);
   }
@@ -642,16 +585,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final grouped = <String, List<MatchModel>>{};
 
     for (final match in matches) {
-      final league = match.league.trim().isEmpty
-          ? "Competizione"
-          : match.league.trim();
+      final league = GoalVdLineCompetitionOrder.league(match.league);
 
       grouped.putIfAbsent(league, () => []);
       grouped[league]!.add(match);
     }
 
     final entries = grouped.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+      ..sort((a, b) => GoalVdLineCompetitionOrder.compareLeagues(a.key, b.key));
 
     return Map.fromEntries(entries);
   }
@@ -1592,6 +1533,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   ) {
     final key = "$country::$league";
     final expanded = _expandedLeagues.contains(key);
+    final orderedMatches = List<MatchModel>.of(matches)
+      ..sort((a, b) {
+        final byDate = GoalVdLineCompetitionOrder.compareTimes(a.date, b.date);
+        return byDate != 0 ? byDate : a.fixtureId.compareTo(b.fixtureId);
+      });
 
     return Column(
       children: [
@@ -1655,7 +1601,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ),
         ),
-        if (expanded) ...matches.map((match) => _matchCard(context, match)),
+        if (expanded)
+          ...orderedMatches.map((match) => _matchCard(context, match)),
       ],
     );
   }
@@ -1802,7 +1749,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             child: Row(
               children: [
                 Text(
-                  _countryFlag(country),
+                  GoalVdLineCompetitionOrder.flag(country),
                   style: const TextStyle(fontSize: 24),
                 ),
                 const SizedBox(width: 10),

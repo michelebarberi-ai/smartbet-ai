@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/smartbet_simulation_monitor_panel.dart';
+import '../widgets/smartbet_simulation_learning_panel.dart';
+
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_market_intelligence_audit_service.dart';
 import '../services/smartbet_paired_calibration_service.dart';
@@ -553,6 +556,10 @@ class _SmartBetLearningMonitorScreenState
                   ),
                 ],
 
+                const SmartBetSimulationMonitorPanel(),
+                const SmartBetSimulationLearningPanel(),
+                const Divider(height: 32),
+                const Divider(height: 32),
                 _marketIntelligenceSection(),
                 const Divider(height: 32),
                 _pairedCalibrationSection(),

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
@@ -18,9 +19,14 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
+import '../services/smartbet_x_premium_service.dart';
+import '../services/smartbet_multimarket_ranking_service.dart';
+import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
+import '../services/goalvdline_competition_order.dart';
+import '../widgets/goalvdline_competition_groups.dart';
 import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 enum _CombinationPeriod { today, next2Days, next3Days, custom }
@@ -113,6 +119,19 @@ class _CombinationSystemShadow {
   const _CombinationSystemShadow({required this.name, required this.picks});
 }
 
+class _XPremiumDisplayItem {
+  final MatchModel match;
+  final SmartBetXPremiumAssessment assessment;
+
+  const _XPremiumDisplayItem({required this.match, required this.assessment});
+}
+
+class _MultiMarketDisplayItem {
+  final MatchModel match;
+  final SmartBetRankedMultiMarketFixture ranking;
+  const _MultiMarketDisplayItem({required this.match, required this.ranking});
+}
+
 class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -132,6 +151,24 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   _CombinationOutputMode _outputMode = _CombinationOutputMode.single;
   _CombinationSystemRisk _systemRisk = _CombinationSystemRisk.balanced;
   int _systemCombinationCount = 5;
+
+  // P21F: percorso separato, mai attivato automaticamente.
+  bool _multiMarketRankingEnabled = false;
+  final Set<String> _multiMarketFamilies = <String>{'1X2', 'GOAL', 'OVER'};
+  final List<_MultiMarketDisplayItem> _multiMarketResults = [];
+  final SmartBetMultiMarketRankingService _multiMarketRanker =
+      const SmartBetMultiMarketRankingService();
+  bool _xPremiumEnabled = false;
+  // P21U: l'utente indica soltanto il numero di risultati, mai le fixture.
+  // I candidati si caricano esclusivamente dopo AVVIA.
+  int _autoAvailableCount = 0;
+  int _autoExaminedCount = 0;
+  int _autoDeepCount = 0;
+  bool _xPremiumChoosing = false;
+  final Map<int, MatchModel> _xPremiumSelectedMatches = <int, MatchModel>{};
+  final List<_XPremiumDisplayItem> _xPremiumResults = <_XPremiumDisplayItem>[];
+  final SmartBetXPremiumService _xPremiumService =
+      const SmartBetXPremiumService();
 
   bool _loading = false;
   bool _italyScheduleOnly = true;
@@ -870,6 +907,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _selectedCompetitionKeys.clear();
       _expandedComboFixtures.clear();
       _results.clear();
+      _xPremiumSelectedMatches.clear();
+      _xPremiumResults.clear();
+      _multiMarketResults.clear();
 
       _errorMessage = null;
       _processed = 0;
@@ -1107,6 +1147,813 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     debugPrint('');
 
     return unique;
+  }
+
+  // ============================================================
+  // P21U — X PREMIUM (numero richiesto e selezione automatica)
+  // ============================================================
+
+  /// P21U — Preselezione automatica, senza quote e senza pop-up di fixture.
+  /// Il filtro del palinsesto e quello dei campionati rimangono dell'utente.
+  /// Esegue le valutazioni solo dopo il tap sul pulsante AVVIA.
+  Future<List<MatchModel>> _automaticCandidatePool({
+    required bool drawOnly,
+  }) async {
+    final fixtures = (await _loadMatchesForSelectedPeriod())
+        .where(
+          (match) =>
+              match.fixtureId > 0 &&
+              _isUpcoming(match) &&
+              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
+              (_selectedCompetitionKeys.isEmpty ||
+                  _selectedCompetitionKeys.contains(
+                    CompetitionFilterSheet.keyFor(match),
+                  )),
+        )
+        .toList();
+    _autoAvailableCount = fixtures.length;
+    _autoExaminedCount = 0;
+    _autoDeepCount = 0;
+    if (fixtures.isEmpty) return const <MatchModel>[];
+
+    // Budget esplicito: la ricerca non puo' produrre centinaia di
+    // analisi avanzate in un solo tocco. Ordinamento iniziale per data,
+    // senza pregiudizi legati alle quote o ai campionati.
+    const maxPreliminary = 45;
+    const maxDeep = 30;
+    final preliminaryFixtures = fixtures.take(maxPreliminary).toList();
+    final preliminary = <SmartBetAutomaticFixtureEstimate>[];
+    final byId = <int, MatchModel>{};
+    for (
+      var start = 0;
+      start < preliminaryFixtures.length;
+      start += _batchSize
+    ) {
+      final end = math.min(start + _batchSize, preliminaryFixtures.length);
+      final batch = preliminaryFixtures.sublist(start, end);
+      final estimates = await Future.wait(
+        batch.map((match) async {
+          AnalysisResult? base;
+          try {
+            base = await _analysisCache.read(match.fixtureId);
+            base ??= await SmartCore.analyze(match);
+          } catch (error) {
+            debugPrint('P21U preliminare ${match.fixtureId}: $error');
+          }
+          double? probability;
+          final quality = base == null || base.dataConfidence <= 0
+              ? null
+              : (base.dataConfidence / 100).clamp(0.0, 1.0).toDouble();
+          if (base != null) {
+            if (drawOnly) {
+              final estimate = base.drawProbability;
+              if (estimate > 0 && estimate <= 100) probability = estimate / 100;
+            } else {
+              try {
+                final preliminaryRank = _multiMarketRanker.rank(
+                  selectedMatches: [
+                    SmartBetMultiMarketFixture(
+                      fixtureId: match.fixtureId,
+                      analysis: base,
+                    ),
+                  ],
+                  families: _multiMarketFamilies.toList(growable: false),
+                );
+                probability = preliminaryRank.single.selection?.probability;
+              } catch (error) {
+                debugPrint(
+                  'P21U ranking preliminare ${match.fixtureId}: $error',
+                );
+              }
+            }
+          }
+          return SmartBetAutomaticFixtureEstimate(
+            fixtureId: match.fixtureId,
+            probability: probability,
+            dataQuality: quality,
+          );
+        }),
+      );
+      preliminary.addAll(estimates);
+      _autoExaminedCount = preliminary.length;
+      if (!mounted) return const <MatchModel>[];
+      setState(() {
+        _processed = _autoExaminedCount;
+        _total = preliminaryFixtures.length;
+      });
+    }
+    for (final match in preliminaryFixtures) {
+      byId[match.fixtureId] = match;
+    }
+    final shortlist = const SmartBetAutoFixtureSelectionService().shortlist(
+      candidates: preliminary,
+      requestedCount: _topCount,
+      maxDeepAnalyses: maxDeep,
+    );
+    _autoDeepCount = shortlist.length;
+    return [for (final id in shortlist) byId[id]!];
+  }
+
+  Future<void> _findXPremium() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _processed = 0;
+      _total = 0;
+      _errors = 0;
+      _errorMessage = null;
+      _xPremiumResults.clear();
+      _results.clear();
+      _systemResults.clear();
+    });
+    final resultByFixture = <int, _XPremiumDisplayItem>{};
+    try {
+      final matches = await _automaticCandidatePool(drawOnly: true);
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(
+          () => _errorMessage =
+              'Nessuna partita futura disponibile nei filtri scelti.',
+        );
+        return;
+      }
+      setState(() {
+        _processed = 0;
+        _total = matches.length;
+      });
+      for (var start = 0; start < matches.length; start += _batchSize) {
+        final end = math.min(start + _batchSize, matches.length);
+        final batch = matches.sublist(start, end);
+        final analyzed = await Future.wait(
+          batch.map((match) async {
+            if (!_isUpcoming(match)) {
+              return _XPremiumDisplayItem(
+                match: match,
+                assessment: SmartBetXPremiumAssessment.unavailable(
+                  fixtureId: match.fixtureId,
+                  reason:
+                      'Partita gia iniziata: non generiamo previsioni retroattive.',
+                ),
+              );
+            }
+            try {
+              // L'utente ha premuto AVVIA: cache, oppure una sola analisi
+              // avanzata per partita. Niente richieste quote o Diego.
+              var result = await _analysisCache.read(match.fixtureId);
+              if (result == null) {
+                result = await _aiService.analyzeMatch(
+                  match,
+                  runAudit: false,
+                  automaticMode: false,
+                );
+                if (result.smartScore > 0) {
+                  await _analysisCache.write(match.fixtureId, result);
+                }
+              }
+              final assessment = _xPremiumService.assess(
+                fixtureId: match.fixtureId,
+                analysis: result,
+              );
+              // Registra anche le X meno favorevoli, soltanto con probabilita
+              // nativa 1X2 verificabile. P21C conserva la prima previsione.
+              if (assessment.nativeDraw != null && _isUpcoming(match)) {
+                try {
+                  await SmartBetAnalysisRegistrationService().registerSelection(
+                    match: match,
+                    smartBet: result,
+                    source: SmartBetAnalysisSource.combinations,
+                    smartBetMarket: 'X',
+                    smartBetProbabilityPercent: result.drawProbability,
+                  );
+                } catch (error) {
+                  debugPrint(
+                    'X PREMIUM: registrazione shadow non riuscita: $error',
+                  );
+                }
+              }
+              return _XPremiumDisplayItem(match: match, assessment: assessment);
+            } catch (error) {
+              debugPrint(
+                'X PREMIUM: analisi fixture ${match.fixtureId}: $error',
+              );
+              return _XPremiumDisplayItem(
+                match: match,
+                assessment: SmartBetXPremiumAssessment.unavailable(
+                  fixtureId: match.fixtureId,
+                ),
+              );
+            }
+          }),
+        );
+        for (final item in analyzed) {
+          resultByFixture[item.match.fixtureId] = item;
+        }
+        if (!mounted) return;
+        setState(() {
+          _processed = end;
+          _errors = resultByFixture.values
+              .where((item) => !item.assessment.hasSimulation)
+              .length;
+        });
+      }
+      final sorted = _xPremiumService.rank(
+        resultByFixture.values.map((item) => item.assessment),
+      );
+      if (!mounted) return;
+      setState(() {
+        _xPremiumResults
+          ..clear()
+          ..addAll(
+            sorted
+                .take(_topCount)
+                .map((entry) => resultByFixture[entry.fixtureId]!),
+          );
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage = _friendlyErrorMessage(error));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _automaticCountSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'QUANTE PARTITE VUOI?',
+              style: TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              '$_topCount',
+              style: const TextStyle(
+                color: Color(0xFF00C853),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: _topCount.toDouble(),
+          min: 3,
+          max: 15,
+          divisions: 12,
+          label: '$_topCount partite',
+          onChanged: _loading
+              ? null
+              : (value) => setState(() {
+                  _topCount = value.round();
+                  _xPremiumResults.clear();
+                  _multiMarketResults.clear();
+                }),
+        ),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('3', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            Text('15', style: TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _xPremiumControls() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.38)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'X PREMIUM — INTELLIGENZA PAREGGI',
+            style: TextStyle(
+              color: Colors.orangeAccent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Scegli solo il numero di partite. GoalVdLine ricerca automaticamente '
+            'le X piu favorevoli nel periodo e nei campionati impostati, '
+            'poi mostra anche quelle meno affidabili fino al numero richiesto.',
+            style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+          ),
+          _automaticCountSelector(),
+          const SizedBox(height: 8),
+          const Text(
+            'L’analisi parte solo premendo AVVIA. Esamina fino a 45 '
+            'candidate preliminari e ne approfondisce al massimo 30. '
+            'Nuove analisi possono consumare richieste API; nessuna quota guida il modello.',
+            style: TextStyle(color: Colors.white54, fontSize: 10, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _xPremiumCard(_XPremiumDisplayItem item, int rank) {
+    final assessment = item.assessment;
+    final green = assessment.priority;
+    final color = green ? const Color(0xFF00C853) : Colors.orangeAccent;
+    String display(double? probability) => probability == null
+        ? 'N/D'
+        : '${(probability * 100).toStringAsFixed(1)}%';
+    final alternativesLabel = assessment.alternatives.entries
+        .map(
+          (entry) => '${entry.key} ${(entry.value * 100).toStringAsFixed(1)}%',
+        )
+        .join(' • ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$rank. ${item.match.homeTeam} - ${item.match.awayTeam}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${item.match.league} • ${_formatDate(item.match.date)}',
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'X simulata: ${display(assessment.simulatedDraw)}',
+            style: TextStyle(
+              color: color,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'X del motore attuale: ${display(assessment.nativeDraw)} '
+            '• Qualita dati: ${display(assessment.dataQuality)}',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            assessment.reason,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          if (assessment.alternatives.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Altri mercati per probabilita (non per convenienza): '
+              '$alternativesLabel',
+              style: const TextStyle(color: Colors.white60, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _xPremiumResultList() {
+    final preferred = _xPremiumResults
+        .where((item) => item.assessment.priority)
+        .toList();
+    final others = _xPremiumResults
+        .where((item) => !item.assessment.priority)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 23),
+        Text(
+          'X PREMIUM: ${_xPremiumResults.length} partite richieste',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Probabilita statistiche, non garanzie; '
+          'il livello prioritario richiede X stimata >=30% e qualita dati >=60%.',
+          style: TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'X PRIORITARIE (${preferred.length})',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (preferred.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              'Nessuna X supera entrambe le soglie.',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+        GoalVdLineCompetitionGroups<_XPremiumDisplayItem>(
+          namespace: 'x-premium-priority',
+          items: preferred,
+          countryOf: (item) => item.match.country,
+          leagueOf: (item) => item.match.league,
+          dateOf: (item) => item.match.date,
+          itemBuilder: (_, item) =>
+              _xPremiumCard(item, _xPremiumResults.indexOf(item) + 1),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'ALTRE PARTITE (${others.length})',
+          style: const TextStyle(
+            color: Colors.orangeAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        GoalVdLineCompetitionGroups<_XPremiumDisplayItem>(
+          namespace: 'x-premium-other',
+          items: others,
+          countryOf: (item) => item.match.country,
+          leagueOf: (item) => item.match.league,
+          dateOf: (item) => item.match.date,
+          itemBuilder: (_, item) =>
+              _xPremiumCard(item, _xPremiumResults.indexOf(item) + 1),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // P21K — RANKING MULTIMERCATO DELLE PARTITE SCELTE
+  // ============================================================
+
+  Future<void> _findMultiMarketRanking() async {
+    if (_loading || _multiMarketFamilies.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _processed = 0;
+      _total = 0;
+      _errors = 0;
+      _errorMessage = null;
+      _multiMarketResults.clear();
+      _results.clear();
+      _systemResults.clear();
+    });
+    final analyzed = <int, SmartBetMultiMarketFixture>{};
+    try {
+      final matches = await _automaticCandidatePool(drawOnly: false);
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(
+          () => _errorMessage =
+              'Nessuna partita futura disponibile nei filtri scelti.',
+        );
+        return;
+      }
+      setState(() {
+        _processed = 0;
+        _total = matches.length;
+      });
+      for (var start = 0; start < matches.length; start += _batchSize) {
+        final end = math.min(start + _batchSize, matches.length);
+        final batch = matches.sublist(start, end);
+        final items = await Future.wait(
+          batch.map((match) async {
+            if (!_isUpcoming(match)) {
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: null,
+              );
+            }
+            try {
+              var result = await _analysisCache.read(match.fixtureId);
+              if (result == null) {
+                result = await _aiService.analyzeMatch(
+                  match,
+                  runAudit: false,
+                  automaticMode: false,
+                );
+                if (result.smartScore > 0) {
+                  await _analysisCache.write(match.fixtureId, result);
+                }
+              }
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: result,
+              );
+            } catch (error) {
+              debugPrint('P21K: fixture ${match.fixtureId}: $error');
+              return SmartBetMultiMarketFixture(
+                fixtureId: match.fixtureId,
+                analysis: null,
+              );
+            }
+          }),
+        );
+        for (final item in items) {
+          analyzed[item.fixtureId] = item;
+        }
+        if (!mounted) return;
+        setState(() {
+          _processed = end;
+          _errors = analyzed.values
+              .where((item) => item.analysis == null)
+              .length;
+        });
+      }
+      // La ranking API limita un singolo gruppo a 15 fixture: confrontiamo
+      // separatamente le candidate della shortlist (fino a 30) e ordiniamo
+      // globalmente con gli stessi criteri, senza modificare il contratto.
+      final ranked = <SmartBetRankedMultiMarketFixture>[];
+      for (final match in matches) {
+        ranked.addAll(
+          _multiMarketRanker.rank(
+            selectedMatches: [analyzed[match.fixtureId]!],
+            families: _multiMarketFamilies.toList(growable: false),
+          ),
+        );
+      }
+      ranked.sort((a, b) {
+        final band = a.band.index.compareTo(b.band.index);
+        if (band != 0) return band;
+        final probability = (b.selection?.probability ?? -1).compareTo(
+          a.selection?.probability ?? -1,
+        );
+        if (probability != 0) return probability;
+        final quality = (b.dataQuality ?? -1).compareTo(a.dataQuality ?? -1);
+        return quality != 0 ? quality : a.fixtureId.compareTo(b.fixtureId);
+      });
+      final matchesById = {for (final match in matches) match.fixtureId: match};
+
+      // Usa la registrazione gia esistente per le selezioni supportate.
+      // Lo snapshot P21C salva anche le probabilita delle alternative note.
+      for (final item in ranked) {
+        final match = matchesById[item.fixtureId]!;
+        final analysis = analyzed[item.fixtureId]?.analysis;
+        final selection = item.selection;
+        if (analysis == null || selection == null || !_isUpcoming(match))
+          continue;
+        try {
+          final originalProbability = _probabilityFor(
+            analysis,
+            selection.market,
+          );
+          if (originalProbability > 0 && originalProbability <= 100) {
+            await SmartBetAnalysisRegistrationService().registerSelection(
+              match: match,
+              smartBet: analysis,
+              source: SmartBetAnalysisSource.combinations,
+              smartBetMarket: selection.market,
+              smartBetProbabilityPercent: originalProbability,
+            );
+          }
+        } catch (error) {
+          debugPrint('P21K shadow registration ${match.fixtureId}: $error');
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _multiMarketResults
+          ..clear()
+          ..addAll(
+            ranked
+                .take(_topCount)
+                .map(
+                  (item) => _MultiMarketDisplayItem(
+                    match: matchesById[item.fixtureId]!,
+                    ranking: item,
+                  ),
+                ),
+          );
+      });
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = _friendlyErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _multiMarketControls() {
+    const allFamilies = [
+      '1X2',
+      'DOPPIA CHANCE',
+      'OVER',
+      'UNDER',
+      'GOAL',
+      'MULTIGOL',
+      'SEGNA',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF00C853).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ANALISI MULTIMERCATO — MAX 3 FAMIGLIE',
+            style: TextStyle(
+              color: Color(0xFF00C853),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Scegli quante partite vuoi. GoalVdLine le individua '
+            'automaticamente nei campionati e nel periodo selezionati. '
+            'Le stime sono sportive, senza quote.',
+            style: TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 7,
+            runSpacing: 6,
+            children: [
+              for (final family in allFamilies)
+                FilterChip(
+                  label: Text(family),
+                  selected: _multiMarketFamilies.contains(family),
+                  onSelected: _loading
+                      ? null
+                      : (selected) {
+                          if (selected && _multiMarketFamilies.length >= 3)
+                            return;
+                          setState(() {
+                            if (selected) {
+                              _multiMarketFamilies.add(family);
+                            } else {
+                              _multiMarketFamilies.remove(family);
+                            }
+                            _multiMarketResults.clear();
+                          });
+                        },
+                ),
+            ],
+          ),
+          _automaticCountSelector(),
+          const SizedBox(height: 8),
+          const Text(
+            'Il pulsante AVVIA e l unico che avvia nuove analisi. '
+            'Senza quote si ordina per probabilita stimata, non per rendimento.',
+            style: TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _multiMarketResultList() {
+    final primary = _multiMarketResults
+        .where((x) => x.ranking.band == SmartBetFixtureBand.priority)
+        .toList();
+    final others = _multiMarketResults
+        .where((x) => x.ranking.band != SmartBetFixtureBand.priority)
+        .toList();
+    Widget card(_MultiMarketDisplayItem item) {
+      final selection = item.ranking.selection;
+      final quality = item.ranking.dataQuality;
+      final priority = item.ranking.band == SmartBetFixtureBand.priority;
+      final color = priority ? const Color(0xFF00C853) : Colors.orangeAccent;
+      final alternatives = item.ranking.alternatives
+          .map(
+            (option) =>
+                '${option.market} '
+                '${(option.probability * 100).toStringAsFixed(1)}%',
+          )
+          .join(' • ');
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${item.match.homeTeam} - ${item.match.awayTeam}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              item.match.league,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              selection == null
+                  ? 'Nessuna simulazione valida'
+                  : '${selection.market} • '
+                        '${(selection.probability * 100).toStringAsFixed(1)}%',
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Qualita dati: ${quality == null ? 'N/D' : '${(quality * 100).toStringAsFixed(0)}%'} '
+              '• ${item.ranking.reason}',
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            if (alternatives.isNotEmpty)
+              Text(
+                'Alternative: $alternatives',
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Text(
+          'MULTIMERCATO: ${_multiMarketResults.length} partite richieste',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        const Text(
+          'Livelli operativi, non probabilita di vincita garantita.',
+          style: TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'PIU FAVOREVOLI (${primary.length})',
+          style: const TextStyle(
+            color: Color(0xFF00C853),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        GoalVdLineCompetitionGroups<_MultiMarketDisplayItem>(
+          namespace: 'multimarket-priority',
+          items: primary,
+          countryOf: (item) => item.match.country,
+          leagueOf: (item) => item.match.league,
+          dateOf: (item) => item.match.date,
+          itemBuilder: (_, item) => card(item),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'ALTRE PARTITE (${others.length})',
+          style: const TextStyle(
+            color: Colors.orangeAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        GoalVdLineCompetitionGroups<_MultiMarketDisplayItem>(
+          namespace: 'multimarket-other',
+          items: others,
+          countryOf: (item) => item.match.country,
+          leagueOf: (item) => item.match.league,
+          dateOf: (item) => item.match.date,
+          itemBuilder: (_, item) => card(item),
+        ),
+      ],
+    );
   }
 
   // ============================================================
@@ -1961,6 +2808,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ..clear()
           ..addAll(selected);
         _results.clear();
+        _xPremiumSelectedMatches.clear();
+        _xPremiumResults.clear();
         _errorMessage = null;
       });
     } catch (_) {
@@ -2006,6 +2855,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   _selectedCompetitionKeys.clear();
                   _expandedComboFixtures.clear();
                   _results.clear();
+                  _xPremiumSelectedMatches.clear();
+                  _xPremiumResults.clear();
 
                   _errorMessage = null;
                   _processed = 0;
@@ -2929,135 +3780,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
-  int _presentationCompare(_CombinationCandidate a, _CombinationCandidate b) {
-    final countryA = a.match.country.trim().isEmpty
-        ? 'Internazionale'
-        : a.match.country.trim();
-
-    final countryB = b.match.country.trim().isEmpty
-        ? 'Internazionale'
-        : b.match.country.trim();
-
-    final countryCompare = countryA.toLowerCase().compareTo(
-      countryB.toLowerCase(),
-    );
-
-    if (countryCompare != 0) {
-      return countryCompare;
-    }
-
-    final leagueA = a.match.league.trim().isEmpty
-        ? 'Competizione'
-        : a.match.league.trim();
-
-    final leagueB = b.match.league.trim().isEmpty
-        ? 'Competizione'
-        : b.match.league.trim();
-
-    final leagueCompare = leagueA.toLowerCase().compareTo(
-      leagueB.toLowerCase(),
-    );
-
-    if (leagueCompare != 0) {
-      return leagueCompare;
-    }
-
-    DateTime? dateA;
-    DateTime? dateB;
-
-    try {
-      dateA = DateTime.parse(a.match.date).toLocal();
-    } catch (_) {}
-
-    try {
-      dateB = DateTime.parse(b.match.date).toLocal();
-    } catch (_) {}
-
-    if (dateA != null && dateB != null) {
-      final dateCompare = dateA.compareTo(dateB);
-
-      if (dateCompare != 0) {
-        return dateCompare;
-      }
-    } else if (dateA != null) {
-      return -1;
-    } else if (dateB != null) {
-      return 1;
-    }
-
-    final homeCompare = a.match.homeTeam.toLowerCase().compareTo(
-      b.match.homeTeam.toLowerCase(),
-    );
-
-    if (homeCompare != 0) {
-      return homeCompare;
-    }
-
-    return a.match.awayTeam.toLowerCase().compareTo(
-      b.match.awayTeam.toLowerCase(),
-    );
-  }
-
-  List<Widget> _groupedResultWidgets() {
-    final ordered = List<_CombinationCandidate>.of(_results)
-      ..sort(_presentationCompare);
-
-    final widgets = <Widget>[];
-    String? currentGroup;
-    var position = 0;
-
-    for (final item in ordered) {
-      final country = item.match.country.trim().isEmpty
-          ? 'Internazionale'
-          : item.match.country.trim();
-
-      final league = item.match.league.trim().isEmpty
-          ? 'Competizione'
-          : item.match.league.trim();
-
-      final group = '$country • $league';
-
-      if (group != currentGroup) {
-        if (widgets.isNotEmpty) {
-          widgets.add(const SizedBox(height: 6));
-        }
-
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 9),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.emoji_events_outlined,
-                  color: Color(0xFF00C853),
-                  size: 15,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    group,
-                    style: const TextStyle(
-                      color: Color(0xFF00C853),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-
-        currentGroup = group;
-      }
-
-      position++;
-
-      widgets.add(_resultCard(item, position));
-    }
-
-    return widgets;
-  }
+  List<Widget> _groupedResultWidgets() => [
+    GoalVdLineCompetitionGroups<_CombinationCandidate>(
+      namespace: 'combinations-classic',
+      items: _results,
+      countryOf: (item) => item.match.country,
+      leagueOf: (item) => item.match.league,
+      dateOf: (item) => item.match.date,
+      // Il numero indica la posizione originale della classifica AI.
+      itemBuilder: (_, item) => _resultCard(item, _results.indexOf(item) + 1),
+    ),
+  ];
 
   Widget _resultCard(_CombinationCandidate item, int rank) {
     final result = item.analysis;
@@ -3116,7 +3849,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${match.country} • '
+                      '${GoalVdLineCompetitionOrder.displayCountry(match.country, match.league)} • '
                       '${match.league} • '
                       '${_formatDate(match.date)}',
                       maxLines: 1,
@@ -3286,6 +4019,78 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
+  // P23B2F — Condivide esattamente la combinazione attualmente visibile.
+  // Le quote mancanti non vengono stimate o sostituite.
+  Future<void> _shareCurrentCombination() async {
+    if (_results.isEmpty || _loading) return;
+
+    final isSystem = _outputMode == _CombinationOutputMode.system &&
+        _systemResults.isNotEmpty &&
+        _selectedSystemIndex < _systemResults.length;
+    final title = isSystem
+        ? _systemResults[_selectedSystemIndex].name
+        : 'TOP ${_results.length} • $_selectedMarketLabel';
+    final allOddsAvailable = _results.every(
+      (item) => item.odd != null &&
+          item.odd!.isFinite &&
+          item.odd! >= 1.0,
+    );
+    double totalOdd = 1.0;
+    if (allOddsAvailable) {
+      for (final item in _results) {
+        totalOdd *= item.odd!;
+      }
+    }
+    final averageProbability = _results.fold<int>(
+          0,
+          (sum, item) => sum + item.probability,
+        ) /
+        _results.length;
+
+    final message = StringBuffer()
+      ..writeln('GOALVDLINE — COMBINAZIONI AI')
+      ..writeln(title)
+      ..writeln()
+      ..writeln('${_results.length} eventi')
+      ..writeln(
+        allOddsAvailable && totalOdd.isFinite
+            ? 'Quota totale: ${totalOdd.toStringAsFixed(2)}'
+            : 'Quota totale: non disponibile (quote reali incomplete)',
+      )
+      ..writeln('Probabilità media stimata: '
+          '${averageProbability.toStringAsFixed(1)}%')
+      ..writeln();
+
+    for (var index = 0; index < _results.length; index++) {
+      final item = _results[index];
+      final league = item.match.league.trim();
+      message
+        ..writeln('${index + 1}. '
+            '${item.match.homeTeam} - ${item.match.awayTeam}')
+        ..writeln(
+          '   ${item.market} • ${item.probability}%'
+          '${item.odd == null ? ' • quota non disponibile' : ' • quota ${item.odd!.toStringAsFixed(2)}'}',
+        );
+      if (league.isNotEmpty) {
+        message.writeln('   $league');
+      }
+      if (item.bookmaker?.trim().isNotEmpty == true) {
+        message.writeln('   ${item.bookmaker!.trim()}');
+      }
+    }
+    message
+      ..writeln()
+      ..writeln('Stime statistiche, non garanzie di risultato. '
+          'Gioca responsabilmente.');
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: message.toString(),
+        subject: 'GoalVdLine — $title',
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -3323,19 +4128,25 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 8),
 
-          const Text(
-            'Scegli un mercato e GoalVdLine '
-            'scansionerà le partite del periodo '
-            'selezionato, mostrando quelle con '
-            'la probabilità più alta '
-            'nella pre-analisi.',
-            style: TextStyle(color: Colors.white54, height: 1.4),
+          Text(
+            _multiMarketRankingEnabled
+                ? 'Indica quante partite vuoi: GoalVdLine cerca automaticamente le migliori per i mercati consentiti.'
+                : _xPremiumEnabled
+                ? 'Indica quante partite vuoi e premi AVVIA: GoalVdLine individua automaticamente le X piu favorevoli.'
+                : 'Scegli un mercato e GoalVdLine scansionera le partite del periodo '
+                      'selezionato, mostrando quelle con la probabilita piu alta '
+                      'nella pre-analisi.',
+            style: const TextStyle(color: Colors.white54, height: 1.4),
           ),
 
           const SizedBox(height: 8),
 
           Text(
-            _selectedMarket == 'COMBO CHANCE'
+            _multiMarketRankingEnabled
+                ? 'Ranking multimercato: probabilita sportive senza quote.'
+                : _xPremiumEnabled
+                ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
+                : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
                 : 'Filtro automatico: solo selezioni con quota reale almeno 1.25.',
             style: TextStyle(
@@ -3379,6 +4190,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                       setState(() {
                         _italyScheduleOnly = value;
                         _results.clear();
+                        _xPremiumSelectedMatches.clear();
+                        _xPremiumResults.clear();
                         _errorMessage = null;
                         _processed = 0;
                         _total = 0;
@@ -3405,9 +4218,77 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 10),
 
-          _marketSelector(),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'RANKING MULTIMERCATO — AUTOMATICO',
+              style: TextStyle(
+                color: Color(0xFF00C853),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: const Text(
+              'Scegli fino a 3 famiglie e il numero di partite.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            value: _multiMarketRankingEnabled,
+            activeThumbColor: const Color(0xFF00C853),
+            onChanged: (_loading || _xPremiumChoosing)
+                ? null
+                : (value) {
+                    setState(() {
+                      _multiMarketRankingEnabled = value;
+                      if (value) _xPremiumEnabled = false;
+                      _multiMarketResults.clear();
+                      _xPremiumResults.clear();
+                      _results.clear();
+                      _systemResults.clear();
+                      _errorMessage = null;
+                    });
+                  },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'X PREMIUM — INTELLIGENZA PAREGGI',
+              style: TextStyle(
+                color: Colors.orangeAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: const Text(
+              'Modalita dedicata, senza alterare le combinazioni classiche.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            value: _xPremiumEnabled,
+            activeThumbColor: Colors.orangeAccent,
+            onChanged: (_loading || _xPremiumChoosing)
+                ? null
+                : (value) {
+                    setState(() {
+                      _xPremiumEnabled = value;
+                      if (value) _multiMarketRankingEnabled = false;
+                      _multiMarketResults.clear();
+                      _xPremiumResults.clear();
+                      _results.clear();
+                      _systemResults.clear();
+                      _errorMessage = null;
+                      _processed = 0;
+                      _total = 0;
+                      _errors = 0;
+                    });
+                  },
+          ),
+          if (_xPremiumEnabled)
+            _xPremiumControls()
+          else if (_multiMarketRankingEnabled)
+            _multiMarketControls()
+          else
+            _marketSelector(),
 
-          if (_selectedMarket == 'COMBO CHANCE') ...[
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              _selectedMarket == 'COMBO CHANCE') ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -3445,116 +4326,135 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          const SizedBox(height: 20),
+          if (!_xPremiumEnabled && !_multiMarketRankingEnabled) ...[
+            const SizedBox(height: 20),
 
-          const Text(
-            'AFFIDABILITÀ MINIMA',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
+            const Text(
+              'AFFIDABILITÀ MINIMA',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
 
-          _smartScoreSelector(),
+            _smartScoreSelector(),
 
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          const Text(
-            'MODALITÀ RISULTATO',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
+            const Text(
+              'MODALITÀ RISULTATO',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
-          const SizedBox(height: 9),
-          _outputModeSelector(),
+            const SizedBox(height: 9),
+            _outputModeSelector(),
 
-          if (_outputMode == _CombinationOutputMode.system) ...[
-            const SizedBox(height: 12),
-            _systemControls(),
+            if (_outputMode == _CombinationOutputMode.system) ...[
+              const SizedBox(height: 12),
+              _systemControls(),
+            ],
+
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _outputMode == _CombinationOutputMode.system
+                        ? 'EVENTI PER COMBINAZIONE'
+                        : 'NUMERO RISULTATI',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F2937),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF00C853).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    '$_topCount partite',
+                    style: const TextStyle(
+                      color: Color(0xFF00C853),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 6),
+
+            Slider(
+              value: _topCount.toDouble(),
+              min: 3,
+              max: 15,
+              divisions: 12,
+              label: '$_topCount',
+              onChanged: _loading
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _topCount = value.round();
+                        _results.clear();
+                      });
+                    },
+            ),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text(
+                  '3',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                Text(
+                  '15',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
           ],
-
-          const SizedBox(height: 20),
-
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _outputMode == _CombinationOutputMode.system
-                      ? 'EVENTI PER COMBINAZIONE'
-                      : 'NUMERO RISULTATI',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF00C853).withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Text(
-                  '$_topCount partite',
-                  style: const TextStyle(
-                    color: Color(0xFF00C853),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 6),
-
-          Slider(
-            value: _topCount.toDouble(),
-            min: 3,
-            max: 15,
-            divisions: 12,
-            label: '$_topCount',
-            onChanged: _loading
-                ? null
-                : (value) {
-                    setState(() {
-                      _topCount = value.round();
-                      _results.clear();
-                    });
-                  },
-          ),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('3', style: TextStyle(color: Colors.white38, fontSize: 11)),
-              Text('15', style: TextStyle(color: Colors.white38, fontSize: 11)),
-            ],
-          ),
 
           const SizedBox(height: 20),
 
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: (_loading || _checkingOdds || _selectedMarkets.isEmpty)
+              onPressed:
+                  (_loading ||
+                      _checkingOdds ||
+                      (_multiMarketRankingEnabled &&
+                          _multiMarketFamilies.isEmpty) ||
+                      (!_xPremiumEnabled &&
+                          !_multiMarketRankingEnabled &&
+                          _selectedMarkets.isEmpty))
                   ? null
-                  : _findCombinations,
+                  : (_xPremiumEnabled
+                        ? _findXPremium
+                        : _multiMarketRankingEnabled
+                        ? _findMultiMarketRanking
+                        : _findCombinations),
               icon: _loading
                   ? const SizedBox(
                       width: 18,
@@ -3565,6 +4465,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               label: Text(
                 _loading
                     ? 'RICERCA IN CORSO...'
+                    : _xPremiumEnabled
+                    ? 'AVVIA X PREMIUM • $_topCount PARTITE'
+                    : _multiMarketRankingEnabled
+                    ? 'AVVIA MULTIMERCATO • $_topCount PARTITE'
                     : _outputMode == _CombinationOutputMode.system
                     ? 'CREA SISTEMA $_selectedMarketLabel'
                     : 'TROVA LE MIGLIORI '
@@ -3621,7 +4525,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (_results.isNotEmpty) ...[
+          if (_xPremiumEnabled && _xPremiumResults.isNotEmpty)
+            _xPremiumResultList(),
+
+          if (_multiMarketRankingEnabled && _multiMarketResults.isNotEmpty)
+            _multiMarketResultList(),
+
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              _results.isNotEmpty) ...[
             const SizedBox(height: 24),
 
             if (_outputMode == _CombinationOutputMode.system &&
@@ -3663,9 +4575,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 12),
 
             ..._groupedResultWidgets(),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _shareCurrentCombination,
+                icon: const Icon(Icons.ios_share_outlined),
+                label: const Text('CONDIVIDI SCHEDINA'),
+              ),
+            ),
           ],
 
-          if (!_loading &&
+          if (!_xPremiumEnabled &&
+              !_loading &&
               _results.isEmpty &&
               _processed > 0 &&
               _errorMessage == null) ...[
@@ -3686,7 +4608,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (!_loading && _errors > 0) ...[
+          if (!_xPremiumEnabled && !_loading && _errors > 0) ...[
             const SizedBox(height: 10),
             Text(
               '$_errors partite non sono state '

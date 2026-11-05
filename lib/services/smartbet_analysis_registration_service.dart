@@ -9,6 +9,9 @@ import 'smartbet_shadow_learning_store.dart';
 import 'smartbet_adaptive_decision_service.dart';
 import 'smartbet_shadow_outcome_service.dart';
 import 'smartbet_frozen_model_registration_store.dart';
+import 'smartbet_simulation_shadow_capture_service.dart';
+import 'smartbet_simulation_shadow_store.dart';
+import 'goalvdline_central_learning_outbox.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -17,12 +20,24 @@ class SmartBetAnalysisRegistrationService {
 
   final SmartBetAnalysisComparisonStore _comparisonStore;
 
+  final SmartBetSimulationShadowCaptureService _simulationCapture;
+
+  final GoalVdLineCentralLearningOutbox _centralOutbox;
+
   SmartBetAnalysisRegistrationService({
     SmartBetAnalysisHistoryStore? store,
     SmartBetAnalysisComparisonStore? comparisonStore,
+    SmartBetSimulationShadowCaptureService? simulationCapture,
+    GoalVdLineCentralLearningOutbox? centralOutbox,
   }) : _store = store ?? SmartBetAnalysisHistoryStore.instance,
        _comparisonStore =
-           comparisonStore ?? SmartBetAnalysisComparisonStore.instance;
+           comparisonStore ?? SmartBetAnalysisComparisonStore.instance,
+       _simulationCapture =
+           simulationCapture ??
+           SmartBetSimulationShadowCaptureService(
+             store: SmartBetSimulationShadowStore.instance,
+           ),
+       _centralOutbox = centralOutbox ?? GoalVdLineCentralLearningOutbox.instance;
 
   Future<void> registerSelection({
     required MatchModel match,
@@ -75,6 +90,17 @@ class SmartBetAnalysisRegistrationService {
       );
 
       await _captureShadow(smartBetRecord);
+      await _captureCentralDraft(smartBetRecord);
+
+      if (smartBetRecord != null) {
+        await _simulationCapture.capture(
+          match: match,
+          smartBet: smartBet,
+          record: smartBetRecord,
+          diego: dualAnalysis?.diego,
+          recordedAt: recordedAt,
+        );
+      }
     }
 
     // ============================================================
@@ -126,6 +152,7 @@ class SmartBetAnalysisRegistrationService {
     );
 
     await _captureShadow(diegoRecord);
+    await _captureCentralDraft(diegoRecord);
 
     // ============================================================
     // COPPIA SMARTBET ↔ DIEGO
@@ -149,6 +176,15 @@ class SmartBetAnalysisRegistrationService {
         source: source,
         recordedAt: recordedAt,
       );
+    }
+  }
+
+  Future<void> _captureCentralDraft(SmartBetAnalysisRecord? record) async {
+    try {
+      await _centralOutbox.captureIfEligible(record);
+    } catch (error) {
+      // La coda opzionale non deve mai bloccare le analisi.
+      debugPrint('GoalVdLine local learning queue unavailable: $error');
     }
   }
 

@@ -19,6 +19,8 @@ import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../services/smartbet_prediction_quantity_policy.dart';
+import '../services/goalvdline_competition_order.dart';
+import '../widgets/goalvdline_competition_groups.dart';
 
 enum _PredictionPeriod { today, next2Days, next3Days, custom }
 
@@ -37,6 +39,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       DualEngineAnalysisService();
 
   bool _loading = false;
+  bool _hasStartedAnalysis = false;
   String? _error;
 
   _PredictionPeriod _period = _PredictionPeriod.today;
@@ -77,15 +80,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
     'GOAL + O2.5',
     'NO GOAL + U2.5',
   ];
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _generate();
-    });
-  }
 
   @override
   void dispose() {
@@ -643,12 +637,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
       _results.clear();
       _error = null;
+      _hasStartedAnalysis = false;
       _phase = '';
       _processed = 0;
       _total = 0;
     });
-
-    await _generate();
   }
 
   // ============================================================
@@ -661,6 +654,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     }
 
     setState(() {
+      _hasStartedAnalysis = true;
       _loading = true;
       _error = null;
       _phase = 'matches';
@@ -1078,7 +1072,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   String _competitionLabel(MatchModel match) {
-    final country = match.country.trim();
+    final country = GoalVdLineCompetitionOrder.displayCountry(
+      match.country,
+      match.league,
+    );
     final league = match.league.trim();
 
     if (country.isNotEmpty && league.isNotEmpty) {
@@ -1523,12 +1520,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   _results.clear();
                   _error = null;
+                  _hasStartedAnalysis = false;
                   _phase = '';
                   _processed = 0;
                   _total = 0;
                 });
-
-                await _generate();
               },
       );
     }
@@ -1659,6 +1655,49 @@ class _PredictionScreenState extends State<PredictionScreen> {
     );
   }
 
+  Widget _manualStartCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 18),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x6600C853)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.play_circle_outline,
+            color: Color(0xFF00C853),
+            size: 32,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'ANALISI SU RICHIESTA',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Nessuna analisi viene avviata automaticamente. '
+            'Controlla le opzioni e premi il pulsante quando sei pronto.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _loading ? null : _generate,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('AVVIA ANALISI'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -1690,14 +1729,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
             )
           else
             IconButton(
-              tooltip: 'Rigenera',
+              tooltip: _hasStartedAnalysis ? 'Rigenera' : 'Avvia analisi',
               onPressed: _generate,
               icon: const Icon(Icons.refresh),
             ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _generate,
+        onRefresh: _hasStartedAnalysis ? _generate : () async {},
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
@@ -1740,6 +1779,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
             _periodSelector(),
 
+            if (!_loading && _results.isEmpty && _error == null)
+              _manualStartCard(),
             if (_loading) ...[const SizedBox(height: 16), _progressCard()],
             if (_error != null && _results.isEmpty) ...[
               const SizedBox(height: 18),
@@ -1799,9 +1840,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              ...List.generate(
-                _results.length,
-                (index) => _resultCard(_results[index], index + 1),
+              GoalVdLineCompetitionGroups<_DailyPick>(
+                namespace: 'daily-top-picks',
+                items: _results,
+                countryOf: (item) => item.match.country,
+                leagueOf: (item) => item.match.league,
+                dateOf: (item) => item.match.date,
+                itemBuilder: (_, item) =>
+                    _resultCard(item, _results.indexOf(item) + 1),
               ),
               if (!_loading && _results.length < _wantedResults) ...[
                 const SizedBox(height: 10),

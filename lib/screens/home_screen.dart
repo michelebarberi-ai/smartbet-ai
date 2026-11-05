@@ -9,6 +9,7 @@ import '../services/smartbet_learning_coordinator.dart';
 import '../widgets/ai_card.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
+import '../widgets/goalvdline_central_learning_consent_card.dart';
 import 'analysis_history_screen.dart';
 import 'smartbet_learning_monitor_screen.dart';
 import 'settings_screen.dart';
@@ -533,6 +534,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 12,
                     ),
                     children: [
+                      const GoalVdLineCentralLearningConsentCard(),
+                      const SizedBox(height: 16),
                       const Text(
                         'Prestazioni analisi',
                         style: TextStyle(
