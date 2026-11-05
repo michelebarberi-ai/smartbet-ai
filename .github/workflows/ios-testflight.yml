@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/api
+      - feature/v1.2.4-simulation
 
 jobs:
   build-ios:
