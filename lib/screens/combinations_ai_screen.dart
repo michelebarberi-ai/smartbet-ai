@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
@@ -4018,6 +4019,78 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
+  // P23B2F — Condivide esattamente la combinazione attualmente visibile.
+  // Le quote mancanti non vengono stimate o sostituite.
+  Future<void> _shareCurrentCombination() async {
+    if (_results.isEmpty || _loading) return;
+
+    final isSystem = _outputMode == _CombinationOutputMode.system &&
+        _systemResults.isNotEmpty &&
+        _selectedSystemIndex < _systemResults.length;
+    final title = isSystem
+        ? _systemResults[_selectedSystemIndex].name
+        : 'TOP ${_results.length} • $_selectedMarketLabel';
+    final allOddsAvailable = _results.every(
+      (item) => item.odd != null &&
+          item.odd!.isFinite &&
+          item.odd! >= 1.0,
+    );
+    double totalOdd = 1.0;
+    if (allOddsAvailable) {
+      for (final item in _results) {
+        totalOdd *= item.odd!;
+      }
+    }
+    final averageProbability = _results.fold<int>(
+          0,
+          (sum, item) => sum + item.probability,
+        ) /
+        _results.length;
+
+    final message = StringBuffer()
+      ..writeln('GOALVDLINE — COMBINAZIONI AI')
+      ..writeln(title)
+      ..writeln()
+      ..writeln('${_results.length} eventi')
+      ..writeln(
+        allOddsAvailable && totalOdd.isFinite
+            ? 'Quota totale: ${totalOdd.toStringAsFixed(2)}'
+            : 'Quota totale: non disponibile (quote reali incomplete)',
+      )
+      ..writeln('Probabilità media stimata: '
+          '${averageProbability.toStringAsFixed(1)}%')
+      ..writeln();
+
+    for (var index = 0; index < _results.length; index++) {
+      final item = _results[index];
+      final league = item.match.league.trim();
+      message
+        ..writeln('${index + 1}. '
+            '${item.match.homeTeam} - ${item.match.awayTeam}')
+        ..writeln(
+          '   ${item.market} • ${item.probability}%'
+          '${item.odd == null ? ' • quota non disponibile' : ' • quota ${item.odd!.toStringAsFixed(2)}'}',
+        );
+      if (league.isNotEmpty) {
+        message.writeln('   $league');
+      }
+      if (item.bookmaker?.trim().isNotEmpty == true) {
+        message.writeln('   ${item.bookmaker!.trim()}');
+      }
+    }
+    message
+      ..writeln()
+      ..writeln('Stime statistiche, non garanzie di risultato. '
+          'Gioca responsabilmente.');
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: message.toString(),
+        subject: 'GoalVdLine — $title',
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -4502,6 +4575,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 12),
 
             ..._groupedResultWidgets(),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _shareCurrentCombination,
+                icon: const Icon(Icons.ios_share_outlined),
+                label: const Text('CONDIVIDI SCHEDINA'),
+              ),
+            ),
           ],
 
           if (!_xPremiumEnabled &&
