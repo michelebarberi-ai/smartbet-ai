@@ -5,6 +5,43 @@
 require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
+const {Pool} = require('pg');
+
+// Read-only database connectivity and schema probe. It never enables ingest or
+// touches prediction rows, and it deliberately omits connection error details.
+async function probeLearningDatabase({env = process.env, poolFactory = options => new Pool(options)} = {}) {
+  if (typeof env.DATABASE_URL !== 'string' || !env.DATABASE_URL.trim()) {
+    return {databaseChecked: false, databaseReachable: false, schemaReady: false};
+  }
+  let pool;
+  try {
+    pool = poolFactory({
+      connectionString: env.DATABASE_URL,
+      max: 1,
+      connectionTimeoutMillis: 4000,
+      idleTimeoutMillis: 1000,
+      query_timeout: 5000,
+      ssl: env.LEARNING_PG_SSL === 'true' ? {rejectUnauthorized: true} : undefined,
+    });
+    const result = await pool.query(`
+      SELECT
+        to_regclass('public.sb_learning_predictions_v1') IS NOT NULL AS predictions_present,
+        to_regclass('public.sb_learning_clients_v1') IS NOT NULL AS clients_present
+    `);
+    const row = result?.rows?.[0];
+    return {
+      databaseChecked: true,
+      databaseReachable: true,
+      schemaReady: row?.predictions_present === true && row?.clients_present === true,
+    };
+  } catch (_error) {
+    return {databaseChecked: true, databaseReachable: false, schemaReady: false};
+  } finally {
+    if (pool) {
+      try { await pool.end(); } catch (_error) { /* Never expose pool errors. */ }
+    }
+  }
+}
 
 const API_FOOTBALL_ORIGIN = 'https://v3.football.api-sports.io';
 
@@ -37,7 +74,7 @@ async function requestFixture({path, query}, {env = process.env, fetchImpl = fet
   return {data};
 }
 
-function createLearningOnlyApp({env = process.env, fetchImpl = fetch} = {}) {
+function createLearningOnlyApp({env = process.env, fetchImpl = fetch, poolFactory} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {res.set('Cache-Control', 'no-store'); next();});
@@ -47,6 +84,29 @@ function createLearningOnlyApp({env = process.env, fetchImpl = fetch} = {}) {
   app.get('/health', (_req, res) => res.json({
     service: 'GoalVdLine Central Learning', running: true, databaseChecked: false,
   }));
+
+// Public response exposes only boolean readiness, never Neon credentials or
+// database errors. Share a single probe per minute to limit free-tier usage.
+let lastResult = null;
+let lastCheckedAt = 0;
+let pendingProbe = null;
+app.get('/health/database', async (_req, res) => {
+  const now = Date.now();
+  if (!pendingProbe && (lastResult === null || now - lastCheckedAt >= 60000)) {
+    pendingProbe = probeLearningDatabase({env, poolFactory})
+      .then(result => {
+        lastResult = result;
+        lastCheckedAt = Date.now();
+        return result;
+      })
+      .finally(() => { pendingProbe = null; });
+  }
+  const result = pendingProbe ? await pendingProbe : lastResult;
+  return res.status(result.databaseReachable && result.schemaReady ? 200 : 503).json({
+    service: 'GoalVdLine Central Learning', ...result,
+    learningEnabled: false,
+  });
+});
 
   registerLearningRoutes(app, {
     env,
@@ -62,4 +122,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = {createLearningOnlyApp, requestFixture};
+module.exports = {createLearningOnlyApp, requestFixture, probeLearningDatabase};
