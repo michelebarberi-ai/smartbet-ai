@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_analysis_result_resolver.dart';
 
 enum _HistoryEngineFilter { all, smartBet, diego }
 
 enum _HistoryStatusFilter { all, pending, correct, wrong, unsupported }
 
 class AnalysisHistoryScreen extends StatefulWidget {
-  const AnalysisHistoryScreen({super.key});
+  final Future<SmartBetAnalysisResultResolutionSummary> Function()? onRefreshResults;
+  const AnalysisHistoryScreen({super.key, this.onRefreshResults});
 
   @override
   State<AnalysisHistoryScreen> createState() => _AnalysisHistoryScreenState();
@@ -24,6 +26,47 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
   // Ricerca locale: nessuna interrogazione di rete e nessuna modifica allo storico.
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _updatingResults = false;
+
+  Future<void> _updateResults() async {
+    final refresh = widget.onRefreshResults;
+    if (refresh == null || _updatingResults) return;
+    setState(() => _updatingResults = true);
+    try {
+      final result = await refresh();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Aggiornamento esiti'),
+          content: SingleChildScrollView(child: Text([
+            'Partite risolte: ${result.resolvedFixtures}',
+            'Registrazioni aggiornate: ${result.updatedRecords}',
+            'Partite ancora in attesa: ${result.pendingFixturesAfter}',
+            if (result.skippedNotDue > 0)
+              'Prima della verifica (4 ore dal calcio d’inizio): ${result.skippedNotDue}',
+            if (result.fixturesWithoutFinalScore > 0)
+              'Senza punteggio finale utilizzabile: ${result.fixturesWithoutFinalScore}',
+            if (result.fixturesNotReturned > 0)
+              'Assenti dalla risposta del fornitore: ${result.fixturesNotReturned}',
+            if (result.fixturesWithFetchError > 0)
+              'Recupero fallito: ${result.fixturesWithFetchError} partite',
+          ].join('\n'))),
+          actions: [TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Chiudi'),
+          )],
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aggiornamento incompleto. Puoi riprovare.')),
+      );
+    } finally {
+      if (mounted) setState(() => _updatingResults = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -97,6 +140,16 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
         backgroundColor: const Color(0xFF111827),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          if (widget.onRefreshResults != null)
+            IconButton(
+              tooltip: 'Aggiorna esiti',
+              onPressed: _updatingResults ? null : _updateResults,
+              icon: _updatingResults
+                  ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.refresh),
+            ),
+        ],
         title: const Text(
           'Storico Analisi',
           style: TextStyle(fontWeight: FontWeight.w800),

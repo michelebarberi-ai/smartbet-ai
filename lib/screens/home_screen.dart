@@ -97,18 +97,29 @@ class _HomeScreenState extends State<HomeScreen> {
     _refreshAnalysisHistory();
   }
 
+  Future<SmartBetAnalysisResultResolutionSummary>? _historyUpdate;
+
+  Future<SmartBetAnalysisResultResolutionSummary> _updateResults() {
+    return _historyUpdate ??= _resolveAndRefreshLearning().whenComplete(() {
+      _historyUpdate = null;
+    });
+  }
+
+  Future<SmartBetAnalysisResultResolutionSummary> _resolveAndRefreshLearning() async {
+    await Future.wait([
+      _analysisHistory.initialize(),
+      _comparisonStore.initialize(),
+    ]);
+    final summary = await _analysisResolver.resolvePending();
+    await _learningCoordinator.refresh();
+    return summary;
+  }
+
   Future<void> _refreshAnalysisHistory() async {
     try {
-      await Future.wait([
-        _analysisHistory.initialize(),
-        _comparisonStore.initialize(),
-      ]);
-
-      await _analysisResolver.resolvePending();
-
-      await _learningCoordinator.refresh();
-    } catch (e) {
-      debugPrint('ANALYSIS HISTORY REFRESH ERROR: $e');
+      await _updateResults();
+    } catch (error) {
+      debugPrint('ANALYSIS HISTORY REFRESH ERROR: $error');
     }
   }
 
@@ -612,7 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const AnalysisHistoryScreen(),
+                                builder: (_) => AnalysisHistoryScreen(onRefreshResults: _updateResults),
                               ),
                             );
                           },

@@ -16,6 +16,9 @@ class SmartBetAnalysisResultResolutionSummary {
   final int updatedRecords;
 
   final int apiErrors;
+  final int fixturesNotReturned;
+  final int fixturesWithoutFinalScore;
+  final int fixturesWithFetchError;
 
   final int pendingRecordsAfter;
   final int pendingFixturesAfter;
@@ -29,6 +32,9 @@ class SmartBetAnalysisResultResolutionSummary {
     required this.resolvedFixtures,
     required this.updatedRecords,
     required this.apiErrors,
+    this.fixturesNotReturned = 0,
+    this.fixturesWithoutFinalScore = 0,
+    this.fixturesWithFetchError = 0,
     required this.pendingRecordsAfter,
     required this.pendingFixturesAfter,
   });
@@ -114,6 +120,9 @@ class SmartBetAnalysisResultResolver {
     var resolvedFixtures = 0;
     var updatedRecords = 0;
     var apiErrors = 0;
+    var fixturesNotReturned = 0;
+    var fixturesWithoutFinalScore = 0;
+    var fixturesWithFetchError = 0;
 
     for (final dateKey in dateKeys) {
       final records = grouped[dateKey]!;
@@ -138,6 +147,7 @@ class SmartBetAnalysisResultResolver {
         datesQueried++;
       } catch (_) {
         apiErrors++;
+        fixturesWithFetchError += records.length;
         continue;
       }
 
@@ -169,12 +179,14 @@ class SmartBetAnalysisResultResolver {
         final raw = rawByFixture[record.fixtureId];
 
         if (raw == null) {
+          fixturesNotReturned++;
           continue;
         }
 
         final actual = _settlementResult(raw);
 
-        if (actual == null) {
+        if (actual == null || actual.homeGoals < 0 || actual.awayGoals < 0) {
+          fixturesWithoutFinalScore++;
           continue;
         }
 
@@ -204,6 +216,9 @@ class SmartBetAnalysisResultResolver {
       resolvedFixtures: resolvedFixtures,
       updatedRecords: updatedRecords,
       apiErrors: apiErrors,
+      fixturesNotReturned: fixturesNotReturned,
+      fixturesWithoutFinalScore: fixturesWithoutFinalScore,
+      fixturesWithFetchError: fixturesWithFetchError,
       pendingRecordsAfter: pendingAfter.length,
       pendingFixturesAfter: _fixtureIds(pendingAfter).length,
     );

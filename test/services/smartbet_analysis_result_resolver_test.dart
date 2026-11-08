@@ -316,6 +316,26 @@ void main() {
     expect(summary.pendingRecordsAfter, 0);
   });
 
+  test('distingue una partita assente da una senza punteggio finale', () async {
+    final store = SmartBetAnalysisHistoryStore();
+    final kickoff = DateTime.utc(2026, 10, 20, 18);
+    for (final id in [801, 802]) {
+      await register(store: store, fixtureId: id,
+          engine: SmartBetAnalysisEngine.smartBet, market: '1', kickoff: kickoff);
+    }
+    final resolver = SmartBetAnalysisResultResolver(
+      store: store,
+      fetchByDate: (_) async => [
+        fixture(id: 802, status: '2H', homeGoals: 1, awayGoals: 0),
+      ],
+    );
+    final summary = await resolver.resolvePending(now: kickoff.add(const Duration(hours: 6)));
+    expect(summary.fixturesNotReturned, 1);
+    expect(summary.fixturesWithoutFinalScore, 1);
+    expect(summary.fixturesWithFetchError, 0);
+    expect(summary.pendingFixturesAfter, 2);
+  });
+
   test('errore API non altera lo storico', () async {
     final store = SmartBetAnalysisHistoryStore();
 

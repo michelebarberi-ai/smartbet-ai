@@ -125,6 +125,40 @@ void main() {
     );
   });
 
+  test('tre gare senza eventi non bloccano la quarta al riavvio', () async {
+    final store = SmartBetScorerLearningStore();
+    final ids = [101, 102, 103, 104];
+    await store.capture([for (final id in ids) _record(fixtureId: id)]);
+    final attempts = <int>[];
+    SmartBetScorerResultResolver resolver(SmartBetScorerLearningStore storage) =>
+        SmartBetScorerResultResolver(
+          store: storage,
+          fetchFixtures: (_) async => [
+            for (final id in ids)
+              {
+                'fixture': {'id': id, 'status': {'short': 'FT'}},
+                'goals': {'home': 1, 'away': 0},
+              },
+          ],
+          fetchEvents: (id) async {
+            attempts.add(id);
+            if (id != 104) return [];
+            return [
+              {'type': 'Goal', 'detail': 'Missed Penalty'},
+              {'type': 'Goal', 'detail': 'Normal Goal', 'player': {'id': 10}},
+            ];
+          },
+        );
+    final now = _kickoff.add(const Duration(hours: 6));
+    expect(await resolver(store).resolvePending(now: now), 0);
+    expect(attempts, [101, 102, 103]);
+    attempts.clear();
+    final reloaded = SmartBetScorerLearningStore();
+    expect(await resolver(reloaded).resolvePending(now: now), 1);
+    expect(attempts, [104, 101, 102]);
+    expect(reloaded.records.singleWhere((r) => r.fixtureId == 104).actualGoals, 1);
+  });
+
   test('risolve una fixture solo se FT e feed gol coerente', () async {
     final store = SmartBetScorerLearningStore();
     await store.capture([_record(playerId: 10), _record(playerId: 11)]);

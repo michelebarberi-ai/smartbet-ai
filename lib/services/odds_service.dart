@@ -471,7 +471,7 @@ class OddsService {
                   continue;
                 }
 
-                final outcome = _goalsOutcome(raw, betName);
+                final outcome = _goalsOutcome(raw);
 
                 if (outcome == null) {
                   continue;
@@ -872,7 +872,7 @@ class OddsService {
       return betId == 5;
     }
 
-    return _normalizeText(betName) == 'goals over under';
+    return _normalizeText(betName.replaceAll('/', ' ')) == 'goals over under';
   }
 
   bool _isBothTeamsScoreBet(int betId, String betName) {
@@ -915,60 +915,28 @@ class OddsService {
     return null;
   }
 
-  String? _goalsOutcome(String raw, String betName) {
-    // La linea deve provenire dal VALUE del mercato, non dal nome del bet.
-    // Questo riduce il rischio di confondere mercati secondari con il
-    // totale gol full-time principale.
-    final value = _normalizeText(raw);
+  static final _goalLine = RegExp(
+    r'^(over|under)\s*([1-4])[.,]50*$',
+    caseSensitive: false,
+  );
 
-    final isOver = value.contains('over');
-    final isUnder = value.contains('under');
-
-    if (!isOver && !isUnder) {
-      return null;
-    }
-
-    final number = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(value);
-
-    if (number == null) {
-      return null;
-    }
-
-    final line = number.group(1);
-
-    if (line != '1.5' && line != '2.5' && line != '3.5' && line != '4.5') {
-      return null;
-    }
-
-    return '${isOver ? 'OVER' : 'UNDER'} $line';
+  String? _goalsOutcome(String raw) {
+    final match = _goalLine.firstMatch(raw.trim());
+    if (match == null) return null;
+    return '${match[1]!.toUpperCase()} ${match[2]}.5';
   }
 
+  static final _goalOverCombo = RegExp(
+    r'^(?:o/yes|over/yes|yes/over)2[.,]50*$',
+  );
+  static final _noGoalUnderCombo = RegExp(
+    r'^(?:u/no|under/no|no/under)2[.,]50*$',
+  );
+
   String? _verifiedGoalTotalComboOutcome(String raw) {
-    final value = raw.toLowerCase().trim();
-    final compact = value.replaceAll(RegExp(r'\s+'), '');
-
-    if (!compact.contains('2.5')) {
-      return null;
-    }
-
-    final goalOver =
-        compact.startsWith('o/yes') ||
-        compact.startsWith('over/yes') ||
-        compact.startsWith('yes/over');
-
-    if (goalOver) {
-      return 'GOAL + O2.5';
-    }
-
-    final noGoalUnder =
-        compact.startsWith('u/no') ||
-        compact.startsWith('under/no') ||
-        compact.startsWith('no/under');
-
-    if (noGoalUnder) {
-      return 'NO GOAL + U2.5';
-    }
-
+    final value = raw.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    if (_goalOverCombo.hasMatch(value)) return 'GOAL + O2.5';
+    if (_noGoalUnderCombo.hasMatch(value)) return 'NO GOAL + U2.5';
     return null;
   }
 
@@ -1020,9 +988,10 @@ class OddsService {
   }
 
   double _toDouble(dynamic value) {
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
+    final parsed = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString().trim().replaceAll(',', '.') ?? '');
+    return parsed != null && parsed.isFinite ? parsed : 0.0;
   }
 
   static void clearCache() {

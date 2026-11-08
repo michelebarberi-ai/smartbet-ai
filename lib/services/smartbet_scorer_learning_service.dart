@@ -236,6 +236,9 @@ class SmartBetScorerGoalEventVerifier {
         continue;
       }
       final detail = raw['detail']?.toString().trim().toLowerCase() ?? '';
+      if (detail == 'missed penalty') {
+        continue;
+      }
       if (detail != 'normal goal' &&
           detail != 'penalty' &&
           detail != 'own goal') {
@@ -292,16 +295,34 @@ class SmartBetScorerResultResolver {
         continue;
       }
       due.putIfAbsent(r.fixtureId, () => r);
-      if (due.length >= maximumFixtures) {
-        break;
-      }
     }
     if (due.isEmpty) {
       return 0;
     }
 
+    // Resume after the last reserved fixture, even when the feed failed.
+    // Ordered IDs also let us resume when the previous fixture has settled.
+    final ids = due.keys.toList()..sort();
+    Iterable<int> batch = ids;
+    if (ids.length > maximumFixtures) {
+      const cursorKey = 'smartbet_scorer_resolution_cursor_v1';
+      final prefs = await store._preferences();
+      final cursor = prefs.getInt(cursorKey);
+      final after = cursor == null ? 0 : ids.indexWhere((id) => id > cursor);
+      final start = after < 0 ? 0 : after;
+      final selected = List<int>.generate(
+        maximumFixtures,
+        (offset) => ids[(start + offset) % ids.length],
+      );
+      if (!await prefs.setInt(cursorKey, selected.last)) {
+        throw StateError('Impossibile salvare il turno di verifica marcatori');
+      }
+      batch = selected;
+    }
+
     final byDate = <String, List<SmartBetScorerLearningRecord>>{};
-    for (final item in due.values) {
+    for (final id in batch) {
+      final item = due[id]!;
       final local = item.kickoffAt.toLocal();
       final key = '${local.year}-${local.month}-${local.day}';
       (byDate[key] ??= []).add(item);
@@ -339,9 +360,9 @@ class SmartBetScorerResultResolver {
           continue;
         }
         final goals = raw['goals'] as Map;
-        final home = SmartBetScorerGoalEventVerifier._toInt(goals['home']);
-        final away = SmartBetScorerGoalEventVerifier._toInt(goals['away']);
-        if (goals['home'] == null || goals['away'] == null) {
+        final home = int.tryParse(goals['home'].toString());
+        final away = int.tryParse(goals['away'].toString());
+        if (home == null || away == null || home < 0 || away < 0) {
           continue;
         }
         try {
