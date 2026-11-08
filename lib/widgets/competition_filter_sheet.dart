@@ -13,13 +13,20 @@ class CompetitionFilterSheet {
       'goalvdline.favorite_competition_keys.v1';
   static const Color _accent = Color(0xFF00C853);
 
-  static String keyFor(MatchModel match) {
-    final country = match.country.trim().isEmpty
-        ? 'Altro'
-        : match.country.trim();
-    final league = match.league.trim().isEmpty
-        ? 'Competizione'
-        : match.league.trim();
+  static String keyFor(MatchModel match) =>
+      keyForNames(match.country, match.league);
+
+  static String keyForNames(String country, String league) {
+    final area = country.trim().isEmpty ? 'Altro' : country.trim();
+    final name = league.trim().isEmpty ? 'Competizione' : league.trim();
+    return '$area|||$name';
+  }
+
+  static String _favoriteKey(String key) {
+    final separator = key.indexOf('|||');
+    if (separator < 0) return key;
+    final country = GoalVdLineCompetitionOrder.country(key.substring(0, separator));
+    final league = key.substring(separator + 3).trim().toLowerCase();
     return '$country|||$league';
   }
 
@@ -27,23 +34,23 @@ class CompetitionFilterSheet {
     required BuildContext context,
     required List<MatchModel> matches,
     required Set<String> selectedKeys,
+  }) => showLeagues(
+    context: context,
+    leagues: matches.map((m) => (m.country, m.league)),
+    selectedKeys: selectedKeys,
+  );
+
+  static Future<Set<String>?> showLeagues({
+    required BuildContext context,
+    required Iterable<(String, String)> leagues,
+    required Set<String> selectedKeys,
   }) async {
     final byCountry = <String, Map<String, String>>{};
-
-    for (final match in matches) {
-      // La classificazione resta puramente visiva. L'identificativo dei
-      // campionati non cambia, per rispettare filtri e preferiti precedenti.
-      final country = GoalVdLineCompetitionOrder.displayCountry(
-        match.country,
-        match.league,
-      );
-      final league = match.league.trim().isEmpty
-          ? 'Competizione'
-          : match.league.trim();
-      byCountry.putIfAbsent(country, () => <String, String>{})[keyFor(match)] =
-          league;
+    for (final (area, name) in leagues) {
+      final country = GoalVdLineCompetitionOrder.displayCountry(area, name);
+      final league = name.trim().isEmpty ? 'Competizione' : name.trim();
+      byCountry.putIfAbsent(country, () => {})[keyForNames(area, name)] = league;
     }
-
     final countries = byCountry.keys.toList()
       ..sort(GoalVdLineCompetitionOrder.compareCountries);
     final allKeys = <String>{
@@ -53,7 +60,7 @@ class CompetitionFilterSheet {
 
     final preferenceStore = await SharedPreferences.getInstance();
     final favorites = <String>{
-      ...?preferenceStore.getStringList(_favoritesStorageKey),
+      ...(preferenceStore.getStringList(_favoritesStorageKey) ?? <String>[]).map(_favoriteKey),
     };
     if (!context.mounted) return null;
 
@@ -61,19 +68,20 @@ class CompetitionFilterSheet {
         ? <String>{...allKeys}
         : <String>{...selectedKeys.where(allKeys.contains)};
 
+    var selected = initial;
+    var favoriteKeys = favorites;
+    var search = '';
+    var saving = false;
     return showModalBottomSheet<Set<String>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF111827),
       builder: (context) {
-        var selected = initial;
-        var favoriteKeys = favorites;
-        var search = '';
 
         return StatefulBuilder(
           builder: (context, setModalState) {
             final allSelected = selected.length == allKeys.length;
-            final favoriteAvailable = allKeys.intersection(favoriteKeys);
+            final favoriteAvailable = allKeys.where((key) => favoriteKeys.contains(_favoriteKey(key))).toSet();
             final matchingCountries = <String, Map<String, String>>{};
             for (final country in countries) {
               final filtered = <String, String>{};
@@ -88,7 +96,8 @@ class CompetitionFilterSheet {
             }
 
             Widget leagueRow(MapEntry<String, String> entry) {
-              final starred = favoriteKeys.contains(entry.key);
+              final key = _favoriteKey(entry.key);
+              final starred = favoriteKeys.contains(key);
               return CheckboxListTile(
                 dense: true,
                 value: selected.contains(entry.key),
@@ -108,23 +117,28 @@ class CompetitionFilterSheet {
                     starred ? Icons.star : Icons.star_border,
                     color: starred ? Colors.amberAccent : Colors.white38,
                   ),
-                  onPressed: () async {
+                  onPressed: saving ? null : () async {
                     final nextFavorites = <String>{...favoriteKeys};
-                    if (!nextFavorites.add(entry.key)) {
-                      nextFavorites.remove(entry.key);
+                    if (!nextFavorites.add(key)) {
+                      nextFavorites.remove(key);
                     }
-                    setModalState(() => favoriteKeys = nextFavorites);
-                    final persisted = nextFavorites.toList()..sort();
-                    final saved = await preferenceStore.setStringList(
-                      _favoritesStorageKey,
-                      persisted,
-                    );
-                    if (!saved && context.mounted) {
-                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                        const SnackBar(
-                          content: Text('Impossibile salvare i preferiti.'),
-                        ),
+                    setModalState(() => saving = true);
+                    try {
+                      final saved = await preferenceStore.setStringList(
+                        _favoritesStorageKey, nextFavorites.toList()..sort(),
                       );
+                      if (!saved) throw StateError('Preferiti non salvati');
+                      if (context.mounted) {
+                        setModalState(() => favoriteKeys = nextFavorites);
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                          const SnackBar(content: Text('Impossibile salvare i preferiti.')),
+                        );
+                      }
+                    } finally {
+                      if (context.mounted) setModalState(() => saving = false);
                     }
                   },
                 ),
@@ -270,10 +284,9 @@ class CompetitionFilterSheet {
                             ),
                             for (final country in countries)
                               for (final entry
-                                  in byCountry[country]!.entries.where(
-                                    (entry) =>
-                                        favoriteAvailable.contains(entry.key),
-                                  ))
+                                  in (byCountry[country]!.entries.where(
+                                    (entry) => favoriteAvailable.contains(entry.key),
+                                  ).toList()..sort((a, b) => GoalVdLineCompetitionOrder.compareLeagues(a.value, b.value))))
                                 leagueRow(entry),
                             const Divider(color: Colors.white12),
                           ],
@@ -343,6 +356,31 @@ class CompetitionFilterSheet {
             );
           },
         );
+      },
+    );
+  }
+}
+
+/// The current screen owns its selection. All screens open the same favorites.
+class CompetitionFilterButton extends StatelessWidget {
+  final Iterable<(String, String)> leagues;
+  final Set<String> selectedKeys;
+  final ValueChanged<Set<String>> onChanged;
+
+  const CompetitionFilterButton({
+    super.key, required this.leagues, required this.selectedKeys, required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      icon: const Icon(Icons.filter_list),
+      label: Text(selectedKeys.isEmpty ? 'Campionati' : 'Campionati (${selectedKeys.length})'),
+      onPressed: () async {
+        final result = await CompetitionFilterSheet.showLeagues(
+          context: context, leagues: leagues, selectedKeys: selectedKeys,
+        );
+        if (context.mounted && result != null) onChanged(result);
       },
     );
   }

@@ -1,3 +1,4 @@
+import '../widgets/competition_filter_sheet.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -49,6 +50,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
   int _processed = 0;
   int _total = 0;
 
+  Set<String> _competitionKeys = {};
   final List<_DailyPick> _results = [];
 
   static const int _wantedResults =
@@ -1704,6 +1706,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visibleResults = _results.where((item) => _competitionKeys.isEmpty ||
+        _competitionKeys.contains(CompetitionFilterSheet.keyFor(item.match))).toList();
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
@@ -1840,9 +1844,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
               ],
               const SizedBox(height: 12),
+              CompetitionFilterButton(
+                leagues: _results.map((item) => (item.match.country, item.match.league)),
+                selectedKeys: _competitionKeys,
+                onChanged: (keys) => setState(() => _competitionKeys = keys),
+              ),
+              if (visibleResults.isEmpty)
+                const Text('Nessun risultato nei campionati selezionati.'),
               GoalVdLineCompetitionGroups<_DailyPick>(
                 namespace: 'daily-top-picks',
-                items: _results,
+                items: visibleResults,
                 countryOf: (item) => item.match.country,
                 leagueOf: (item) => item.match.league,
                 dateOf: (item) => item.match.date,

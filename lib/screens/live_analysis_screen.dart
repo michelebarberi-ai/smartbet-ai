@@ -1,3 +1,4 @@
+import '../widgets/competition_filter_sheet.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
   Future<List<LiveMatchSummary>>? _future;
   Timer? _timer;
 
+  Set<String> _competitionKeys = {};
   bool _mainCompetitionsOnly = false;
 
   @override
@@ -177,6 +179,10 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
     final query = _searchController.text.trim().toLowerCase();
 
     return matches.where((match) {
+      if (_competitionKeys.isNotEmpty && !_competitionKeys.contains(
+          CompetitionFilterSheet.keyForNames(match.country, match.leagueName))) {
+        return false;
+      }
       if (_mainCompetitionsOnly && !_isMainCompetition(match)) {
         return false;
       }
@@ -192,7 +198,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
     }).toList();
   }
 
-  Widget _filters(int totalMatches, int visibleMatches) {
+  Widget _filters(List<LiveMatchSummary> matches, int visibleMatches) {
     return Column(
       children: [
         TextField(
@@ -268,11 +274,16 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
             ),
           ],
         ),
+        CompetitionFilterButton(
+          leagues: matches.map((m) => (m.country, m.leagueName)),
+          selectedKeys: _competitionKeys,
+          onChanged: (keys) => setState(() => _competitionKeys = keys),
+        ),
         const SizedBox(height: 7),
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            '$visibleMatches di $totalMatches partite Live',
+            '$visibleMatches di ${matches.length} partite Live',
             style: const TextStyle(color: Colors.white38, fontSize: 10),
           ),
         ),
@@ -394,7 +405,7 @@ class _LiveAnalysisScreenState extends State<LiveAnalysisScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _filters(matches.length, visibleMatches.length),
+                _filters(matches, visibleMatches.length),
                 const SizedBox(height: 16),
                 if (visibleMatches.isEmpty)
                   Container(

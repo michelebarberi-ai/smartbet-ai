@@ -1,3 +1,4 @@
+import '../widgets/competition_filter_sheet.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_coupon_service.dart';
@@ -23,6 +24,7 @@ class AnalysisScreen extends StatefulWidget {
 }
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
+  Set<String> _competitionKeys = {};
   late Future<List<MatchModel>> _matches;
 
   Timer? _matchExpiryTimer;
@@ -556,7 +558,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         continue;
       }
 
-      if (!_matchesSearch(match)) {
+      if (!_matchesSearch(match) ||
+          (_competitionKeys.isNotEmpty && !_competitionKeys.contains(CompetitionFilterSheet.keyFor(match)))) {
         continue;
       }
 
@@ -1806,21 +1809,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // HEADER
   // ============================================================
 
-  Widget _header() {
+  Widget _header([List<MatchModel> matches = const []]) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "GOALVDLINE",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.5,
-            ),
-          ),
+          Row(children: [
+            const Expanded(child: Text("GOALVDLINE", style: TextStyle(
+              color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.5,
+            ))),
+            if (matches.isNotEmpty)
+              CompetitionFilterButton(
+                leagues: matches.where(_isStillAnalyzable).map((m) => (m.country, m.league)),
+                selectedKeys: _competitionKeys,
+                onChanged: (keys) => setState(() => _competitionKeys = keys),
+              ),
+          ]),
           const SizedBox(height: 3),
           const Text(
             "Analisi intelligente delle partite",
@@ -2044,7 +2049,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (grouped.isEmpty) {
             return Column(
               children: [
-                _header(),
+                _header(allMatches),
                 const Expanded(
                   child: Center(
                     child: Padding(
@@ -2077,7 +2082,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
           return Column(
             children: [
-              _header(),
+              _header(allMatches),
 
               Expanded(
                 child: ListView.builder(

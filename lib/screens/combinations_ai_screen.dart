@@ -4021,7 +4021,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   // P23B2F — Condivide esattamente la combinazione attualmente visibile.
   // Le quote mancanti non vengono stimate o sostituite.
-  Future<void> _shareCurrentCombination() async {
+  Future<void> _shareCurrentCombination(BuildContext buttonContext) async {
     if (_results.isEmpty || _loading) return;
 
     final isSystem = _outputMode == _CombinationOutputMode.system &&
@@ -4069,7 +4069,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             '${item.match.homeTeam} - ${item.match.awayTeam}')
         ..writeln(
           '   ${item.market} • ${item.probability}%'
-          '${item.odd == null ? ' • quota non disponibile' : ' • quota ${item.odd!.toStringAsFixed(2)}'}',
+          '${item.odd == null || !item.odd!.isFinite || item.odd! < 1 ? ' • quota non disponibile' : ' • quota ${item.odd!.toStringAsFixed(2)}'}',
         );
       if (league.isNotEmpty) {
         message.writeln('   $league');
@@ -4083,8 +4083,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       ..writeln('Stime statistiche, non garanzie di risultato. '
           'Gioca responsabilmente.');
 
+    final box = buttonContext.findRenderObject() as RenderBox?;
     await SharePlus.instance.share(
       ShareParams(
+        sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
         text: message.toString(),
         subject: 'GoalVdLine — $title',
       ),
@@ -4578,11 +4580,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _shareCurrentCombination,
+              child: Builder(builder: (buttonContext) => OutlinedButton.icon(
+                onPressed: _loading ? null : () => _shareCurrentCombination(buttonContext),
                 icon: const Icon(Icons.ios_share_outlined),
                 label: const Text('CONDIVIDI SCHEDINA'),
-              ),
+              )),
             ),
           ],
 
