@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// P21C: fotografia prepartita, locale e separata dallo storico ufficiale.
 /// Nessuna quota bookmaker viene conservata o usata nel modello.
 class SmartBetSimulationShadowSnapshot {
+  final String? officialChoice;
+  final String? trialChoiceV1;
   final int fixtureId;
   final String engine;
   final DateTime matchDate;
@@ -19,6 +21,8 @@ class SmartBetSimulationShadowSnapshot {
   final List<String> unsupportedMarkets;
 
   SmartBetSimulationShadowSnapshot({
+    this.officialChoice,
+    this.trialChoiceV1,
     required this.fixtureId,
     required this.engine,
     required this.matchDate,
@@ -65,6 +69,8 @@ class SmartBetSimulationShadowSnapshot {
 
   Map<String, dynamic> toJson() => {
     'fixtureId': fixtureId,
+    if (trialChoiceV1 != null) 'officialChoice': officialChoice,
+    if (trialChoiceV1 != null) 'trialChoiceV1': trialChoiceV1,
     'engine': engine,
     'matchDate': matchDate.toUtc().toIso8601String(),
     'capturedAt': capturedAt.toUtc().toIso8601String(),
@@ -83,6 +89,8 @@ class SmartBetSimulationShadowSnapshot {
     );
     return SmartBetSimulationShadowSnapshot(
       fixtureId: (json['fixtureId'] as num).toInt(),
+      officialChoice: json['officialChoice'] as String?,
+      trialChoiceV1: json['trialChoiceV1'] as String?,
       engine: json['engine'] as String,
       matchDate: DateTime.parse(json['matchDate'] as String),
       capturedAt: DateTime.parse(json['capturedAt'] as String),

@@ -4,6 +4,7 @@ import 'package:smartbet_ai_new/models/analysis_result.dart';
 import 'package:smartbet_ai_new/models/match_model.dart';
 import 'package:smartbet_ai_new/services/smartbet_analysis_history_store.dart';
 import 'package:smartbet_ai_new/services/smartbet_analysis_registration_service.dart';
+import 'package:smartbet_ai_new/services/smartbet_choice_trial.dart';
 import 'package:smartbet_ai_new/services/smartbet_simulation_shadow_capture_service.dart';
 import 'package:smartbet_ai_new/services/smartbet_simulation_shadow_store.dart';
 
@@ -61,6 +62,42 @@ void main() {
     explanation: 'previsione di test',
   );
 
+  test('lo storico disponibile oggi influenza solo le nuove scelte', () {
+    final cutoff = DateTime.utc(2026, 11, 8);
+    final old = SmartBetAnalysisRecord.fromJson({
+      'fixtureId': 42, 'engine': 'smartBet', 'market': 'OSPITE SEGNA',
+      'matchDate': '2026-11-01T18:00:00Z',
+      'firstSeenAt': '2026-11-01T12:00:00Z',
+      'lastSeenAt': '2026-11-01T12:00:00Z',
+      'actualHomeGoals': 1, 'actualAwayGoals': 0,
+      'status': 'wrong', 'prospectiveEligible': true, 'probability': 0.8,
+    })!;
+    const probabilities = {'OSPITE SEGNA': 0.701, 'CASA SEGNA': 0.7};
+    String? pick(bool observedNow, SmartBetAnalysisEngine engine, int fixture) =>
+        SmartBetChoiceTrial.choose(
+          official: 'OSPITE SEGNA', original: probabilities,
+          simulated: probabilities, engine: engine, fixtureId: fixture,
+          cutoff: cutoff, history: [old], historyObservedNow: observedNow,
+        );
+    expect(pick(true, SmartBetAnalysisEngine.smartBet, 43), 'CASA SEGNA');
+    expect(pick(false, SmartBetAnalysisEngine.smartBet, 43), 'OSPITE SEGNA');
+    expect(pick(true, SmartBetAnalysisEngine.smartBet, 42), 'OSPITE SEGNA');
+    expect(pick(true, SmartBetAnalysisEngine.diego, 43), 'OSPITE SEGNA');
+  });
+
+  test('le due scelte usano lo stesso denominatore', () {
+    final totals = SmartBetChoiceTotals()
+      ..add('X', '1', 2, 0)
+      ..add('X', '1', 1, 1)
+      ..add('X', 'X', 0, 0)
+      ..add('X', '1', 0, 2);
+    expect(totals.settled, 4);
+    expect(totals.officialHits, 2);
+    expect(totals.alternativeHits, 2);
+    expect(totals.fixed, 1);
+    expect(totals.introduced, 1);
+  });
+
   test('P21C: registra tutte le probabilita native, soprattutto X', () async {
     final shadows = SmartBetSimulationShadowStore();
     final registration = SmartBetAnalysisRegistrationService(
@@ -79,6 +116,11 @@ void main() {
     final snap = shadows.snapshots.single;
     expect(snap.engine, 'SMARTBET');
     expect(snap.fixtureId, 2101);
+    final reloaded = SmartBetSimulationShadowSnapshot.fromJson(snap.toJson());
+    expect(reloaded.officialChoice, 'X');
+    expect(reloaded.trialChoiceV1, '1');
+    final legacy = snap.toJson()..remove('trialChoiceV1')..remove('officialChoice');
+    expect(SmartBetSimulationShadowSnapshot.fromJson(legacy).trialChoiceV1, isNull);
     expect(snap.capturedAt, before);
     expect(snap.dataQuality, closeTo(0.76, 1e-12));
     expect(snap.originalProbabilities['X'], 0.27);

@@ -1,4 +1,5 @@
 import 'smartbet_analysis_history_store.dart';
+import 'smartbet_choice_trial.dart';
 import 'smartbet_analysis_market_settlement.dart';
 import 'smartbet_simulation_shadow_store.dart';
 
@@ -50,6 +51,7 @@ class SmartBetSimulationOutcomeMarketMetric {
 }
 
 class SmartBetSimulationOutcomeAuditReport {
+  final Map<String, SmartBetChoiceTotals> choices;
   final int snapshotCount;
   final int comparedSnapshots;
   final int pendingSnapshots;
@@ -61,6 +63,7 @@ class SmartBetSimulationOutcomeAuditReport {
   final Map<String, SmartBetSimulationOutcomeMarketMetric> metrics;
 
   const SmartBetSimulationOutcomeAuditReport({
+    this.choices = const {},
     required this.snapshotCount,
     required this.comparedSnapshots,
     required this.pendingSnapshots,
@@ -83,6 +86,7 @@ class SmartBetSimulationOutcomeAuditReport {
 
   Map<String, Object> toJson() => {
     'schema': 'smartbet_p21d_outcome_audit_v1',
+    'choiceTrialV1': {for (final e in choices.entries) e.key: e.value.toJson()},
     'snapshotCount': snapshotCount,
     'comparedSnapshots': comparedSnapshots,
     'pendingSnapshots': pendingSnapshots,
@@ -157,6 +161,7 @@ class SmartBetSimulationOutcomeAuditService {
       }
     }
 
+    final choices = <String, SmartBetChoiceTotals>{};
     final seen = <String>{};
     final totals = <String, _PairAccumulator>{};
     var snapshotsCount = 0;
@@ -190,6 +195,12 @@ class SmartBetSimulationOutcomeAuditService {
       }
 
       compared++;
+      final official = snapshot.officialChoice;
+      final trial = snapshot.trialChoiceV1;
+      if (official != null && trial != null) {
+        choices.putIfAbsent(snapshot.engine, SmartBetChoiceTotals.new)
+            .add(official, trial, outcome.home, outcome.away);
+      }
       // Non appaiamo mercati differenti o sconosciuti. Solo l'intersezione
       // delle due mappe e' confrontabile: stesso fixture, motore e mercato.
       final original = snapshot.originalProbabilities;
@@ -247,6 +258,7 @@ class SmartBetSimulationOutcomeAuditService {
       );
     }
     return SmartBetSimulationOutcomeAuditReport(
+      choices: Map.unmodifiable(choices),
       snapshotCount: snapshotsCount,
       comparedSnapshots: compared,
       pendingSnapshots: pending,

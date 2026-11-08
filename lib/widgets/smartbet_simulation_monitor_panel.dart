@@ -116,6 +116,15 @@ class SmartBetSimulationAuditReportView extends StatelessWidget {
       key: const ValueKey('p21e_report'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text('Confronto scelte prepartita'),
+        if (report.choices.isEmpty)
+          const Text('In attesa di nuove scelte confrontabili con esito.'),
+        for (final e in report.choices.entries)
+          Text('${e.key} • ${e.value.settled} confronti: '
+              'ufficiale ${e.value.officialHits} corrette, '
+              'alternativa ${e.value.alternativeHits} corrette. '
+              'Errori corretti ${e.value.fixed}, introdotti ${e.value.introduced}, '
+              'saldo ${e.value.fixed - e.value.introduced}.'),
         Text('Snapshot prepartita: ${report.snapshotCount}'),
         Text('Snapshot confrontati: ${report.comparedSnapshots}'),
         Text('Snapshot in attesa di esito: ${report.pendingSnapshots}'),

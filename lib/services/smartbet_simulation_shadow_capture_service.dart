@@ -5,6 +5,7 @@ import '../models/match_model.dart';
 import 'diego_ai_service.dart';
 import 'smartbet_analysis_history_store.dart';
 import 'smartbet_match_simulation_service.dart';
+import 'smartbet_choice_trial.dart';
 import 'smartbet_simulation_bridge_service.dart';
 import 'smartbet_simulation_shadow_store.dart';
 
@@ -24,6 +25,8 @@ class SmartBetSimulationShadowCaptureService {
     required AnalysisResult smartBet,
     required SmartBetAnalysisRecord record,
     DiegoAiAnalysis? diego,
+    String? diegoMarket,
+    Iterable<SmartBetAnalysisRecord> history = const [],
     DateTime? recordedAt,
   }) async {
     try {
@@ -45,6 +48,10 @@ class SmartBetSimulationShadowCaptureService {
         );
         await store.saveFirst(
           _snapshot(
+            official: record.market,
+            engine: SmartBetAnalysisEngine.smartBet,
+            history: history,
+            historyObservedNow: recordedAt == null,
             report: report,
             fixtureId: match.fixtureId,
             matchDate: kickoff,
@@ -65,6 +72,10 @@ class SmartBetSimulationShadowCaptureService {
         );
         await store.saveFirst(
           _snapshot(
+            official: diegoMarket ?? '',
+            engine: SmartBetAnalysisEngine.diego,
+            history: history,
+            historyObservedNow: recordedAt == null,
             report: report,
             fixtureId: match.fixtureId,
             matchDate: kickoff,
@@ -86,12 +97,26 @@ class SmartBetSimulationShadowCaptureService {
       away <= 6;
 
   static SmartBetSimulationShadowSnapshot _snapshot({
+    required String official,
+    required SmartBetAnalysisEngine engine,
+    required Iterable<SmartBetAnalysisRecord> history,
+    required bool historyObservedNow,
     required SmartBetSimulationComparisonReport report,
     required int fixtureId,
     required DateTime matchDate,
     required DateTime capturedAt,
   }) {
+    final original = {for (final d in report.comparedMarkets) d.market: d.existingProbability};
+    final simulated = {for (final d in report.comparedMarkets) d.market: d.simulatedProbability};
+    final market = normalizeAnalysisMarket(official);
+    final trial = SmartBetChoiceTrial.choose(
+      official: market, original: original, simulated: simulated,
+      fixtureId: fixtureId, engine: engine, history: history,
+      cutoff: capturedAt, historyObservedNow: historyObservedNow,
+    );
     return SmartBetSimulationShadowSnapshot(
+      officialChoice: trial == null ? null : market,
+      trialChoiceV1: trial,
       fixtureId: fixtureId,
       engine: report.source,
       matchDate: matchDate,
@@ -100,14 +125,8 @@ class SmartBetSimulationShadowCaptureService {
       expectedHomeGoals: report.simulation.input.expectedHomeGoals,
       expectedAwayGoals: report.simulation.input.expectedAwayGoals,
       dataQuality: report.dataQuality,
-      originalProbabilities: {
-        for (final delta in report.comparedMarkets)
-          delta.market: delta.existingProbability,
-      },
-      simulatedProbabilities: {
-        for (final delta in report.comparedMarkets)
-          delta.market: delta.simulatedProbability,
-      },
+      originalProbabilities: original,
+      simulatedProbabilities: simulated,
       unsupportedMarkets: report.unsupportedMarkets,
     );
   }

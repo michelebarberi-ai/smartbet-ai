@@ -15,12 +15,16 @@ void main() {
     snapshots: const [],
     scorers: scorers,
     savedPredictions: const [],
+    simulations: const [],
+    simulationAudit: const {'snapshotCount': 0},
   );
 
   test('non inventa valutazioni quando gli storici sono vuoti', () {
     final report = sample();
     expect(report['schema'], 'smartbet-diagnostica-v1');
     expect(report['learningEnabledOnThisDevice'], isTrue);
+    expect((report['data'] as Map)['matchSimulationSnapshots'], isEmpty);
+    expect((report['matchSimulationAudit'] as Map)['snapshotCount'], 0);
     expect((report['summary'] as Map)['marketPredictions'], 0);
     expect((report['shadowBrierOnMatchedVerified'] as Map)['original'], isNull);
     expect((report['data'] as Map).containsKey('apiKeys'), isFalse);

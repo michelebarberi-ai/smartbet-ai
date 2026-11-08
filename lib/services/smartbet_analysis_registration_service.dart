@@ -98,6 +98,9 @@ class SmartBetAnalysisRegistrationService {
           smartBet: smartBet,
           record: smartBetRecord,
           diego: dualAnalysis?.diego,
+          diegoMarket: comparison?.status == DualEngineAgreement.unavailable
+              ? null : comparison?.diegoMarket,
+          history: _store.records,
           recordedAt: recordedAt,
         );
       }

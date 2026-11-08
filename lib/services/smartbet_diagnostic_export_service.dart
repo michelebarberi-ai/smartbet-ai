@@ -8,6 +8,8 @@ import 'smartbet_device_learning_preferences.dart';
 import 'smartbet_learning_snapshot_store.dart';
 import 'smartbet_scorer_learning_service.dart';
 import 'smartbet_shadow_learning_store.dart';
+import 'smartbet_simulation_outcome_audit_service.dart';
+import 'smartbet_simulation_shadow_store.dart';
 
 /// Esporta esclusivamente record diagnostici esplicitamente selezionati.
 /// Nessun dump di SharedPreferences, token, profilo personale o backend.
@@ -34,10 +36,21 @@ class SmartBetDiagnosticExportService {
     final consent = await const SmartBetDeviceLearningPreferences()
         .loadEnabled();
 
+    final simulationStore = SmartBetSimulationShadowStore.instance;
+    await simulationStore.initialize();
+    final simulations = simulationStore.snapshots;
+    final records = history.records;
+    final simulationAudit = SmartBetSimulationOutcomeAuditService().evaluate(
+      snapshots: simulations,
+      history: records,
+    );
+
     final data = SmartBetDiagnosticPayloadBuilder.build(
       generatedAt: DateTime.now().toUtc(),
       learningEnabled: consent,
-      markets: history.records.map((r) => r.toJson()).toList(),
+      markets: records.map((r) => r.toJson()).toList(),
+      simulations: simulations.map((s) => s.toJson()).toList(),
+      simulationAudit: simulationAudit.toJson(),
       comparisons: comparisons.links.map((r) => r.toJson()).toList(),
       shadow: shadows.predictions.map((r) => r.toJson()).toList(),
       snapshots: snapshots.snapshots.map((r) => r.toJson()).toList(),
@@ -95,6 +108,8 @@ class SmartBetDiagnosticPayloadBuilder {
     required List<Map<String, dynamic>> snapshots,
     required List<Map<String, dynamic>> scorers,
     required List<Map<String, dynamic>> savedPredictions,
+    required List<Map<String, dynamic>> simulations,
+    required Map<String, Object> simulationAudit,
   }) {
     final resolved = markets.where(
       (r) =>
@@ -254,8 +269,10 @@ class SmartBetDiagnosticPayloadBuilder {
             : calibratedBrierTotal / shadowPairs,
         'method': 'Stessa previsione e risultato; sola diagnostica shadow',
       },
+      'matchSimulationAudit': simulationAudit,
       'byMarket': byMarket,
       'data': {
+        'matchSimulationSnapshots': simulations,
         'analysisHistory': markets,
         'comparisonLinks': comparisons,
         'shadowCalibrationPredictions': shadow,
