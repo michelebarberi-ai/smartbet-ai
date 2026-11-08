@@ -116,6 +116,8 @@ class SmartBetSimulationAuditReportView extends StatelessWidget {
       key: const ValueKey('p21e_report'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        for (final entry in report.overall.entries)
+          _overallAccuracy(entry.key, entry.value),
         const Text('Confronto scelte prepartita'),
         if (report.choices.isEmpty)
           const Text('In attesa di nuove scelte confrontabili con esito.'),
@@ -157,6 +159,27 @@ class SmartBetSimulationAuditReportView extends StatelessWidget {
           style: TextStyle(fontSize: 12),
         ),
       ],
+    );
+  }
+
+  Widget _overallAccuracy(String engine, SmartBetOverallAccuracy summary) {
+    if (summary.settled == 0) {
+      return Text('$engine • Nessun pronostico concluso');
+    }
+    String rate(int n) => (100 * n / summary.settled).toStringAsFixed(1);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$engine • Precisione complessiva', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('Ufficiale: ${summary.officialHits}/${summary.settled} • ${rate(summary.officialHits)}%'),
+          Text('Scelte confrontate: ${summary.matched.settled}/${summary.settled}'),
+          if (summary.matched.settled > 0)
+            Text('Simulata sul totale: ${summary.shadowHits}/${summary.settled} • '
+                '${rate(summary.shadowHits)}%. Le scelte senza confronto conservano l’esito ufficiale.'),
+        ],
+      ),
     );
   }
 

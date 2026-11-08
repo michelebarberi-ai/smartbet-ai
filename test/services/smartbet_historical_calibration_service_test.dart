@@ -50,6 +50,24 @@ void main() {
     return List.generate(count, (i) => record(i + 1, correct: i < count ~/ 2));
   }
 
+  test('un esito legacy osservato oggi entra solo nelle previsioni successive', () {
+    final json = record(99, legacy: true).toJson();
+    final observed = SmartBetAnalysisRecord.fromJson(json, observedAtLoad: cutoff)!;
+    final later = cutoff.add(const Duration(days: 1));
+    final loadedAgain = SmartBetAnalysisRecord.fromJson(observed.toJson(), observedAtLoad: later)!;
+    expect(loadedAgain.resolvedAt, isNull);
+    expect(loadedAgain.outcomeKnownBy, cutoff);
+    SmartBetCalibrationResult evaluate(DateTime time) => service.evaluate(
+      engine: SmartBetAnalysisEngine.smartBet, market: 'GOAL', probability: 0.8,
+      asOf: time, records: [...history(49), loadedAgain],
+    );
+    expect(evaluate(cutoff).sampleSize, 49);
+    expect(evaluate(later).sampleSize, 50);
+
+    final inconsistent = Map<String, dynamic>.of(json)..['actualAwayGoals'] = 0;
+    expect(SmartBetAnalysisRecord.fromJson(inconsistent, observedAtLoad: cutoff)!.outcomeKnownBy, isNull);
+  });
+
   test('meno di 50 osservazioni non correggono', () {
     final result = service.evaluate(
       engine: SmartBetAnalysisEngine.smartBet,

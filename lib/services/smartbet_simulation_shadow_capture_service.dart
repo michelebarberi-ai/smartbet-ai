@@ -40,7 +40,8 @@ class SmartBetSimulationShadowCaptureService {
       }
 
       // Gli xG a zero sono sentinella di dato mancante in AnalysisResult.
-      if (_validGoals(smartBet.expectedHomeGoals, smartBet.expectedAwayGoals)) {
+      if (record.engine == SmartBetAnalysisEngine.smartBet &&
+          _validGoals(smartBet.expectedHomeGoals, smartBet.expectedAwayGoals)) {
         final report = bridge.fromSmartBet(
           result: smartBet,
           fixtureId: match.fixtureId.toString(),

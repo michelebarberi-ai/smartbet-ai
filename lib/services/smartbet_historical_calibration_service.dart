@@ -52,8 +52,9 @@ class SmartBetHistoricalCalibrationService {
 
       // Conservativo: il risultato deve risultare gia'
       // registrato prima della previsione valutata.
-      final resolvedAt = record.resolvedAt;
-      if (resolvedAt == null || !resolvedAt.isBefore(cutoff)) {
+      final known = record.outcomeKnownBy;
+      if (known == null || !known.isAfter(record.matchDate) ||
+          !record.firstSeenAt.isBefore(record.matchDate) || !known.isBefore(cutoff)) {
         return false;
       }
 

@@ -50,6 +50,11 @@ class SmartBetAnalysisRecord {
   final DateTime lastSeenAt;
   final DateTime? resolvedAt;
 
+  /// When this device first observed the stored outcome without a resolver date.
+  final DateTime? outcomeObservedAt;
+
+  DateTime? get outcomeKnownBy => resolvedAt ?? outcomeObservedAt;
+
   /// Quota decimale catturata alla prima registrazione.
   /// Null per analisi senza una quota reale disponibile.
   final double? quotedOdd;
@@ -91,6 +96,7 @@ class SmartBetAnalysisRecord {
     required this.firstSeenAt,
     required this.lastSeenAt,
     this.resolvedAt,
+    this.outcomeObservedAt,
     this.quotedOdd,
     this.asianSettlement,
   });
@@ -132,6 +138,7 @@ class SmartBetAnalysisRecord {
       firstSeenAt: firstSeenAt,
       lastSeenAt: seenAt,
       resolvedAt: resolvedAt,
+      outcomeObservedAt: outcomeObservedAt,
       quotedOdd: quotedOdd,
       asianSettlement: asianSettlement,
     );
@@ -144,6 +151,8 @@ class SmartBetAnalysisRecord {
     required DateTime updatedAt,
     SmartBetAsianSettlement? asianSettlement,
   }) {
+    final outcomeChanged = homeGoals != actualHomeGoals ||
+        awayGoals != actualAwayGoals || status != this.status;
     return SmartBetAnalysisRecord(
       engine: engine,
       fixtureId: fixtureId,
@@ -167,11 +176,8 @@ class SmartBetAnalysisRecord {
       lastSeenAt: updatedAt,
       quotedOdd: quotedOdd,
       asianSettlement: asianSettlement,
-      resolvedAt:
-          resolvedAt ??
-          (this.status == SmartBetAnalysisStatus.pending
-              ? updatedAt.toUtc()
-              : null),
+      resolvedAt: outcomeChanged ? updatedAt.toUtc() : resolvedAt,
+      outcomeObservedAt: outcomeChanged ? null : outcomeObservedAt,
     );
   }
 
@@ -198,12 +204,17 @@ class SmartBetAnalysisRecord {
       'firstSeenAt': firstSeenAt.toUtc().toIso8601String(),
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
       'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
+      if (outcomeObservedAt != null)
+        'outcomeObservedAt': outcomeObservedAt!.toUtc().toIso8601String(),
       'quotedOdd': quotedOdd,
       'asianSettlement': asianSettlement?.name,
     };
   }
 
-  static SmartBetAnalysisRecord? fromJson(Map<String, dynamic> json) {
+  static SmartBetAnalysisRecord? fromJson(
+    Map<String, dynamic> json, {
+    DateTime? observedAtLoad,
+  }) {
     final fixtureId = _toInt(json['fixtureId']);
 
     final engine = _analysisEngineFromName(json['engine']?.toString());
@@ -249,6 +260,30 @@ class SmartBetAnalysisRecord {
         _analysisStatusFromName(json['status']?.toString()) ??
         SmartBetAnalysisStatus.pending;
 
+    final homeGoals = _toInt(json['actualHomeGoals']);
+    final awayGoals = _toInt(json['actualAwayGoals']);
+    final savedObservation = DateTime.tryParse(
+      json['outcomeObservedAt']?.toString() ?? '',
+    );
+    DateTime? observed;
+    if (resolvedAt == null &&
+        homeGoals != null && awayGoals != null &&
+        homeGoals >= 0 && awayGoals >= 0 &&
+        firstSeenAt.isBefore(matchDate) &&
+        (status == SmartBetAnalysisStatus.correct ||
+            status == SmartBetAnalysisStatus.wrong)) {
+      final settled = SmartBetAnalysisMarketSettlement.evaluate(
+        market: market, homeGoals: homeGoals, awayGoals: awayGoals,
+      );
+      final expected = status == SmartBetAnalysisStatus.correct
+          ? SmartBetAnalysisSettlement.correct
+          : SmartBetAnalysisSettlement.wrong;
+      final known = savedObservation ?? observedAtLoad;
+      if (settled == expected && known != null && known.isAfter(matchDate)) {
+        observed = known.toUtc();
+      }
+    }
+
     return SmartBetAnalysisRecord(
       engine: engine,
       fixtureId: fixtureId,
@@ -266,11 +301,12 @@ class SmartBetAnalysisRecord {
       sources: List.unmodifiable(sources),
       prospectiveEligible: _toBool(json['prospectiveEligible']) ?? false,
       status: status,
-      actualHomeGoals: _toInt(json['actualHomeGoals']),
-      actualAwayGoals: _toInt(json['actualAwayGoals']),
+      actualHomeGoals: homeGoals,
+      actualAwayGoals: awayGoals,
       firstSeenAt: firstSeenAt.toUtc(),
       lastSeenAt: lastSeenAt.toUtc(),
       resolvedAt: resolvedAt?.toUtc(),
+      outcomeObservedAt: observed,
       quotedOdd: _safeSnapshotOdd(_toDouble(json['quotedOdd'])),
       asianSettlement: _asianSettlementFromName(
         json['asianSettlement']?.toString(),
@@ -591,6 +627,7 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
 
       _records.clear();
 
+      final observedAtLoad = DateTime.now().toUtc();
       for (final item in decoded) {
         if (item is! Map) {
           continue;
@@ -598,6 +635,7 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
 
         final record = SmartBetAnalysisRecord.fromJson(
           Map<String, dynamic>.from(item),
+          observedAtLoad: observedAtLoad,
         );
 
         if (record != null) {

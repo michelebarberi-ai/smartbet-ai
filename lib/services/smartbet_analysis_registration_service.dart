@@ -56,6 +56,19 @@ class SmartBetAnalysisRegistrationService {
     }
 
     final comparison = dualAnalysis?.comparison;
+    final nativeDiego = dualAnalysis?.diego;
+    final diegoMarket = comparison?.diegoMarket.trim() ?? '';
+    final probability = comparison?.diegoProbability;
+    // A missing SmartBet pick can make the pair unavailable while Diego
+    // still has a native, qualified choice for this exact fixture.
+    final independentDiego = comparison?.status == DualEngineAgreement.unavailable &&
+        comparison?.smartBetMarket.trim().toUpperCase() == 'N/D' &&
+        nativeDiego?.match.fixtureId == match.fixtureId &&
+        probability != null && probability.isFinite &&
+        probability >= 0 && probability <= 1;
+    final hasDiegoChoice = comparison != null &&
+        diegoMarket.isNotEmpty && diegoMarket.toUpperCase() != 'N/D' &&
+        (comparison.status != DualEngineAgreement.unavailable || independentDiego);
 
     // ============================================================
     // SMARTBET
@@ -97,9 +110,8 @@ class SmartBetAnalysisRegistrationService {
           match: match,
           smartBet: smartBet,
           record: smartBetRecord,
-          diego: dualAnalysis?.diego,
-          diegoMarket: comparison?.status == DualEngineAgreement.unavailable
-              ? null : comparison?.diegoMarket,
+          // Keep the probability-only snapshot when no official Diego pick exists.
+          diego: hasDiegoChoice ? null : nativeDiego,
           history: _store.records,
           recordedAt: recordedAt,
         );
@@ -111,7 +123,7 @@ class SmartBetAnalysisRegistrationService {
     // ============================================================
     //
     // unavailable:
-    //   nessuna previsione Diego -> nessun record / confronto.
+    //   conserva la scelta Diego autonoma solo se documentata dal motore.
     //
     // noSelection:
     //   Diego ha comunque prodotto una previsione statistica.
@@ -122,17 +134,7 @@ class SmartBetAnalysisRegistrationService {
     //   previsione Diego qualificata.
     // ============================================================
 
-    if (dualAnalysis == null ||
-        comparison == null ||
-        comparison.status == DualEngineAgreement.unavailable) {
-      return;
-    }
-
-    final diegoMarket = comparison.diegoMarket.trim();
-
-    if (diegoMarket.isEmpty || diegoMarket.toUpperCase() == 'N/D') {
-      return;
-    }
+    if (comparison == null || !hasDiegoChoice) return;
 
     final qualified = comparison.status != DualEngineAgreement.noSelection;
 
@@ -157,6 +159,18 @@ class SmartBetAnalysisRegistrationService {
     await _captureShadow(diegoRecord);
     await _captureCentralDraft(diegoRecord);
 
+    if (diegoRecord != null && nativeDiego != null) {
+      await _simulationCapture.capture(
+        match: match,
+        smartBet: smartBet,
+        record: diegoRecord,
+        diego: nativeDiego,
+        diegoMarket: diegoRecord.market,
+        history: _store.records,
+        recordedAt: recordedAt,
+      );
+    }
+
     // ============================================================
     // COPPIA SMARTBET ↔ DIEGO
     // ============================================================
@@ -172,7 +186,8 @@ class SmartBetAnalysisRegistrationService {
     //   coppie distinte e corrette.
     // ============================================================
 
-    if (smartBetRecord != null && diegoRecord != null) {
+    if (smartBetRecord != null && diegoRecord != null &&
+        comparison.status != DualEngineAgreement.unavailable) {
       await _comparisonStore.registerPair(
         smartBet: smartBetRecord,
         diego: diegoRecord,

@@ -50,7 +50,27 @@ class SmartBetSimulationOutcomeMarketMetric {
   };
 }
 
+class SmartBetOverallAccuracy {
+  final int settled;
+  final int officialHits;
+  final SmartBetChoiceTotals matched;
+
+  const SmartBetOverallAccuracy(this.settled, this.officialHits, this.matched);
+
+  int get shadowHits => officialHits + matched.fixed - matched.introduced;
+
+  Map<String, int> toJson() => {
+    'settled': settled,
+    'officialHits': officialHits,
+    'covered': matched.settled,
+    'fixed': matched.fixed,
+    'introduced': matched.introduced,
+    'shadowHitsWithOfficialFallback': shadowHits,
+  };
+}
+
 class SmartBetSimulationOutcomeAuditReport {
+  final Map<String, SmartBetOverallAccuracy> overall;
   final Map<String, SmartBetChoiceTotals> choices;
   final int snapshotCount;
   final int comparedSnapshots;
@@ -64,6 +84,7 @@ class SmartBetSimulationOutcomeAuditReport {
 
   const SmartBetSimulationOutcomeAuditReport({
     this.choices = const {},
+    this.overall = const {},
     required this.snapshotCount,
     required this.comparedSnapshots,
     required this.pendingSnapshots,
@@ -86,6 +107,7 @@ class SmartBetSimulationOutcomeAuditReport {
 
   Map<String, Object> toJson() => {
     'schema': 'smartbet_p21d_outcome_audit_v1',
+    'overallChoiceCoverageV1': {for (final e in overall.entries) e.key: e.value.toJson()},
     'choiceTrialV1': {for (final e in choices.entries) e.key: e.value.toJson()},
     'snapshotCount': snapshotCount,
     'comparedSnapshots': comparedSnapshots,
@@ -130,10 +152,28 @@ class SmartBetSimulationOutcomeAuditService {
   }) {
     final scores = <int, _FixtureOutcome>{};
     final conflicts = <int>{};
+    final published = <(String, int, String), SmartBetAnalysisRecord>{};
+    final settled = <String, int>{};
+    final hits = <String, int>{};
+    final matched = <String, SmartBetChoiceTotals>{};
 
     // Una partita puo' avere molti record per mercato e motore. Si deduplica
     // per fixture e si rifiutano risultati finali contraddittori.
     for (final record in history) {
+      if (record.prospectiveEligible &&
+          (record.status == SmartBetAnalysisStatus.correct ||
+              record.status == SmartBetAnalysisStatus.wrong)) {
+        final engine = record.engine.name.toUpperCase();
+        final key = (engine, record.fixtureId, normalizeAnalysisMarket(record.market));
+        if (!published.containsKey(key)) {
+          published[key] = record;
+          settled[engine] = (settled[engine] ?? 0) + 1;
+          if (record.status == SmartBetAnalysisStatus.correct) {
+            hits[engine] = (hits[engine] ?? 0) + 1;
+          }
+        }
+      }
+
       final h = record.actualHomeGoals;
       final a = record.actualAwayGoals;
       if (record.fixtureId <= 0 ||
@@ -200,6 +240,24 @@ class SmartBetSimulationOutcomeAuditService {
       if (official != null && trial != null) {
         choices.putIfAbsent(snapshot.engine, SmartBetChoiceTotals.new)
             .add(official, trial, outcome.home, outcome.away);
+        final engine = snapshot.engine.toUpperCase();
+        final record = published[(engine, snapshot.fixtureId, normalizeAnalysisMarket(official))];
+        if (record != null &&
+            record.matchDate.isAtSameMomentAs(snapshot.matchDate) &&
+            record.firstSeenAt.isBefore(record.matchDate) &&
+            record.actualHomeGoals == outcome.home &&
+            record.actualAwayGoals == outcome.away) {
+          final scored = SmartBetAnalysisMarketSettlement.evaluate(
+            market: official, homeGoals: outcome.home, awayGoals: outcome.away,
+          );
+          final expected = record.status == SmartBetAnalysisStatus.correct
+              ? SmartBetAnalysisSettlement.correct
+              : SmartBetAnalysisSettlement.wrong;
+          if (scored == expected) {
+            matched.putIfAbsent(engine, SmartBetChoiceTotals.new)
+                .add(official, trial, outcome.home, outcome.away);
+          }
+        }
       }
       // Non appaiamo mercati differenti o sconosciuti. Solo l'intersezione
       // delle due mappe e' confrontabile: stesso fixture, motore e mercato.
@@ -258,6 +316,14 @@ class SmartBetSimulationOutcomeAuditService {
       );
     }
     return SmartBetSimulationOutcomeAuditReport(
+      overall: Map.unmodifiable({
+        for (final engine in SmartBetAnalysisEngine.values)
+          engine.name.toUpperCase(): SmartBetOverallAccuracy(
+            settled[engine.name.toUpperCase()] ?? 0,
+            hits[engine.name.toUpperCase()] ?? 0,
+            matched[engine.name.toUpperCase()] ?? SmartBetChoiceTotals(),
+          ),
+      }),
       choices: Map.unmodifiable(choices),
       snapshotCount: snapshotsCount,
       comparedSnapshots: compared,
