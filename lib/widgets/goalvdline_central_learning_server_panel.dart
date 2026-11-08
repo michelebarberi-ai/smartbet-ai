@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../services/goalvdline_central_learning_mobile_sync.dart';
 import '../services/goalvdline_central_learning_outbox.dart';
+import '../services/goalvdline_mobile_token_vault.dart';
 
-/// Strumento manuale di collaudo P23B2B.
-/// Non conserva su disco URL, token o autorizzazioni alla trasmissione.
+/// Collegamento manuale a Render. Server preimpostato e salvataggio del solo
+/// token mobile nel Portachiavi su richiesta esplicita dell'utente.
 /// Ogni invio e ogni cancellazione richiedono una conferma separata.
 class GoalVdLineCentralLearningServerPanel extends StatefulWidget {
   final Future<void> Function()? onLocalChanged;
@@ -17,13 +18,69 @@ class GoalVdLineCentralLearningServerPanel extends StatefulWidget {
 
 class _GoalVdLineCentralLearningServerPanelState
     extends State<GoalVdLineCentralLearningServerPanel> {
-  final _origin = TextEditingController();
+  final _origin = TextEditingController(
+    text: GoalVdLineCentralLearningMobileSync.defaultServerUrl,
+  );
   final _token = TextEditingController();
   final _sync = GoalVdLineCentralLearningMobileSync();
+  final _vault = GoalVdLineMobileTokenVault();
   final _outbox = GoalVdLineCentralLearningOutbox.instance;
   bool _busy = false;
   bool _available = false;
-  String _message = 'Collegamento non configurato. Nessun invio automatico.';
+  String _message = 'Server preconfigurato. Nessun invio automatico.';
+  bool _savedToken = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreToken();
+  }
+
+  Future<void> _restoreToken() async {
+    try {
+      final saved = await _vault.read();
+      if (!mounted || saved == null) return;
+      setState(() {
+        if (_token.text.isEmpty) _token.text = saved;
+        _savedToken = true;
+      });
+    } catch (_) {
+      _show('Portachiavi non disponibile: inserisci il token manualmente.');
+    }
+  }
+
+  Future<void> _saveToken() async {
+    if (_busy) return;
+    if (!GoalVdLineMobileTokenVault.validToken(_token.text)) {
+      _show('Il token mobile deve contenere 43 caratteri validi.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _vault.save(_token.text);
+      _show('Token mobile salvato nel Portachiavi del dispositivo.');
+      if (mounted) setState(() => _savedToken = true);
+    } catch (_) {
+      _show('Salvataggio nel Portachiavi non riuscito.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _forgetToken() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _vault.delete();
+      _token.clear();
+      _show('Token eliminato dal Portachiavi. Dati già inviati invariati.');
+      if (mounted) setState(() => _savedToken = false);
+    } catch (_) {
+      _show('Impossibile eliminare il token dal Portachiavi.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -100,7 +157,7 @@ class _GoalVdLineCentralLearningServerPanelState
       'Questa operazione trasmette al massimo 20 previsioni originali '
           'relative a non più di 5 partite, con probabilità e mercato. '
           'Non trasmette le copie dello storico precedente. '
-          'Il token rimane solo in memoria fino alla fine dell’operazione. '
+          'Il token è conservato sul dispositivo solo se scegli Salva token. '
           'Hai ${drafts.length} previsioni in coda. Procedere?',
       'Invia adesso',
     ))
@@ -121,7 +178,7 @@ class _GoalVdLineCentralLearningServerPanelState
     } catch (_) {
       _show('Invio non completato. Verifica la coda e ritenta.');
     } finally {
-      _token.clear();
+      if (!_savedToken) _token.clear();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -147,6 +204,16 @@ class _GoalVdLineCentralLearningServerPanelState
       );
       if (result.success) {
         await _outbox.setConsent(false);
+        // La credenziale è stata revocata dal server, non deve più restare salvata.
+        try {
+          await _vault.delete();
+          _savedToken = false;
+        } catch (_) {
+          _show(
+            'Dati cancellati sul server, ma elimina il token dal Portachiavi.',
+          );
+        }
+        _token.clear();
         if (widget.onLocalChanged != null) await widget.onLocalChanged!();
       }
       _show(result.message);
@@ -157,7 +224,7 @@ class _GoalVdLineCentralLearningServerPanelState
         'Cancellazione remota non verificabile: richiedi una verifica amministrativa.',
       );
     } finally {
-      _token.clear();
+      if (!_savedToken) _token.clear();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -168,7 +235,7 @@ class _GoalVdLineCentralLearningServerPanelState
       tilePadding: EdgeInsets.zero,
       childrenPadding: EdgeInsets.zero,
       title: const Text(
-        'Collegamento server · test P23B2B',
+        'Collegamento al cervello centrale',
         style: TextStyle(color: Colors.white, fontSize: 14),
       ),
       subtitle: const Text(
@@ -183,8 +250,8 @@ class _GoalVdLineCentralLearningServerPanelState
           enabled: !_busy,
           autocorrect: false,
           decoration: const InputDecoration(
-            labelText: 'Server HTTPS (solo indirizzo base)',
-            hintText: 'https://nome-server.onrender.com',
+            labelText: 'Server HTTPS GoalVdLine',
+            hintText: GoalVdLineCentralLearningMobileSync.defaultServerUrl,
             labelStyle: TextStyle(color: Colors.white70),
           ),
           style: const TextStyle(color: Colors.white),
@@ -198,10 +265,34 @@ class _GoalVdLineCentralLearningServerPanelState
           autocorrect: false,
           enableSuggestions: false,
           decoration: const InputDecoration(
-            labelText: 'Token mobile temporaneo (non amministratore)',
+            labelText: 'Token mobile (non amministratore)',
             labelStyle: TextStyle(color: Colors.white70),
           ),
           style: const TextStyle(color: Colors.white),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _saveToken,
+              icon: const Icon(Icons.lock_outline, size: 16),
+              label: const Text('Salva token'),
+            ),
+            if (_savedToken)
+              TextButton.icon(
+                onPressed: _busy ? null : _forgetToken,
+                icon: const Icon(Icons.lock_open_outlined, size: 16),
+                label: const Text('Dimentica token'),
+              ),
+            if (_savedToken)
+              const Text(
+                'Protetto nel Portachiavi',
+                style: TextStyle(fontSize: 11, color: Colors.greenAccent),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
@@ -231,10 +322,10 @@ class _GoalVdLineCentralLearningServerPanelState
           ],
         ),
         const Text(
-          'Credenziale solo in memoria e cancellata dopo ogni operazione. '
-          'Revocare il consenso locale NON cancella automaticamente i dati '
-          'già inviati: utilizzare «Cancella dal server». Se il token è '
-          'scaduto o perso, richiedere la cancellazione all’amministratore. '
+          'Il token viene conservato nel Portachiavi soltanto premendo '
+          '«Salva token»; puoi eliminarlo con «Dimentica token». '
+          'Revocare il consenso locale NON cancella i dati già inviati: '
+          'utilizzare «Cancella dal server». '
           'Nessuna sincronizzazione in background.',
           style: TextStyle(fontSize: 11, color: Colors.white54),
         ),

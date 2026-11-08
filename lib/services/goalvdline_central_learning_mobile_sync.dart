@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'goalvdline_central_learning_outbox.dart';
 
-/// P23B2B: trasporto manuale in HTTPS, senza credenziali persistenti.
+/// Trasporto manuale in HTTPS. Il token può essere conservato solo nel Portachiavi, a scelta dell’utente.
 /// Il token amministratore NON deve mai essere utilizzato su un dispositivo.
 /// Lo storico P23B3 non viene mai letto da questa classe.
 class GoalVdLineCentralLearningMobileSync {
@@ -19,6 +19,8 @@ class GoalVdLineCentralLearningMobileSync {
   final http.Client _client;
   final bool _ownsClient;
 
+  static const defaultServerUrl =
+      'https://goalvdline-learning-api.onrender.com';
   static const _timeout = Duration(seconds: 12);
   static final _tokenPattern = RegExp(r'^[A-Za-z0-9_-]{43}$');
 

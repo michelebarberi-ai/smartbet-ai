@@ -52,6 +52,15 @@ void main() {
     200,
   );
 
+  test('server GoalVdLine preconfigurato utilizza HTTPS e origine valida', () {
+    final uri = GoalVdLineCentralLearningMobileSync.serverOrigin(
+      GoalVdLineCentralLearningMobileSync.defaultServerUrl,
+    );
+    expect(uri.scheme, 'https');
+    expect(uri.host, 'goalvdline-learning-api.onrender.com');
+    expect(uri.path, isEmpty);
+  });
+
   test('token e indirizzo non possono usare HTTP o credenziali in URL', () {
     expect(
       () => GoalVdLineCentralLearningMobileSync.serverOrigin(
