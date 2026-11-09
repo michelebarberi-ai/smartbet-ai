@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/goalvdline_central_learning_mobile_sync.dart';
 import '../services/goalvdline_central_learning_outbox.dart';
+import '../services/goalvdline_historical_learning_review.dart';
 import '../services/goalvdline_mobile_token_vault.dart';
 
 /// Collegamento manuale a Render. Server preimpostato e salvataggio del solo
@@ -25,6 +26,7 @@ class _GoalVdLineCentralLearningServerPanelState
   final _sync = GoalVdLineCentralLearningMobileSync();
   final _vault = GoalVdLineMobileTokenVault();
   final _outbox = GoalVdLineCentralLearningOutbox.instance;
+  final _historical = GoalVdLineHistoricalLearningReview.instance;
   bool _busy = false;
   bool _available = false;
   String _message = 'Server preconfigurato. Nessun invio automatico.';
@@ -183,6 +185,50 @@ class _GoalVdLineCentralLearningServerPanelState
     }
   }
 
+  Future<void> _uploadHistorical() async {
+    if (_busy) return;
+    try {
+      await _historical.initialize();
+      if (!_historical.consentGranted || _historical.preparedCount == 0) {
+        _show('Prima prepara la copia storica nel pannello precedente.');
+        return;
+      }
+    } catch (_) {
+      _show('Impossibile leggere la copia storica sul telefono.');
+      return;
+    }
+    final count = _historical.preparedCount;
+    if (!await _confirm(
+      'Trasferire $count copie storiche al server?',
+      'Le copie sono retrospettive e NON verificate dal server come '
+          'pronostici registrati prima della partita. Saranno archiviate '
+          'separatamente per ricerca, senza correggere le probabilità ufficiali. '
+          'Invio volontario in blocchi, nessuna cancellazione sul telefono. '
+          'Vuoi trasferirle?',
+      'Autorizzo e trasferisco',
+    ))
+      return;
+    if (!mounted) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _sync.uploadHistorical(
+        baseUrl: _origin.text,
+        token: _token.text.trim(),
+        history: _historical,
+        onProgress: (done, total) =>
+            _show('Storico: $done di $total confermate…'),
+      );
+      _show(result.message);
+    } on FormatException {
+      _show('Indirizzo HTTPS non valido. Storico non inviato.');
+    } catch (_) {
+      _show('Invio storico non completato. Copie locali conservate.');
+    } finally {
+      if (!_savedToken) _token.clear();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _erase() async {
     if (_busy) return;
     if (!await _confirm(
@@ -190,7 +236,7 @@ class _GoalVdLineCentralLearningServerPanelState
       'La cancellazione revoca la credenziale e rimuove i dati centralizzati '
           'associati a quel dispositivo. In caso di successo verrà disattivata '
           'anche la raccolta locale e svuotata la relativa coda. '
-          'Lo Storico Analisi e le copie retrospettive non saranno modificati. '
+          'Lo Storico Analisi e le copie retrospettive sul telefono non saranno modificati. '
           'Serve una credenziale mobile ancora valida.',
       'Cancella dati remoti',
     ))
@@ -313,6 +359,11 @@ class _GoalVdLineCentralLearningServerPanelState
               onPressed: _busy || !_available ? null : _upload,
               icon: const Icon(Icons.cloud_upload_outlined, size: 16),
               label: const Text('Invio manuale'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy || !_available ? null : _uploadHistorical,
+              icon: const Icon(Icons.history, size: 16),
+              label: const Text('Trasferisci storico'),
             ),
             TextButton.icon(
               onPressed: _busy ? null : _erase,

@@ -74,7 +74,8 @@ async function requestFixture({path, query}, {env = process.env, fetchImpl = fet
   return {data};
 }
 
-function createLearningOnlyApp({env = process.env, fetchImpl = fetch, poolFactory} = {}) {
+function createLearningOnlyApp({env = process.env, fetchImpl = fetch, poolFactory,
+  generateOfficialCoupon = null} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {res.set('Cache-Control', 'no-store'); next();});
@@ -109,7 +110,7 @@ app.get('/health/database', async (_req, res) => {
 });
 
   registerLearningRoutes(app, {
-    env,
+    env, generateOfficialCoupon,
     requestApiFootball: (request) => requestFixture(request, {env, fetchImpl}),
   });
   return app;

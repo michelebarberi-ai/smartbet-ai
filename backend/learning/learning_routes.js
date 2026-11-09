@@ -3,18 +3,40 @@
 const {validToken} = require('./learning_core');
 const {LearningRepository} = require('./learning_repository');
 const {LearningService} = require('./learning_service');
+const {registerAutoCouponWorkerRoute} = require('../auto_coupon/worker_route');
+const {registrationReady} = require('../auto_coupon/device_registration');
+const {apnsReady} = require('../auto_coupon/apns_provider');
+const {registerAutoCouponPushDispatchRoute} = require('../auto_coupon/push_dispatch');
 
-function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null}) {
+function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null}) {
   const requested = env.LEARNING_SERVER_ENABLED === 'true';
   const configured = requested && !!env.DATABASE_URL &&
     typeof env.LEARNING_ADMIN_TOKEN === 'string' && env.LEARNING_ADMIN_TOKEN.length >= 32 &&
     typeof env.LEARNING_SUBJECT_SALT === 'string' && env.LEARNING_SUBJECT_SALT.length >= 32;
 
   const mobileEnabled = configured && env.LEARNING_MOBILE_INGEST_ENABLED === 'true';
+  const historicalEnabled = mobileEnabled && env.LEARNING_RETRO_INGEST_ENABLED === 'true';
+  const autoCouponPrefsEnabled = mobileEnabled && env.AUTO_COUPON_PREFERENCES_ENABLED === 'true';
+  const pushRegistrationEnabled = autoCouponPrefsEnabled && registrationReady(env);
+  // Worker requires both an explicit flag and a verified official engine adapter.
+  const workerReady = autoCouponPrefsEnabled &&
+    env.AUTO_COUPON_WORKER_ENABLED === 'true' &&
+    typeof env.AUTO_COUPON_WORKER_TOKEN === 'string' &&
+    env.AUTO_COUPON_WORKER_TOKEN.length >= 32 &&
+    typeof generateOfficialCoupon === 'function';
+
+  // All independent gates and the genuine official generator are required.
+  const pushDispatchReady = workerReady && pushRegistrationEnabled && apnsReady({env});
 
   app.get('/learning/v1/status', (_req, res) => {
     return res.json({service: 'SmartBet Central Learning', version: 1,
       enabled: configured, mobileIngestEnabled: mobileEnabled,
+      retrospectiveIngestEnabled: historicalEnabled,
+      autoCouponPreferencesEnabled: autoCouponPrefsEnabled,
+      autoCouponGenerationEnabled: false, autoCouponPushEnabled: false,
+      autoCouponWorkerReady: workerReady,
+      autoCouponDeviceRegistrationEnabled: pushRegistrationEnabled,
+      autoCouponPushDispatchReady: pushDispatchReady,
       mode: 'admin_staging', liveCalibration: false,
       requiresDatabase: true});
   });
@@ -108,6 +130,102 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     res.set('Cache-Control', 'no-store');
     return res.status(result.status).json(result.body);
   }, res));
+
+  // Retroactive imports are separately gated, stored in a different table,
+  // and never included in live calibration or official market summaries.
+  app.post('/learning/v1/mobile/retrospective', authorizeMobile, (req, res) => handle(async () => {
+    if (!historicalEnabled) return res.status(503).json({success: false, error: 'Archivio storico non abilitato.'});
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
+        Object.prototype.hasOwnProperty.call(req.body, 'clientId') ||
+        Object.prototype.hasOwnProperty.call(req.body, 'predictions')) {
+      return res.status(400).json({success: false, error: 'Payload non valido.'});
+    }
+    const result = await getService().ingestRetrospective({
+      clientId: req.learningClientId, snapshots: req.body.snapshots,
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.status(result.status).json(result.body);
+  }, res));
+
+  // Authenticated draft synchronization. No worker, no push, no active schedule.
+  app.post('/learning/v1/mobile/auto-coupon/preferences', authorizeMobile, (req, res) => handle(async () => {
+    if (!autoCouponPrefsEnabled) return res.status(503).json({success: false,
+      error: 'Sincronizzazione AutoSchedina non abilitata.'});
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
+        Object.keys(req.body).length !== 1 || !Object.hasOwn(req.body, 'preferences')) {
+      return res.status(400).json({success: false, error: 'Payload non valido.'});
+    }
+    const result = await getService().saveAutoCouponPreferences({
+      clientId: req.learningClientId, preferences: req.body.preferences,
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.status(result.status).json(result.body);
+  }, res));
+
+  app.get('/learning/v1/mobile/auto-coupon/preferences', authorizeMobile, (req, res) => handle(async () => {
+    if (!autoCouponPrefsEnabled) return res.status(503).json({success: false,
+      error: 'Sincronizzazione AutoSchedina non abilitata.'});
+    const result = await getService().readAutoCouponPreferences(req.learningClientId);
+    res.set('Cache-Control', 'no-store');
+    return res.status(result.status).json(result.body);
+  }, res));
+
+  app.get('/learning/v1/mobile/auto-coupon/today', authorizeMobile, (req, res) => handle(async () => {
+    if (!autoCouponPrefsEnabled) return res.status(503).json({success: false,
+      error: 'AutoSchedina non abilitata sul server.'});
+    const result = await getService().readTodayAutoCoupon(req.learningClientId);
+    res.set('Cache-Control', 'no-store');
+    return res.status(result.status).json(result.body);
+  }, res));
+
+  // Explicit iPhone opt-in. APNs tokens are encrypted before database insertion.
+  // Registration does NOT enable scheduled work or transmit push notifications.
+  app.post('/learning/v1/mobile/auto-coupon/push/register', authorizeMobile,
+    (req, res) => handle(async () => {
+      if (!pushRegistrationEnabled) return res.status(503).json({success: false,
+        error: 'Registrazione notifiche non abilitata.'});
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
+          Object.keys(req.body).length !== 1 || !Object.hasOwn(req.body, 'deviceToken')) {
+        return res.status(400).json({success: false, error: 'Payload non valido.'});
+      }
+      const result = await getService().registerAutoCouponPushDevice({
+        clientId: req.learningClientId, deviceToken: req.body.deviceToken,
+        environment: env.APNS_ENVIRONMENT,
+        encryptionKey: env.AUTO_COUPON_PUSH_TOKEN_ENCRYPTION_KEY,
+      });
+      res.set('Cache-Control', 'no-store');
+      return res.status(result.status).json(result.body);
+    }, res));
+
+  app.post('/learning/v1/mobile/auto-coupon/push/unregister', authorizeMobile,
+    (req, res) => handle(async () => {
+      if (!pushRegistrationEnabled) return res.status(503).json({success: false,
+        error: 'Registrazione notifiche non abilitata.'});
+      if (req.body && (typeof req.body !== 'object' ||
+          Array.isArray(req.body) || Object.keys(req.body).length)) {
+        return res.status(400).json({success: false, error: 'Payload non valido.'});
+      }
+      const result = await getService().unregisterAutoCouponPushDevice(req.learningClientId);
+      res.set('Cache-Control', 'no-store');
+      return res.status(result.status).json(result.body);
+    }, res));
+
+  // Protected server-to-server route. No scheduling, no push and no invented
+  // predictions. If an official generator is absent it fails closed.
+  registerAutoCouponWorkerRoute(app, {
+    enabled: workerReady,
+    workerToken: env.AUTO_COUPON_WORKER_TOKEN,
+    getRepository: () => getService().repository,
+    generateOfficialCoupon, now,
+  });
+
+  // Invoked explicitly by the trusted job *after* official generation.
+  // No timer and no APNs calls until all server flags/keys are configured.
+  registerAutoCouponPushDispatchRoute(app, {
+    enabled: pushDispatchReady,
+    workerToken: env.AUTO_COUPON_WORKER_TOKEN, env, now,
+    getRepository: () => getService().repository,
+  });
 
   app.post('/learning/v1/mobile/erase', authorizeMobile, (req, res) => handle(async () => {
     res.set('Cache-Control', 'no-store');

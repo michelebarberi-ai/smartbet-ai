@@ -17,6 +17,7 @@ import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/smartbet_reliability_service.dart';
+import '../services/goalvdline_market_probability_filter.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_x_premium_service.dart';
@@ -146,6 +147,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String get _selectedMarketLabel => _selectedMarkets.join(' + ');
   int _topCount = 5;
   int _minimumSmartScore = 0;
+  // Filtro distinto dallo SmartScore: 0 = nessuna soglia aggiuntiva.
+  int _minimumMarketProbability = 0;
 
   // P5A — Sistema GoalVdLine
   _CombinationOutputMode _outputMode = _CombinationOutputMode.single;
@@ -193,6 +196,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final Set<int> _expandedComboFixtures = {};
 
   static const int _batchSize = 3;
+  bool _acceptsMarketProbability(int probability) =>
+      GoalVdLineMarketProbabilityFilter.accepts(
+        probability: probability,
+        minimumPercent: _minimumMarketProbability,
+      );
+
   static const double _minimumOdd = 1.25;
 
   // P19I — gruppi di sola presentazione. I valori dei mercati restano
@@ -2304,6 +2313,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             break;
           }
 
+          if (!_multiMarketMode &&
+              !_isFamilyMarket(_selectedMarket) &&
+              !_acceptsMarketProbability(item.probability)) {
+            continue;
+          }
+
           if (_selectedMarket == 'COMBO CHANCE') {
             validCandidates.add(item);
 
@@ -2333,7 +2348,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               families: _selectedMarkets,
               minimumOdd: _minimumOdd,
             );
-            if (multiPick == null) continue;
+            if (multiPick == null ||
+                !_acceptsMarketProbability(multiPick.probability)) {
+              continue;
+            }
 
             validCandidates.add(
               _CombinationCandidate(
@@ -2366,7 +2384,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               family: _selectedMarket,
             );
 
-            if (executableFamilyCandidate == null) {
+            if (executableFamilyCandidate == null ||
+                !_acceptsMarketProbability(
+                  executableFamilyCandidate.probability,
+                )) {
               continue;
             }
 
@@ -2461,6 +2482,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             'autorizzate dal learning gate',
           );
         }
+      }
+
+      // Se il learning corregge la probabilità sotto la soglia richiesta,
+      // non possiamo mantenere la selezione nella schedina finale.
+      validCandidates.removeWhere(
+        (item) => !_acceptsMarketProbability(item.probability),
+      );
+      if (validCandidates.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _results.clear();
+          _systemResults.clear();
+          _loading = false;
+          _checkingOdds = false;
+          _errorMessage = _minimumMarketProbability == 0
+              ? 'Nessuna selezione valida dopo i controlli finali.'
+              : 'Nessuna selezione raggiunge la probabilità di mercato '
+                    'minima del $_minimumMarketProbability% dopo '
+                    'i controlli finali.';
+        });
+        return;
       }
 
       // Auditor finale di fattibilità: SmartBet ha già deciso tutto.
@@ -3607,6 +3649,47 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     );
   }
 
+  Widget _marketProbabilitySelector() {
+    Widget chip(String label, int minimum) {
+      final selected = _minimumMarketProbability == minimum;
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => setState(() {
+          _minimumMarketProbability = minimum;
+          _results.clear();
+          _systemResults.clear();
+        }),
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        showCheckmark: false,
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          chip('Qualsiasi', 0),
+          const SizedBox(width: 7),
+          chip('≥50%', 50),
+          const SizedBox(width: 7),
+          chip('≥65%', 65),
+          const SizedBox(width: 7),
+          chip('≥75%', 75),
+        ],
+      ),
+    );
+  }
+
   // ============================================================
   // RESULT CARD
   // ============================================================
@@ -4024,16 +4107,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<void> _shareCurrentCombination(BuildContext buttonContext) async {
     if (_results.isEmpty || _loading) return;
 
-    final isSystem = _outputMode == _CombinationOutputMode.system &&
+    final isSystem =
+        _outputMode == _CombinationOutputMode.system &&
         _systemResults.isNotEmpty &&
         _selectedSystemIndex < _systemResults.length;
     final title = isSystem
         ? _systemResults[_selectedSystemIndex].name
         : 'TOP ${_results.length} • $_selectedMarketLabel';
     final allOddsAvailable = _results.every(
-      (item) => item.odd != null &&
-          item.odd!.isFinite &&
-          item.odd! >= 1.0,
+      (item) => item.odd != null && item.odd!.isFinite && item.odd! >= 1.0,
     );
     double totalOdd = 1.0;
     if (allOddsAvailable) {
@@ -4041,10 +4123,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         totalOdd *= item.odd!;
       }
     }
-    final averageProbability = _results.fold<int>(
-          0,
-          (sum, item) => sum + item.probability,
-        ) /
+    final averageProbability =
+        _results.fold<int>(0, (sum, item) => sum + item.probability) /
         _results.length;
 
     final message = StringBuffer()
@@ -4057,16 +4137,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ? 'Quota totale: ${totalOdd.toStringAsFixed(2)}'
             : 'Quota totale: non disponibile (quote reali incomplete)',
       )
-      ..writeln('Probabilità media stimata: '
-          '${averageProbability.toStringAsFixed(1)}%')
+      ..writeln(
+        'Probabilità media stimata: '
+        '${averageProbability.toStringAsFixed(1)}%',
+      )
       ..writeln();
 
     for (var index = 0; index < _results.length; index++) {
       final item = _results[index];
       final league = item.match.league.trim();
       message
-        ..writeln('${index + 1}. '
-            '${item.match.homeTeam} - ${item.match.awayTeam}')
+        ..writeln(
+          '${index + 1}. '
+          '${item.match.homeTeam} - ${item.match.awayTeam}',
+        )
         ..writeln(
           '   ${item.market} • ${item.probability}%'
           '${item.odd == null || !item.odd!.isFinite || item.odd! < 1 ? ' • quota non disponibile' : ' • quota ${item.odd!.toStringAsFixed(2)}'}',
@@ -4080,13 +4164,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     }
     message
       ..writeln()
-      ..writeln('Stime statistiche, non garanzie di risultato. '
-          'Gioca responsabilmente.');
+      ..writeln(
+        'Stime statistiche, non garanzie di risultato. '
+        'Gioca responsabilmente.',
+      );
 
     final box = buttonContext.findRenderObject() as RenderBox?;
     await SharePlus.instance.share(
       ShareParams(
-        sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+        sharePositionOrigin: box == null
+            ? null
+            : box.localToGlobal(Offset.zero) & box.size,
         text: message.toString(),
         subject: 'GoalVdLine — $title',
       ),
@@ -4332,7 +4420,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 20),
 
             const Text(
-              'AFFIDABILITÀ MINIMA',
+              'SMARTSCORE MINIMO',
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 12,
@@ -4344,6 +4432,24 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 8),
 
             _smartScoreSelector(),
+            const SizedBox(height: 6),
+            const Text(
+              'Lo SmartScore misura la qualità complessiva: non è la '
+              'probabilità del mercato selezionato.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'PROBABILITÀ MINIMA DEL MERCATO',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _marketProbabilitySelector(),
 
             const SizedBox(height: 20),
 
@@ -4580,11 +4686,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
-              child: Builder(builder: (buttonContext) => OutlinedButton.icon(
-                onPressed: _loading ? null : () => _shareCurrentCombination(buttonContext),
-                icon: const Icon(Icons.ios_share_outlined),
-                label: const Text('CONDIVIDI SCHEDINA'),
-              )),
+              child: Builder(
+                builder: (buttonContext) => OutlinedButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () => _shareCurrentCombination(buttonContext),
+                  icon: const Icon(Icons.ios_share_outlined),
+                  label: const Text('CONDIVIDI SCHEDINA'),
+                ),
+              ),
             ),
           ],
 

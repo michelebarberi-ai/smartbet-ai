@@ -29,6 +29,214 @@ class LearningRepository {
     return result.rowCount === 1;
   }
 
+  async insertRetrospectiveBatch({subjectHash, snapshots}) {
+    const params = [];
+    const placeholders = [];
+    for (const row of snapshots) {
+      const start = params.length;
+      params.push(subjectHash, row.fixtureId, row.engine, row.market,
+        row.probability, row.firstSeenAt, row.kickoffAt, row.localStatusHint);
+      placeholders.push(`(${Array.from({length: 8}, (_, n) => `$${start + n + 1}`).join(',')})`);
+    }
+    const result = await this.pool.query(
+      `INSERT INTO sb_learning_retrospective_v1
+       (subject_hash, fixture_id, engine, market, original_probability,
+        claimed_first_seen_at, claimed_kickoff_at, local_status_hint)
+       VALUES ${placeholders.join(',')}
+       ON CONFLICT (subject_hash, fixture_id, engine, market) DO NOTHING
+       RETURNING id`, params
+    );
+    return result.rowCount;
+  }
+
+  // Only user-selected preferences. This does not register a runnable job.
+  async upsertAutoCouponPreferences({subjectHash, preferences}) {
+    await this.pool.query(
+      `INSERT INTO sb_auto_coupon_preferences_v1 (subject_hash, preferences)
+       VALUES ($1,$2::jsonb)
+       ON CONFLICT (subject_hash) DO UPDATE
+       SET preferences=EXCLUDED.preferences, updated_at=now()`,
+      [subjectHash, JSON.stringify(preferences)]
+    );
+  }
+
+  async readAutoCouponPreferences(subjectHash) {
+    const result = await this.pool.query(
+      `SELECT preferences FROM sb_auto_coupon_preferences_v1 WHERE subject_hash=$1`,
+      [subjectHash]
+    );
+    return result.rows.length ? result.rows[0].preferences : null;
+  }
+
+  // B45 P8: durable, idempotent daily coupon generation records. No worker
+  // runs automatically; repository is called only by an explicit coordinator.
+  async listAutoCouponSubscribers(limit, afterSubjectHash = null) {
+    const result = await this.pool.query(
+      `SELECT subject_hash AS "subjectHash", preferences
+       FROM sb_auto_coupon_preferences_v1
+       WHERE preferences->>'requested'='true' AND ($2::char(64) IS NULL OR subject_hash > $2)
+       ORDER BY subject_hash LIMIT $1`, [limit, afterSubjectHash]
+    );
+    return result.rows;
+  }
+
+  async claimAutoCouponRun({subjectHash, dayKey, now}) {
+    const result = await this.pool.query(
+      `INSERT INTO sb_auto_coupon_daily_runs_v1
+       (subject_hash, local_day, status, attempts, updated_at)
+       VALUES ($1,$2,'processing',1,$3)
+       ON CONFLICT (subject_hash,local_day) DO UPDATE SET
+         status='processing', attempts=sb_auto_coupon_daily_runs_v1.attempts+1,
+         updated_at=EXCLUDED.updated_at, next_retry_at=NULL, failure_reason=NULL
+       WHERE sb_auto_coupon_daily_runs_v1.attempts < 5 AND (
+         (sb_auto_coupon_daily_runs_v1.status='retry'
+          AND sb_auto_coupon_daily_runs_v1.next_retry_at <= $3)
+         OR (sb_auto_coupon_daily_runs_v1.status='processing'
+          AND sb_auto_coupon_daily_runs_v1.updated_at <= $3 - INTERVAL '15 minutes')
+       ) RETURNING attempts`, [subjectHash, dayKey, now]
+    );
+    return result.rowCount === 1 ? {attempts: result.rows[0].attempts} : null;
+  }
+
+  async finishAutoCouponRun({subjectHash, dayKey, attempts, outcome,
+    reason = null, coupon = null, now, retryMinutes = 60}) {
+    const isReady = outcome === 'ready';
+    const result = await this.pool.query(
+      `UPDATE sb_auto_coupon_daily_runs_v1 SET
+         status=CASE WHEN $4::boolean THEN 'ready'
+                     WHEN attempts >= 5 THEN 'unavailable' ELSE 'retry' END,
+         coupon_json=CASE WHEN $4::boolean THEN $5::jsonb ELSE NULL END,
+         generated_at=CASE WHEN $4::boolean THEN $6::timestamptz ELSE NULL END,
+         next_retry_at=CASE WHEN NOT $4::boolean AND attempts < 5
+            THEN $6::timestamptz + ($8::integer * INTERVAL '1 minute') ELSE NULL END,
+         failure_reason=CASE WHEN $4::boolean THEN NULL ELSE $7 END,
+         updated_at=$6
+       WHERE subject_hash=$1 AND local_day=$2 AND status='processing'
+         AND attempts=$3`,
+      [subjectHash, dayKey, attempts, isReady,
+        isReady ? JSON.stringify(coupon) : null, now, reason, retryMinutes]
+    );
+    return result.rowCount === 1;
+  }
+
+  async readAutoCouponDay({subjectHash, dayKey}) {
+    const result = await this.pool.query(
+      `SELECT status, coupon_json AS coupon, generated_at AS "generatedAt"
+       FROM sb_auto_coupon_daily_runs_v1
+       WHERE subject_hash=$1 AND local_day=$2`, [subjectHash, dayKey]
+    );
+    return result.rows[0] || null;
+  }
+
+  async deleteAutoCouponPreferences(subjectHash) {
+    await this.pool.query('DELETE FROM sb_auto_coupon_preferences_v1 WHERE subject_hash=$1',
+      [subjectHash]);
+    await this.pool.query('DELETE FROM sb_auto_coupon_daily_runs_v1 WHERE subject_hash=$1',
+      [subjectHash]);
+    await this.pool.query('DELETE FROM sb_auto_coupon_push_deliveries_v1 WHERE subject_hash=$1',
+      [subjectHash]);
+    await this.deleteAutoCouponPushDevice(subjectHash);
+  }
+
+  // Device tokens are AES-256-GCM encrypted by the service before persistence.
+  async upsertAutoCouponPushDevice({subjectHash, environment, ciphertext, nonce, authTag}) {
+    await this.pool.query(
+      `INSERT INTO sb_auto_coupon_push_devices_v1
+       (subject_hash, apns_environment, token_ciphertext, token_nonce, token_auth_tag)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (subject_hash) DO UPDATE
+       SET apns_environment=EXCLUDED.apns_environment,
+           token_ciphertext=EXCLUDED.token_ciphertext,
+           token_nonce=EXCLUDED.token_nonce,
+           token_auth_tag=EXCLUDED.token_auth_tag,
+           updated_at=now()`,
+      [subjectHash, environment, ciphertext, nonce, authTag]
+    );
+  }
+
+  async deleteAutoCouponPushDevice(subjectHash) {
+    await this.pool.query(
+      'DELETE FROM sb_auto_coupon_push_devices_v1 WHERE subject_hash=$1',
+      [subjectHash]
+    );
+  }
+
+  // B45 P13: APNs dispatch queue. Claiming is atomic across concurrent workers.
+  async listPendingAutoCouponPushes({dayKey, now, limit, afterSubjectHash}) {
+    const result = await this.pool.query(
+      `SELECT runs.subject_hash AS "subjectHash"
+       FROM sb_auto_coupon_daily_runs_v1 runs
+       JOIN sb_auto_coupon_preferences_v1 prefs
+         ON prefs.subject_hash = runs.subject_hash
+       JOIN sb_auto_coupon_push_devices_v1 devices
+         ON devices.subject_hash = runs.subject_hash
+       LEFT JOIN sb_auto_coupon_push_deliveries_v1 sent
+         ON sent.subject_hash = runs.subject_hash AND sent.local_day = runs.local_day
+       WHERE runs.local_day=$1 AND runs.status='ready'
+         AND prefs.preferences->>'requested'='true'
+         AND ($4::char(64) IS NULL OR runs.subject_hash > $4)
+         AND (sent.subject_hash IS NULL OR
+              (sent.status='retry' AND sent.next_retry_at <= $2 AND sent.attempts < 5) OR
+              (sent.status='processing' AND sent.updated_at <= $2 - INTERVAL '15 minutes'
+               AND sent.attempts < 5))
+       ORDER BY runs.subject_hash LIMIT $3`,
+      [dayKey, now, limit, afterSubjectHash]
+    );
+    return result.rows;
+  }
+
+  async claimAutoCouponPush({subjectHash, dayKey, now}) {
+    const result = await this.pool.query(
+      `INSERT INTO sb_auto_coupon_push_deliveries_v1
+       (subject_hash,local_day,status,attempts,updated_at)
+       VALUES ($1,$2,'processing',1,$3)
+       ON CONFLICT (subject_hash,local_day) DO UPDATE SET
+         status='processing', attempts=sb_auto_coupon_push_deliveries_v1.attempts+1,
+         updated_at=$3, next_retry_at=NULL, failure_reason=NULL
+       WHERE sb_auto_coupon_push_deliveries_v1.attempts < 5 AND (
+         (sb_auto_coupon_push_deliveries_v1.status='retry'
+          AND sb_auto_coupon_push_deliveries_v1.next_retry_at <= $3) OR
+         (sb_auto_coupon_push_deliveries_v1.status='processing'
+          AND sb_auto_coupon_push_deliveries_v1.updated_at <= $3 - INTERVAL '15 minutes')
+       ) RETURNING attempts`, [subjectHash, dayKey, now]
+    );
+    return result.rowCount === 1 ? {attempts: result.rows[0].attempts} : null;
+  }
+
+  async readAutoCouponPushDevice(subjectHash) {
+    const result = await this.pool.query(
+      `SELECT apns_environment AS environment, token_ciphertext AS ciphertext,
+              token_nonce AS nonce, token_auth_tag AS "authTag"
+       FROM sb_auto_coupon_push_devices_v1 WHERE subject_hash=$1`, [subjectHash]
+    );
+    return result.rows[0] || null;
+  }
+
+  async deleteAutoCouponPushDeviceIfMatch({subjectHash, ciphertext}) {
+    await this.pool.query(
+      `DELETE FROM sb_auto_coupon_push_devices_v1
+       WHERE subject_hash=$1 AND token_ciphertext=$2`, [subjectHash, ciphertext]
+    );
+  }
+
+  async finishAutoCouponPush({subjectHash, dayKey, attempts, outcome, reason, now}) {
+    const result = await this.pool.query(
+      `UPDATE sb_auto_coupon_push_deliveries_v1 SET
+         status=CASE WHEN $4='sent' THEN 'sent'
+                     WHEN $4='unregistered' THEN 'unregistered'
+                     WHEN $4='unavailable' OR attempts >= 5 THEN 'unavailable'
+                     ELSE 'retry' END,
+         failure_reason=$5,
+         next_retry_at=CASE WHEN $4='retry' AND attempts < 5
+           THEN $6::timestamptz + INTERVAL '15 minutes' ELSE NULL END,
+         updated_at=$6
+       WHERE subject_hash=$1 AND local_day=$2 AND status='processing'
+         AND attempts=$3`,
+      [subjectHash, dayKey, attempts, outcome, reason, now]
+    );
+    return result.rowCount === 1;
+  }
+
   async insertClientCredential({clientId, tokenHash, expiresAt}) {
     await this.pool.query(
       `INSERT INTO sb_learning_clients_v1 (client_id, token_hash, expires_at)
@@ -63,12 +271,32 @@ class LearningRepository {
         `DELETE FROM sb_learning_predictions_v1 WHERE subject_hash=$1`,
         [subjectHash]
       );
+      const removedHistorical = await connection.query(
+        `DELETE FROM sb_learning_retrospective_v1 WHERE subject_hash=$1`,
+        [subjectHash]
+      );
+      await connection.query(
+        `DELETE FROM sb_auto_coupon_preferences_v1 WHERE subject_hash=$1`,
+        [subjectHash]
+      );
+      await connection.query(
+        `DELETE FROM sb_auto_coupon_daily_runs_v1 WHERE subject_hash=$1`,
+        [subjectHash]
+      );
+      await connection.query(
+        'DELETE FROM sb_auto_coupon_push_deliveries_v1 WHERE subject_hash=$1',
+        [subjectHash]
+      );
+      await connection.query(
+        'DELETE FROM sb_auto_coupon_push_devices_v1 WHERE subject_hash=$1',
+        [subjectHash]
+      );
       await connection.query(
         `UPDATE sb_learning_clients_v1 SET revoked_at=now()
          WHERE client_id=$1 AND revoked_at IS NULL`, [clientId]
       );
       await connection.query('COMMIT');
-      return deleted.rowCount;
+      return deleted.rowCount + removedHistorical.rowCount;
     } catch (error) {
       await connection.query('ROLLBACK');
       throw error;

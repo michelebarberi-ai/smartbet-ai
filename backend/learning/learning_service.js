@@ -2,6 +2,10 @@
 
 const crypto = require('node:crypto');
 
+const {validateRetrospective} = require('./learning_retrospective');
+const {validatePreferences, localClock} = require('../auto_coupon/daily_schedule');
+const {encryptDeviceToken} = require('../auto_coupon/device_registration');
+
 const {
   validateBatch, hashClientId, fixtureBeforeKickoff, finishedScore, settleMarket,
 } = require('./learning_core');
@@ -48,6 +52,86 @@ class LearningService {
     return {status: 200, body: {success: true, accepted: inserted, duplicates: validated.predictions.length - inserted}};
   }
 
+  async ingestRetrospective({clientId, snapshots}) {
+    const validated = validateRetrospective({snapshots}, this.now());
+    if (!validated) return {status: 400, body: {success: false, error: 'Copie retrospettive non valide.'}};
+    await this.repository.initialize();
+    const accepted = await this.repository.insertRetrospectiveBatch({
+      subjectHash: hashClientId(clientId, this.subjectSalt), snapshots: validated,
+    });
+    return {status: 200, body: {success: true, accepted,
+      duplicates: validated.length - accepted, kind: 'retrospective_unverified_v1',
+      appliesToLivePredictions: false}};
+  }
+
+  // Stores only preferences, never starts a timer or sends push notifications.
+  async saveAutoCouponPreferences({clientId, preferences}) {
+    if (!validatePreferences(preferences)) {
+      return {status: 400, body: {success: false, error: 'Preferenze AutoSchedina non valide.'}};
+    }
+    const normalized = Object.fromEntries([
+      'requested', 'hour', 'minute', 'events', 'minimumMarketProbability',
+      'market', 'notifyChanges',
+    ].map(key => [key, preferences[key]]));
+    await this.repository.initialize();
+    const subjectHash = hashClientId(clientId, this.subjectSalt);
+    await this.repository.upsertAutoCouponPreferences({
+      subjectHash, preferences: normalized,
+    });
+    if (!normalized.requested && typeof this.repository.deleteAutoCouponPushDevice === 'function') {
+      await this.repository.deleteAutoCouponPushDevice(subjectHash);
+    }
+    return {status: 200, body: {success: true, saved: true,
+      preferences: normalized, generationActive: false, pushActive: false}};
+  }
+
+  async readAutoCouponPreferences(clientId) {
+    await this.repository.initialize();
+    const preferences = await this.repository.readAutoCouponPreferences(
+      hashClientId(clientId, this.subjectSalt)
+    );
+    return {status: 200, body: {success: true, preferences,
+      generationActive: false, pushActive: false}};
+  }
+
+  async registerAutoCouponPushDevice({clientId, deviceToken, environment, encryptionKey}) {
+    if (typeof deviceToken !== 'string' || !/^[0-9a-fA-F]{64}$/.test(deviceToken)) {
+      return {status: 400, body: {success: false, error: 'Token APNs non valido.'}};
+    }
+    await this.repository.initialize();
+    const subjectHash = hashClientId(clientId, this.subjectSalt);
+    const preferences = await this.repository.readAutoCouponPreferences(subjectHash);
+    if (preferences?.requested !== true) {
+      return {status: 409, body: {success: false,
+        error: 'Attiva e sincronizza prima le preferenze AutoSchedina.'}};
+    }
+    const encrypted = encryptDeviceToken({deviceToken, subjectHash, environment,
+      keyHex: encryptionKey});
+    await this.repository.upsertAutoCouponPushDevice({subjectHash, environment, ...encrypted});
+    return {status: 200, body: {success: true, registered: true, pushActive: false}};
+  }
+
+  async unregisterAutoCouponPushDevice(clientId) {
+    await this.repository.initialize();
+    await this.repository.deleteAutoCouponPushDevice(hashClientId(clientId, this.subjectSalt));
+    return {status: 200, body: {success: true, registered: false, pushActive: false}};
+  }
+
+  // Read-only: returns ONLY a coupon already saved by the server for this
+  // authenticated device and current Rome day. No generation side effects.
+  async readTodayAutoCoupon(clientId) {
+    await this.repository.initialize();
+    const dayKey = localClock(this.now()).dayKey;
+    const record = await this.repository.readAutoCouponDay({
+      subjectHash: hashClientId(clientId, this.subjectSalt), dayKey,
+    });
+    return {status: 200, body: {success: true, dayKey,
+      status: record?.status || 'not_ready',
+      coupon: record?.status === 'ready' ? record.coupon : null,
+      generatedAt: record?.status === 'ready' ? record.generatedAt : null,
+      generationActive: false, pushActive: false}};
+  }
+
   // P23B2A: admin creates opaque, scoped device credentials; the admin key
   // must never be distributed to any mobile app.
   async provisionMobileClient() {
@@ -75,6 +159,9 @@ class LearningService {
     }
     await this.repository.initialize();
     const revoked = await this.repository.revokeClient(clientId);
+    if (revoked && typeof this.repository.deleteAutoCouponPreferences === 'function') {
+      await this.repository.deleteAutoCouponPreferences(hashClientId(clientId, this.subjectSalt));
+    }
     return {status: 200, body: {success: true, revoked}};
   }
 

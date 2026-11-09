@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'goalvdline_central_learning_outbox.dart';
+import 'goalvdline_historical_learning_review.dart';
 
 /// Trasporto manuale in HTTPS. Il token può essere conservato solo nel Portachiavi, a scelta dell’utente.
 /// Il token amministratore NON deve mai essere utilizzato su un dispositivo.
@@ -202,6 +203,139 @@ class GoalVdLineCentralLearningMobileSync {
     }
   }
 
+  /// B45 P2: copie retrospettive (NON previsioni originali certificate).
+  /// Richiede consenso locale già attivo e conferma esplicita nella UI.
+  /// Non svuota mai lo storico o le fotografie originali dell'iPhone.
+  /// Un invio fallito può essere ripetuto: il server deduplica per dispositivo.
+  Future<GoalVdLineHistoricalUploadResult> uploadHistorical({
+    required String baseUrl,
+    required String token,
+    required GoalVdLineHistoricalLearningReview history,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final origin = serverOrigin(baseUrl);
+    if (!_tokenPattern.hasMatch(token)) {
+      return const GoalVdLineHistoricalUploadResult('Token mobile non valido.');
+    }
+    await history.initialize();
+    if (!history.consentGranted) {
+      return const GoalVdLineHistoricalUploadResult(
+        'Prepara e autorizza prima la copia storica sul telefono.',
+      );
+    }
+    final drafts = history.preparedDrafts;
+    if (drafts.isEmpty) {
+      return const GoalVdLineHistoricalUploadResult(
+        'Nessuna copia retrospettiva preparata.',
+      );
+    }
+    try {
+      final statusRequest = http.Request(
+        'GET',
+        _endpoint(origin, '/learning/v1/status'),
+      )..followRedirects = false;
+      statusRequest.headers['Accept'] = 'application/json';
+      final statusStream = await _client.send(statusRequest).timeout(_timeout);
+      final status = await http.Response.fromStream(
+        statusStream,
+      ).timeout(_timeout);
+      if (status.statusCode != 200) {
+        return const GoalVdLineHistoricalUploadResult(
+          'Server storico non raggiungibile. Copie locali intatte.',
+        );
+      }
+      final statusBody = jsonDecode(status.body);
+      if (statusBody is! Map ||
+          statusBody['retrospectiveIngestEnabled'] != true ||
+          statusBody['liveCalibration'] != false) {
+        return const GoalVdLineHistoricalUploadResult(
+          'Ricezione dello storico non ancora abilitata sul server.',
+        );
+      }
+    } catch (_) {
+      return const GoalVdLineHistoricalUploadResult(
+        'Verifica server non riuscita. Copie locali intatte.',
+      );
+    }
+
+    var confirmed = 0;
+    var accepted = 0;
+    var duplicates = 0;
+    const batchSize = 100;
+    while (confirmed < drafts.length) {
+      final end = confirmed + batchSize < drafts.length
+          ? confirmed + batchSize
+          : drafts.length;
+      final batch = drafts.sublist(confirmed, end);
+      try {
+        final request = http.Request(
+          'POST',
+          _endpoint(origin, '/learning/v1/mobile/retrospective'),
+        )..followRedirects = false;
+        request.headers.addAll({
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        });
+        request.body = jsonEncode({
+          'snapshots': batch.map((row) => row.toJson()).toList(),
+        });
+        final stream = await _client.send(request).timeout(_timeout);
+        final response = await http.Response.fromStream(
+          stream,
+        ).timeout(_timeout);
+        if (response.statusCode != 200) {
+          return GoalVdLineHistoricalUploadResult(
+            'Storico: $confirmed/${drafts.length} confermate. '
+            'HTTP ${response.statusCode}. Puoi riprovare; nessun dato locale eliminato.',
+            confirmed: confirmed,
+            accepted: accepted,
+            duplicates: duplicates,
+          );
+        }
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map ||
+            decoded['success'] != true ||
+            decoded['kind'] != 'retrospective_unverified_v1' ||
+            decoded['appliesToLivePredictions'] != false ||
+            decoded['accepted'] is! int ||
+            decoded['duplicates'] is! int ||
+            decoded['accepted'] < 0 ||
+            decoded['duplicates'] < 0 ||
+            decoded['accepted'] + decoded['duplicates'] != batch.length) {
+          return GoalVdLineHistoricalUploadResult(
+            'Conferma server incompleta: $confirmed/${drafts.length}. '
+            'Copie locali intatte, riprova.',
+            confirmed: confirmed,
+            accepted: accepted,
+            duplicates: duplicates,
+          );
+        }
+        accepted += decoded['accepted'] as int;
+        duplicates += decoded['duplicates'] as int;
+        confirmed = end;
+        onProgress?.call(confirmed, drafts.length);
+      } catch (_) {
+        return GoalVdLineHistoricalUploadResult(
+          'Rete interrotta: $confirmed/${drafts.length} confermate. '
+          'Copie locali intatte, riprova.',
+          confirmed: confirmed,
+          accepted: accepted,
+          duplicates: duplicates,
+        );
+      }
+    }
+    return GoalVdLineHistoricalUploadResult(
+      'Storico sul server: $confirmed/${drafts.length}. '
+      '$accepted nuove, $duplicates già presenti. '
+      'Le copie sul telefono sono rimaste intatte.',
+      confirmed: confirmed,
+      accepted: accepted,
+      duplicates: duplicates,
+      completed: true,
+    );
+  }
+
   /// La cancellazione sul server richiede la stessa credenziale mobile.
   /// Non tocca lo storico P23B3, né lo storico analisi dell'utente.
   Future<GoalVdLineEraseResult> eraseRemote({
@@ -347,4 +481,20 @@ class GoalVdLineEraseResult {
   final bool success;
   final String message;
   const GoalVdLineEraseResult(this.success, this.message);
+}
+
+/// Risultato del caricamento retrospettivo; non è una metrica di successo AI.
+class GoalVdLineHistoricalUploadResult {
+  final String message;
+  final int confirmed;
+  final int accepted;
+  final int duplicates;
+  final bool completed;
+  const GoalVdLineHistoricalUploadResult(
+    this.message, {
+    this.confirmed = 0,
+    this.accepted = 0,
+    this.duplicates = 0,
+    this.completed = false,
+  });
 }

@@ -8,6 +8,7 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/italy_schedule_filter.dart';
@@ -134,6 +135,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   _CouponPeriod _period = _CouponPeriod.today;
   DateTimeRange? _customPeriod;
   int _count = 5;
+  // Limite sulle stime dei singoli mercati, distinto dallo SmartScore.
+  // Standard conserva il recupero adattivo esistente (minimo 55%).
+  int _minimumCouponProbability = 65;
 
   bool _loading = false;
   final SmartBetDeviceLearningPreferences _deviceLearningPreferences =
@@ -424,6 +428,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         rawProbability,
         preliminary.match.fixtureId,
       );
+
+      // Applichiamo il limite alla probabilità effettiva, dopo l'eventuale
+      // calibrazione live; non al punteggio complessivo della partita.
+      if (!GoalVdLineCouponProbabilityPolicy.accepts(
+        probability: probability,
+        minimumPercent: _minimumCouponProbability,
+      )) {
+        continue;
+      }
 
       final primary = _passesPrimary(
         probability: probability,
@@ -1792,7 +1805,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // Le cinque schedine vengono costruite sullo stesso pool già
       // analizzato e auditato. Nessuna nuova analisi SmartBet viene
       // eseguita per creare le varianti.
-      final portfolio = _buildPortfolioShadow(feasible);
+      // Seconda verifica sul pool usato per CORE e alternative: eventuali
+      // selezioni di recupero non possono aggirare la soglia impostata.
+      final safeFeasible = GoalVdLineCouponProbabilityPolicy.filter(
+        feasible,
+        probabilityOf: (pick) => pick.probability,
+        minimumPercent: _minimumCouponProbability,
+      );
+      final portfolio = _buildPortfolioShadow(safeFeasible);
       _logPortfolioShadow(portfolio);
 
       if (portfolio.isEmpty) {
@@ -2858,6 +2878,69 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     );
   }
 
+  Widget _minimumProbabilitySelector() {
+    Widget choice(String label, int minimum) {
+      final selected = _minimumCouponProbability == minimum;
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: _loading
+            ? null
+            : (_) => setState(() {
+                _minimumCouponProbability = minimum;
+                _results.clear();
+                _portfolioResults.clear();
+                _selectedPortfolioIndex = 0;
+                _error = null;
+                _notice = null;
+              }),
+        showCheckmark: false,
+        selectedColor: const Color(0xFF00C853),
+        backgroundColor: const Color(0xFF1F2937),
+        side: BorderSide(
+          color: selected ? const Color(0xFF00C853) : Colors.white12,
+        ),
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Probabilità minima del mercato',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            choice('Standard', 0),
+            choice('≥65%', 65),
+            choice('≥75%', 75),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Il filtro usa la probabilità del mercato, anche dopo la '
+          'calibrazione adattiva. Standard mantiene il recupero al 55%. '
+          'Se gli eventi idonei non bastano, non vengono aggiunti pronostici '
+          'sotto la soglia scelta.',
+          style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+        ),
+      ],
+    );
+  }
+
   Widget _portfolioSelector() {
     if (_mode != _CouponMode.automatic ||
         _portfolioResults.length <= 1 ||
@@ -3833,6 +3916,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
           if (_mode == _CouponMode.automatic) ...[
             _riskProfileSelector(),
+            const SizedBox(height: 22),
+            _minimumProbabilitySelector(),
             const SizedBox(height: 22),
             const Text(
               'Quante partite?',
