@@ -9,6 +9,7 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
+import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/italy_schedule_filter.dart';
@@ -140,6 +141,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _minimumCouponProbability = 65;
 
   bool _loading = false;
+  bool _threeSystemLoading = false;
   final SmartBetDeviceLearningPreferences _deviceLearningPreferences =
       const SmartBetDeviceLearningPreferences();
   bool _deviceLearningReady = false;
@@ -2728,6 +2730,232 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // CONDIVIDI
   // ============================================================
 
+  // Modalità aggiuntiva, separata dal sistema/portfolio già esistente.
+  // Le tre schedine mantengono gli stessi fixtureId.
+  Future<void> _createSameMatchesSystem() async {
+    if (_mode != _CouponMode.automatic ||
+        _loading ||
+        _threeSystemLoading ||
+        _results.length < 3 ||
+        _results.length > 15 ||
+        _results.length != _count) {
+      return;
+    }
+
+    final originalPicks = List<_CouponPick>.of(_results);
+    setState(() => _threeSystemLoading = true);
+    final alternatives = <int, List<GoalVdLineSystemSelection>>{};
+
+    try {
+      // Manteniamo i dati originali del motore. Solo mercati con
+      // probabilità sufficiente e quota reale diventano alternative.
+      for (final base in originalPicks) {
+        if (base.probability >= 80) continue;
+        final odds = await _oddsService.getFixtureMarketOdds(
+          fixtureId: base.match.fixtureId,
+        );
+        final candidates = _sportsMarketCandidates(base.analysis, odds: odds);
+        final allowed = <GoalVdLineSystemSelection>[];
+        for (final candidate in candidates) {
+          if (candidate.market == base.market) continue;
+          final probability = _livePercent(
+            candidate.market,
+            candidate.probability,
+            base.match.fixtureId,
+          );
+          if (!GoalVdLineCouponProbabilityPolicy.accepts(
+            probability: probability,
+            minimumPercent: math.max(65, _minimumCouponProbability),
+          )) {
+            continue;
+          }
+          final quote = odds?.oddFor(candidate.market);
+          if (quote == null || !quote.odd.isFinite || quote.odd < _minimumOdd) {
+            continue;
+          }
+          final audit = SmartBetLocalAuditor.evaluate(
+            analysis: base.analysis,
+            market: candidate.market,
+            probability: probability,
+            odd: quote.odd,
+          );
+          if (audit.isBlocked || audit.blocksMarket(candidate.market)) {
+            continue;
+          }
+          allowed.add(
+            GoalVdLineSystemSelection(
+              fixtureId: base.match.fixtureId,
+              market: candidate.market,
+              probability: probability,
+              odd: quote.odd,
+              bookmaker: quote.bookmakerName,
+            ),
+          );
+        }
+        alternatives[base.match.fixtureId] = allowed;
+      }
+
+      final original = originalPicks
+          .map(
+            (item) => GoalVdLineSystemSelection(
+              fixtureId: item.match.fixtureId,
+              market: item.market,
+              probability: item.probability,
+              odd: item.odd ?? double.nan,
+              bookmaker: item.bookmaker,
+            ),
+          )
+          .toList();
+
+      final coupons = GoalVdLineThreeCouponSystem.create(
+        original: original,
+        alternatives: alternatives,
+        minimumProbability: math.max(65, _minimumCouponProbability),
+      );
+      if (!mounted) return;
+      if (coupons == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Non ci sono tre combinazioni diverse con mercati '
+              'sufficientemente affidabili per queste stesse partite.',
+            ),
+          ),
+        );
+        return;
+      }
+      final matchNames = {
+        for (final item in originalPicks)
+          item.match.fixtureId:
+              '${item.match.homeTeam} - ${item.match.awayTeam}',
+      };
+      await _showThreeSystemCoupons(coupons, matchNames);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Non è stato possibile recuperare le quote '
+              'alternative. Riprova più tardi.',
+            ),
+          ),
+        );
+      }
+      debugPrint('GoalVdLine three-coupon system: $error');
+    } finally {
+      if (mounted) setState(() => _threeSystemLoading = false);
+    }
+  }
+
+  Future<void> _showThreeSystemCoupons(
+    List<List<GoalVdLineSystemSelection>> coupons,
+    Map<int, String> matchNames,
+  ) async {
+    const names = ['ORIGINALE', 'ALTERNATIVA 1', 'ALTERNATIVA 2'];
+    String summary() {
+      final buffer = StringBuffer('GOALVDLINE — 3 SCHEDINE, STESSE PARTITE\n');
+      for (var index = 0; index < coupons.length; index++) {
+        final coupon = coupons[index];
+        final total = coupon.fold<double>(
+          1.0,
+          (value, pick) => value * pick.odd,
+        );
+        buffer.writeln('\n${names[index]} | Quota ${total.toStringAsFixed(2)}');
+        for (final pick in coupon) {
+          buffer.writeln(
+            '${matchNames[pick.fixtureId]} | ${pick.market} '
+            '| ${pick.probability}% | ${pick.odd.toStringAsFixed(2)}',
+          );
+        }
+      }
+      return buffer.toString();
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111827),
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.85,
+          child: Column(
+            children: [
+              const SizedBox(height: 14),
+              const Text(
+                '3 SCHEDINE — STESSE PARTITE',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Mercati diversi soltanto dove esistono quote '
+                  'e probabilità valide. Non è un sistema integrale.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: coupons.length,
+                  itemBuilder: (_, index) {
+                    final coupon = coupons[index];
+                    final quota = coupon.fold<double>(1.0, (v, p) => v * p.odd);
+                    return Card(
+                      color: const Color(0xFF1F2937),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${names[index]} · ${coupon.length} partite '
+                              '· Quota ${quota.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Color(0xFF00C853),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            for (final pick in coupon)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                ),
+                                child: Text(
+                                  '${matchNames[pick.fixtureId]} — ${pick.market} '
+                                  '(${pick.probability}%) @${pick.odd.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: OutlinedButton.icon(
+                  onPressed: () => Share.share(summary()),
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('CONDIVIDI LE 3 SCHEDINE'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _share() async {
     if (_results.isEmpty) return;
 
@@ -4091,6 +4319,30 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               icon: const Icon(Icons.ios_share_outlined),
               label: const Text('CONDIVIDI SCHEDINA'),
             ),
+            if (_mode == _CouponMode.automatic) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed:
+                    _loading || _threeSystemLoading || _results.length != _count
+                    ? null
+                    : _createSameMatchesSystem,
+                icon: const Icon(Icons.account_tree_outlined),
+                label: Text(
+                  _threeSystemLoading
+                      ? 'RICERCA MERCATI ALTERNATIVI...'
+                      : 'CREA 3 SCHEDINE — STESSE PARTITE',
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Modalità aggiuntiva: da 3 a 15 partite, '
+                  'tre schedine con le stesse squadre e mercati alternativi '
+                  'solo quando attendibili.',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ),
+            ],
           ],
           if (!_loading && _errors > 0) ...[
             const SizedBox(height: 12),

@@ -22,7 +22,7 @@ test('validates exact mobile preferences contract', () => {
   assert.equal(validatePreferences({...config, hour: 24}), false);
   assert.equal(validatePreferences({...config, minute: 60}), false);
   assert.equal(validatePreferences({...config, minimumMarketProbability: 63}), false);
-  assert.equal(validatePreferences({...config, events: 7}), false);
+  assert.equal(validatePreferences({...config, events: 16}), false);
   assert.equal(validatePreferences({...config, market: 'UNKNOWN'}), false);
   assert.equal(validatePreferences({...config, requested: 'yes'}), false);
 });

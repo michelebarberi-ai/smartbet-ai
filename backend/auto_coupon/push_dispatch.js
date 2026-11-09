@@ -24,7 +24,28 @@ function normalizePushBatch(value) {
 
 function futureCoupon(coupon, dayKey, now) {
   if (!coupon || !Array.isArray(coupon.events) ||
-      coupon.events.length < 3 || coupon.events.length > 6) return false;
+      coupon.events.length < 3 || coupon.events.length > 15) return false;
+  if (coupon.coupons !== undefined) {
+    if (!Array.isArray(coupon.coupons) || coupon.coupons.length !== 3) return false;
+    const signatures = new Set();
+    for (let i=0;i<3;i++) {
+      const variant = coupon.coupons[i];
+      if (!variant || !Array.isArray(variant.events) ||
+          variant.events.length !== coupon.events.length) return false;
+      const signature = [];
+      for (let j=0;j<variant.events.length;j++) {
+        const e = variant.events[j], base = coupon.events[j];
+        if (!e || e.fixtureId !== base.fixtureId || e.kickoffAt !== base.kickoffAt ||
+            typeof e.market !== 'string' || !e.market.trim() ||
+            !Number.isFinite(e.marketProbability) || e.marketProbability < 0 ||
+            e.marketProbability > 100 || !Number.isFinite(e.odds) || e.odds <= 1) return false;
+        signature.push(`${e.fixtureId}/${e.market}`);
+      }
+      if (i===0 && JSON.stringify(variant.events)!==JSON.stringify(coupon.events)) return false;
+      signatures.add(signature.join('|'));
+    }
+    if (signatures.size!==3) return false;
+  }
   const ids = new Set();
   return coupon.events.every(event => {
     if (!Number.isSafeInteger(event?.fixtureId) || event.fixtureId <= 0 ||

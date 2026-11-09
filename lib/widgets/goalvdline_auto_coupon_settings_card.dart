@@ -234,10 +234,33 @@ class _GoalVdLineAutoCouponSettingsCardState
           Slider(
             value: _value.events.toDouble(),
             min: 3,
-            max: 6,
-            divisions: 3,
+            max: 15,
+            divisions: 12,
             label: '${_value.events}',
             onChanged: (next) => _update(_value.copyWith(events: next.round())),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              '3 schedine con le stesse partite',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Cambia solo i mercati dove il motore trova alternative valide. '
+              'Se non esistono tre varianti attendibili non forza i pronostici.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            value:
+                _value.systemMode ==
+                GoalVdLineAutoCouponPreferences.threeSameFixtures,
+            onChanged: (enabled) => _update(
+              _value.copyWith(
+                systemMode: enabled
+                    ? GoalVdLineAutoCouponPreferences.threeSameFixtures
+                    : GoalVdLineAutoCouponPreferences.single,
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -348,20 +371,45 @@ class _GoalVdLineAutoCouponSettingsCardState
               _todayResult!.message,
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
-            for (final event in _todayResult!.events)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Partita #${event.fixtureId} · ${event.market}',
-                  style: const TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  'Probabilità: ${event.probability.toStringAsFixed(1)}%'
-                  '${event.odds == null ? '' : ' · Quota: ${event.odds!.toStringAsFixed(2)}'}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+            for (final variant in _todayResult!.coupons) ...[
+              const SizedBox(height: 8),
+              Text(
+                variant.name.replaceAll('_', ' '),
+                style: const TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
+              for (final event in variant.events)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Partita #${event.fixtureId} · ${event.market}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    'Probabilità: ${event.probability.toStringAsFixed(1)}%'
+                    '${event.odds == null ? '' : ' · Quota: ${event.odds!.toStringAsFixed(2)}'}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+            ],
+            if (_todayResult!.coupons.isEmpty)
+              for (final event in _todayResult!.events)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Partita #${event.fixtureId} · ${event.market}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    'Probabilità: ${event.probability.toStringAsFixed(1)}%'
+                    '${event.odds == null ? '' : ' · Quota: ${event.odds!.toStringAsFixed(2)}'}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
           ],
           const Text(
             'Invio volontario: salva soltanto le preferenze. Nessuna schedina o notifica viene ancora generata.',

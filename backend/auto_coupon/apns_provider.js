@@ -40,7 +40,7 @@ function createProviderToken({keyId, teamId, privateKey, issuedAt}) {
 function couponReadyPayload({dayKey, coupon}) {
   if (!DAY_KEY.test(dayKey || '') ||
       !(coupon && Array.isArray(coupon.events) &&
-        coupon.events.length >= 3 && coupon.events.length <= 6)) {
+        coupon.events.length >= 3 && coupon.events.length <= 15)) {
     throw new Error('No validated daily coupon');
   }
   // Never put individual bets, user identity or tokens into push notifications.

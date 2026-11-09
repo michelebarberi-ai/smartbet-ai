@@ -77,7 +77,7 @@ test('accepted preferences saved only for hashed authenticated client; no automa
 
 test('invalid preferences and unexpected fields never persisted',async()=>{
   const {app,saved}=setup();
-  for (const body of [{preferences:{...preferences,events:7}},
+  for (const body of [{preferences:{...preferences,events:16}},
     {preferences:{...preferences,minimumMarketProbability:10}},
     {preferences,clientId:'spoof'}, {}, {preferences:'invalid'}]) {
     const reply=await invoke(app.routes.get(post),req(body));

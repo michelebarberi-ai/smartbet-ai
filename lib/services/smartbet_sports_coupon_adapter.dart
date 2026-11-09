@@ -10,7 +10,17 @@ class SmartBetSportsCouponAdapter {
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
   }) {
-    if (odds == null) return null;
+    final picks = allPlayable(analysis: analysis, odds: odds);
+    return picks.isEmpty ? null : picks.first;
+  }
+
+  /// Espone soltanto mercati gia' calcolati dall'analisi ufficiale e
+  /// realmente quotati, rispettando i blocchi dell'Auditor sportivo.
+  static List<SmartBetSportsMarketPick> allPlayable({
+    required AnalysisResult analysis,
+    required FixtureMarketOdds? odds,
+  }) {
+    if (odds == null) return const <SmartBetSportsMarketPick>[];
 
     final probabilities = <String, int>{
       '1': analysis.homeProbability,
@@ -43,7 +53,7 @@ class SmartBetSportsCouponAdapter {
       }
     }
 
-    return SmartBetSportsMarketSelector.bestPlayable(
+    return SmartBetSportsMarketSelector.allPlayable(
       sportsProbabilities: probabilities,
       blockedMarkets: analysis.sportsAuditBlockedMarkets,
       quotedOdds: {

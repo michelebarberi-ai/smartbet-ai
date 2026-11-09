@@ -131,10 +131,16 @@ class SmartBetCouponSet {
   final SmartBetCouponResult balanced;
   final SmartBetCouponResult value;
 
+  /// Mercati secondari derivati dalle STESSE analisi dei profili.
+  /// Usati solo dalla generazione headless a tre schedine; non cambiano i
+  /// profili e non vengono registrati automaticamente come pronostici giocati.
+  final List<SmartBetCouponSelection> verifiedMarketAlternatives;
+
   const SmartBetCouponSet({
     required this.premium,
     required this.balanced,
     required this.value,
+    this.verifiedMarketAlternatives = const <SmartBetCouponSelection>[],
   });
 
   bool get hasAnyCoupon {
@@ -340,8 +346,16 @@ class SmartBetCouponService {
   Future<SmartBetCouponSet> buildCouponSet({
     required List<MatchModel> matches,
     int minimumRequired = minimumSelections,
+    int maximumValueSelections = maximumSelections,
+    bool collectVerifiedAlternatives = false,
   }) async {
     final safeMinimum = minimumRequired.clamp(1, minimumSelections);
+    if (maximumValueSelections < 2 || maximumValueSelections > 15) {
+      throw ArgumentError.value(
+        maximumValueSelections,
+        'maximumValueSelections',
+      );
+    }
 
     if (matches.isEmpty) {
       final emptyPremium = _emptyResult(
@@ -376,6 +390,7 @@ class SmartBetCouponService {
     final oddsService = oddsProvider == null ? OddsService() : null;
 
     final analyzed = <SmartBetCouponSelection>[];
+    final verifiedMarketAlternatives = <SmartBetCouponSelection>[];
 
     int analyzedMatches = 0;
 
@@ -462,6 +477,42 @@ class SmartBetCouponService {
               learningSamples: learning.applied ? learning.samples : 0,
             ),
           );
+
+          if (collectVerifiedAlternatives &&
+              result.smartScore >= _controlledValueProfile.minimumSmartScore &&
+              !_isHighRisk(result.risk)) {
+            // Nessuna nuova analisi o modello parallelo: tutti i mercati
+            // della stessa partita, incluso il principale se il profilo
+            // Value non lo ha scelto, con quota reale e audit verificati.
+            for (final alternative in SmartBetSportsCouponAdapter.allPlayable(
+              analysis: result,
+              odds: marketOdds,
+            )) {
+              final alternativeLearning = evaluateLearning(
+                session: learningSession,
+                market: alternative.market,
+                originalPercent: alternative.probability,
+                fixtureId: match.fixtureId,
+                hasRealOdd: true,
+              );
+              verifiedMarketAlternatives.add(
+                SmartBetCouponSelection(
+                  match: match,
+                  analysis: result,
+                  sportsPick: alternative,
+                  sportsBookmaker: marketOdds
+                      ?.oddFor(alternative.market)
+                      ?.bookmakerName,
+                  calibratedProbabilityPercent: alternativeLearning.applied
+                      ? alternativeLearning.percent
+                      : null,
+                  learningSamples: alternativeLearning.applied
+                      ? alternativeLearning.samples
+                      : 0,
+                ),
+              );
+            }
+          }
         }
 
         if (end < matches.length) {
@@ -538,7 +589,7 @@ class SmartBetCouponService {
       analyzed: analyzed,
       analyzedMatches: analyzedMatches,
       profile: _controlledValueProfile,
-      maximumProfileSelections: maximumSelections,
+      maximumProfileSelections: maximumValueSelections,
       minimumRequired: valueMinimum,
       allowSmartFallback: true,
       strategy: 'VALUE',
@@ -548,6 +599,7 @@ class SmartBetCouponService {
       premium: premium,
       balanced: balanced,
       value: value,
+      verifiedMarketAlternatives: List.unmodifiable(verifiedMarketAlternatives),
     );
 
     // Memorizza le previsioni effettivamente selezionate una sola volta

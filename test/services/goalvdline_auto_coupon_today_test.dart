@@ -28,6 +28,32 @@ void main() {
     },
   };
 
+  test('P20 shows exactly three verified same-fixture coupons', () async {
+    final main = ((readyBody()['coupon'] as Map)['events'] as List)
+        .map((e) => Map<String, Object?>.from(e as Map))
+        .toList();
+    final alternative1 = main.map((e) => Map<String, Object?>.from(e)).toList();
+    final alternative2 = main.map((e) => Map<String, Object?>.from(e)).toList();
+    alternative1[0]['market'] = 'GOAL';
+    alternative2[1]['market'] = 'UNDER 2.5';
+    final body = readyBody();
+    body['coupon'] = {
+      'events': main,
+      'coupons': [
+        {'name': 'PRINCIPALE', 'events': main},
+        {'name': 'ALTERNATIVA_1', 'events': alternative1},
+        {'name': 'ALTERNATIVA_2', 'events': alternative2},
+      ],
+    };
+    final service = GoalVdLineAutoCouponToday(
+      client: MockClient((_) async => http.Response(jsonEncode(body), 200)),
+    );
+    final result = await service.fetch(token: token);
+    expect(result.isReady, true);
+    expect(result.coupons.length, 3);
+    expect(result.coupons[1].events[0].fixtureId, result.events[0].fixtureId);
+  });
+
   test('reads only authenticated saved daily coupon', () async {
     final client = MockClient((req) async {
       expect(req.method, 'GET');

@@ -100,61 +100,112 @@ class GoalVdLineAutoCouponToday {
           'Schedina ricevuta non valida.',
         );
       }
-      final rawEvents = coupon['events'] as List;
-      if (rawEvents.length < 3 || rawEvents.length > 6) {
+      final events = _parseEvents(coupon['events']);
+      if (events == null) {
         return const GoalVdLineTodayCouponResult(
-          'Numero di eventi non valido.',
+          'Schedina ricevuta non verificabile.',
         );
       }
-      final events = <GoalVdLineTodayCouponEvent>[];
-      final fixtureIds = <int>{};
-      for (final raw in rawEvents) {
-        if (raw is! Map<String, dynamic>) {
-          return const GoalVdLineTodayCouponResult('Evento non valido.');
+      final variants = <GoalVdLineTodayCouponVariant>[];
+      if (coupon.containsKey('coupons')) {
+        final source = coupon['coupons'];
+        if (source is! List || source.length != 3) {
+          return const GoalVdLineTodayCouponResult('Varianti non valide.');
         }
-        final fixtureId = raw['fixtureId'];
-        final market = raw['market'];
-        final probability = raw['marketProbability'];
-        final kickoff = raw['kickoffAt'];
-        final odds = raw['odds'];
-        final parsedKickoff = kickoff is String
-            ? DateTime.tryParse(kickoff)
-            : null;
-        if (fixtureId is! int ||
-            fixtureId <= 0 ||
-            !fixtureIds.add(fixtureId) ||
-            market is! String ||
-            market.trim().isEmpty ||
-            market.length > 100 ||
-            probability is! num ||
-            !probability.isFinite ||
-            probability < 0 ||
-            probability > 100 ||
-            parsedKickoff == null ||
-            (odds != null && (odds is! num || !odds.isFinite || odds <= 1))) {
-          return const GoalVdLineTodayCouponResult(
-            'Schedina ricevuta non verificabile.',
+        const expectedNames = ['PRINCIPALE', 'ALTERNATIVA_1', 'ALTERNATIVA_2'];
+        final signatures = <String>{};
+        for (var i = 0; i < source.length; i++) {
+          final raw = source[i];
+          if (raw is! Map<String, dynamic> || raw['name'] != expectedNames[i]) {
+            return const GoalVdLineTodayCouponResult('Variante non valida.');
+          }
+          final selection = _parseEvents(raw['events']);
+          if (selection == null || selection.length != events.length) {
+            return const GoalVdLineTodayCouponResult(
+              'Eventi alternativi non validi.',
+            );
+          }
+          for (var j = 0; j < events.length; j++) {
+            if (selection[j].fixtureId != events[j].fixtureId ||
+                !selection[j].kickoffAt.isAtSameMomentAs(events[j].kickoffAt)) {
+              return const GoalVdLineTodayCouponResult(
+                'Le schedine non hanno le stesse partite.',
+              );
+            }
+            if (i == 0 &&
+                (selection[j].market != events[j].market ||
+                    selection[j].probability != events[j].probability ||
+                    selection[j].odds != events[j].odds)) {
+              return const GoalVdLineTodayCouponResult(
+                'Prima schedina non coerente.',
+              );
+            }
+          }
+          signatures.add(
+            selection.map((e) => '${e.fixtureId}:${e.market}').join('|'),
+          );
+          variants.add(
+            GoalVdLineTodayCouponVariant(
+              name: expectedNames[i],
+              events: selection,
+            ),
           );
         }
-        events.add(
-          GoalVdLineTodayCouponEvent(
-            fixtureId: fixtureId,
-            market: market.trim(),
-            probability: probability.toDouble(),
-            kickoffAt: parsedKickoff,
-            odds: odds is num ? odds.toDouble() : null,
-          ),
-        );
+        if (signatures.length != 3) {
+          return const GoalVdLineTodayCouponResult('Schedine identiche.');
+        }
       }
       return GoalVdLineTodayCouponResult(
-        'Schedina del giorno ${data['dayKey']}: ${events.length} eventi.',
+        variants.isEmpty
+            ? 'Schedina del giorno ${data['dayKey']}: ${events.length} eventi.'
+            : '3 schedine del giorno ${data['dayKey']}: ${events.length} partite ciascuna.',
         events: events,
+        coupons: variants,
       );
     } catch (_) {
       return const GoalVdLineTodayCouponResult(
         'Impossibile leggere la schedina dal server.',
       );
     }
+  }
+
+  static List<GoalVdLineTodayCouponEvent>? _parseEvents(Object? input) {
+    if (input is! List || input.length < 3 || input.length > 15) return null;
+    final events = <GoalVdLineTodayCouponEvent>[];
+    final ids = <int>{};
+    for (final raw in input) {
+      if (raw is! Map<String, dynamic>) return null;
+      final id = raw['fixtureId'];
+      final market = raw['market'];
+      final probability = raw['marketProbability'];
+      final kickoff = raw['kickoffAt'];
+      final odds = raw['odds'];
+      final date = kickoff is String ? DateTime.tryParse(kickoff) : null;
+      if (id is! int ||
+          id <= 0 ||
+          !ids.add(id) ||
+          market is! String ||
+          market.trim().isEmpty ||
+          market.length > 100 ||
+          probability is! num ||
+          !probability.isFinite ||
+          probability < 0 ||
+          probability > 100 ||
+          date == null ||
+          (odds != null && (odds is! num || !odds.isFinite || odds <= 1))) {
+        return null;
+      }
+      events.add(
+        GoalVdLineTodayCouponEvent(
+          fixtureId: id,
+          market: market.trim(),
+          probability: probability.toDouble(),
+          kickoffAt: date,
+          odds: odds is num ? odds.toDouble() : null,
+        ),
+      );
+    }
+    return events;
   }
 }
 
@@ -173,9 +224,23 @@ class GoalVdLineTodayCouponEvent {
   final double? odds;
 }
 
+class GoalVdLineTodayCouponVariant {
+  const GoalVdLineTodayCouponVariant({
+    required this.name,
+    required this.events,
+  });
+  final String name;
+  final List<GoalVdLineTodayCouponEvent> events;
+}
+
 class GoalVdLineTodayCouponResult {
-  const GoalVdLineTodayCouponResult(this.message, {this.events = const []});
+  const GoalVdLineTodayCouponResult(
+    this.message, {
+    this.events = const [],
+    this.coupons = const [],
+  });
   final String message;
   final List<GoalVdLineTodayCouponEvent> events;
+  final List<GoalVdLineTodayCouponVariant> coupons;
   bool get isReady => events.isNotEmpty;
 }

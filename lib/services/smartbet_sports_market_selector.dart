@@ -54,31 +54,42 @@ class SmartBetSportsMarketSelector {
     return List.unmodifiable(ranked);
   }
 
-  /// Ordine sportivo prima, filtro quota dopo.
-  static SmartBetSportsMarketPick? bestPlayable({
+  /// Tutti i mercati effettivamente quotati e non bloccati dall'audit.
+  /// Ordine sportivo prima del filtro quote, come bestPlayable originale.
+  static List<SmartBetSportsMarketPick> allPlayable({
     required Map<String, int> sportsProbabilities,
     required Map<String, double> quotedOdds,
     Iterable<String> blockedMarkets = const <String>[],
   }) {
     final blocked = blockedMarkets.map(_normalizeMarket).toSet();
+    final picks = <SmartBetSportsMarketPick>[];
 
     for (final entry in rankedMarkets(sportsProbabilities)) {
-      if (blocked.contains(_normalizeMarket(entry.key))) {
-        continue;
-      }
+      if (blocked.contains(_normalizeMarket(entry.key))) continue;
       final odd = quotedOdds[entry.key];
-
-      if (odd == null || !odd.isFinite || odd < minimumOdd) {
-        continue;
-      }
-
-      return SmartBetSportsMarketPick(
-        market: entry.key,
-        probability: entry.value,
-        odd: odd,
+      if (odd == null || !odd.isFinite || odd < minimumOdd) continue;
+      picks.add(
+        SmartBetSportsMarketPick(
+          market: entry.key,
+          probability: entry.value,
+          odd: odd,
+        ),
       );
     }
+    return List.unmodifiable(picks);
+  }
 
-    return null;
+  /// Compatibilita': la prima scelta resta identica al comportamento P20.
+  static SmartBetSportsMarketPick? bestPlayable({
+    required Map<String, int> sportsProbabilities,
+    required Map<String, double> quotedOdds,
+    Iterable<String> blockedMarkets = const <String>[],
+  }) {
+    final picks = allPlayable(
+      sportsProbabilities: sportsProbabilities,
+      quotedOdds: quotedOdds,
+      blockedMarkets: blockedMarkets,
+    );
+    return picks.isEmpty ? null : picks.first;
   }
 }

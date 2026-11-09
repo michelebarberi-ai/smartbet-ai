@@ -8,13 +8,20 @@ const {dailyRunStatus, validateGeneratedCoupon} = require('./daily_schedule');
 const SUBJECT_HASH = /^[0-9a-f]{64}$/;
 const MAX_BATCH = 100;
 
-function publicCoupon(coupon) {
-  return {events: coupon.events.map(event => ({
+function publicEvents(events) {
+  return events.map(event => ({
     fixtureId: event.fixtureId,
     market: event.market,
     marketProbability: event.marketProbability,
     kickoffAt: event.kickoffAt,
     ...(Object.hasOwn(event, 'odds') ? {odds: event.odds} : {}),
+  }));
+}
+function publicCoupon(coupon) {
+  const events = publicEvents(coupon.events);
+  if (!coupon.coupons) return {events};
+  return {events, coupons:coupon.coupons.map(({name,events}) => ({
+    name, events:publicEvents(events),
   }))};
 }
 

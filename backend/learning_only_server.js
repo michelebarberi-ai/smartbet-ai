@@ -6,6 +6,7 @@ require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
 const {Pool} = require('pg');
+const {createOfficialEngineAdapter} = require('./auto_coupon/official_engine_client');
 
 // Read-only database connectivity and schema probe. It never enables ingest or
 // touches prediction rows, and it deliberately omits connection error details.
@@ -109,8 +110,10 @@ app.get('/health/database', async (_req, res) => {
   });
 });
 
+  const officialEngine = typeof generateOfficialCoupon === 'function'
+    ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
   registerLearningRoutes(app, {
-    env, generateOfficialCoupon,
+    env, generateOfficialCoupon: officialEngine,
     requestApiFootball: (request) => requestFixture(request, {env, fetchImpl}),
   });
   return app;

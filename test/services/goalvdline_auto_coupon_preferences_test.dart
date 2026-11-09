@@ -15,10 +15,33 @@ void main() {
     final value = await const GoalVdLineAutoCouponPreferencesStore().load();
     expect(value.requested, isFalse);
     expect(value.formattedTime, '08:00');
-    expect(value.events, 4);
+    expect(value.events, 6);
     expect(value.minimumMarketProbability, 65);
     expect(value.market, GoalVdLineAutoCouponPreferences.multiMarket);
     expect(value.notifyChanges, isTrue);
+  });
+
+  test('P20: 3..15 eventi e modalita tripla esplicita', () async {
+    const store = GoalVdLineAutoCouponPreferencesStore();
+    final original = const GoalVdLineAutoCouponPreferences().copyWith(
+      events: 15,
+      systemMode: GoalVdLineAutoCouponPreferences.threeSameFixtures,
+    );
+    expect(await store.save(original), isTrue);
+    final loaded = await store.load();
+    expect(loaded.events, 15);
+    expect(
+      loaded.systemMode,
+      GoalVdLineAutoCouponPreferences.threeSameFixtures,
+    );
+    expect(const GoalVdLineAutoCouponPreferences(events: 16).isValid, false);
+    expect(const GoalVdLineAutoCouponPreferences(events: 2).isValid, false);
+    expect(
+      GoalVdLineAutoCouponPreferences.fromJson(
+        {...original.toJson()}..remove('systemMode'),
+      )!.systemMode,
+      GoalVdLineAutoCouponPreferences.single,
+    );
   });
 
   test('B45 P5: salva e ricarica tutte le preferenze sul telefono', () async {

@@ -130,7 +130,7 @@ class SmartBetAutoCouponService {
   static const int expandedPreliminaryMatches = 90;
 
   // AI avanzata soltanto sulle migliori.
-  static const int maximumAdvancedMatches = 12;
+  static const int maximumAdvancedMatches = 30;
 
   // Pre-analisi concorrente controllata.
   // Tre partite per volta velocizzano il processo senza
@@ -151,10 +151,16 @@ class SmartBetAutoCouponService {
 
   Future<SmartBetAutoCouponResult> build({
     void Function(SmartBetAutoCouponProgress progress)? onProgress,
+    int? requestedEvents, // headless only; manual app settings stay 2..6
   }) async {
+    if (requestedEvents != null &&
+        (requestedEvents < 3 || requestedEvents > 15)) {
+      throw ArgumentError.value(requestedEvents, 'requestedEvents');
+    }
     await SettingsStore.instance.initialize();
 
     final settings = SettingsStore.instance;
+    final eventTarget = requestedEvents ?? settings.couponSelections;
 
     // ==========================================================
     // CARICA PARTITE
@@ -206,10 +212,10 @@ class SmartBetAutoCouponService {
 
     int analyzed = 0;
 
-    final desiredAdvanced = _desiredAdvancedCount(settings.couponSelections);
+    final desiredAdvanced = _desiredAdvancedCount(eventTarget);
 
     final earlyStopTarget = _earlyStopCandidateCount(
-      requestedSelections: settings.couponSelections,
+      requestedSelections: eventTarget,
       desiredAdvanced: desiredAdvanced,
     );
 
@@ -400,6 +406,10 @@ class SmartBetAutoCouponService {
     final rawCoupons = await couponService.buildCouponSet(
       matches: advancedShortlist,
       minimumRequired: 2,
+      maximumValueSelections:
+          requestedEvents ?? SmartBetCouponService.maximumSelections,
+      // Solo percorso headless P20; la Schedina AI manuale rimane invariata.
+      collectVerifiedAlternatives: requestedEvents != null,
     );
 
     // ==========================================================
@@ -407,15 +417,10 @@ class SmartBetAutoCouponService {
     // ==========================================================
 
     final coupons = SmartBetCouponSet(
-      premium: _applySelectionLimit(
-        rawCoupons.premium,
-        settings.couponSelections,
-      ),
-      balanced: _applySelectionLimit(
-        rawCoupons.balanced,
-        settings.couponSelections,
-      ),
-      value: _applySelectionLimit(rawCoupons.value, settings.couponSelections),
+      premium: _applySelectionLimit(rawCoupons.premium, eventTarget),
+      balanced: _applySelectionLimit(rawCoupons.balanced, eventTarget),
+      value: _applySelectionLimit(rawCoupons.value, eventTarget),
+      verifiedMarketAlternatives: rawCoupons.verifiedMarketAlternatives,
     );
 
     onProgress?.call(

@@ -11,6 +11,8 @@ class GoalVdLineAutoCouponPreferences {
   static const String overUnder = 'OVER_UNDER';
   static const String goalNoGoal = 'GOAL_NOGOAL';
   static const String oneXTwo = '1X2';
+  static const String single = 'SINGLE';
+  static const String threeSameFixtures = 'THREE_SAME_FIXTURES';
   static const List<String> allowedMarkets = [
     multiMarket,
     overUnder,
@@ -25,15 +27,17 @@ class GoalVdLineAutoCouponPreferences {
   final int minimumMarketProbability;
   final String market;
   final bool notifyChanges;
+  final String systemMode;
 
   const GoalVdLineAutoCouponPreferences({
     this.requested = false,
     this.hour = 8,
     this.minute = 0,
-    this.events = 4,
+    this.events = 6,
     this.minimumMarketProbability = 65,
     this.market = multiMarket,
     this.notifyChanges = true,
+    this.systemMode = threeSameFixtures,
   });
 
   bool get isValid =>
@@ -42,11 +46,12 @@ class GoalVdLineAutoCouponPreferences {
       minute >= 0 &&
       minute <= 59 &&
       events >= 3 &&
-      events <= 6 &&
+      events <= 15 &&
       minimumMarketProbability >= 50 &&
       minimumMarketProbability <= 90 &&
       minimumMarketProbability % 5 == 0 &&
-      allowedMarkets.contains(market);
+      allowedMarkets.contains(market) &&
+      (systemMode == single || systemMode == threeSameFixtures);
 
   String get formattedTime =>
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
@@ -59,6 +64,7 @@ class GoalVdLineAutoCouponPreferences {
     int? minimumMarketProbability,
     String? market,
     bool? notifyChanges,
+    String? systemMode,
   }) => GoalVdLineAutoCouponPreferences(
     requested: requested ?? this.requested,
     hour: hour ?? this.hour,
@@ -68,6 +74,7 @@ class GoalVdLineAutoCouponPreferences {
         minimumMarketProbability ?? this.minimumMarketProbability,
     market: market ?? this.market,
     notifyChanges: notifyChanges ?? this.notifyChanges,
+    systemMode: systemMode ?? this.systemMode,
   );
 
   Map<String, Object> toJson() => {
@@ -78,6 +85,7 @@ class GoalVdLineAutoCouponPreferences {
     'minimumMarketProbability': minimumMarketProbability,
     'market': market,
     'notifyChanges': notifyChanges,
+    'systemMode': systemMode,
   };
 
   static GoalVdLineAutoCouponPreferences? fromJson(Object? json) {
@@ -89,13 +97,16 @@ class GoalVdLineAutoCouponPreferences {
     final minimum = json['minimumMarketProbability'];
     final market = json['market'];
     final notifyChanges = json['notifyChanges'];
+    // Old saved settings are SINGLE, not silently upgraded to three.
+    final systemMode = json['systemMode'] ?? single;
     if (requested is! bool ||
         hour is! int ||
         minute is! int ||
         events is! int ||
         minimum is! int ||
         market is! String ||
-        notifyChanges is! bool) {
+        notifyChanges is! bool ||
+        systemMode is! String) {
       return null;
     }
     final result = GoalVdLineAutoCouponPreferences(
@@ -106,6 +117,7 @@ class GoalVdLineAutoCouponPreferences {
       minimumMarketProbability: minimum,
       market: market,
       notifyChanges: notifyChanges,
+      systemMode: systemMode,
     );
     return result.isValid ? result : null;
   }

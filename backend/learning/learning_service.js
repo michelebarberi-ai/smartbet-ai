@@ -73,6 +73,9 @@ class LearningService {
       'requested', 'hour', 'minute', 'events', 'minimumMarketProbability',
       'market', 'notifyChanges',
     ].map(key => [key, preferences[key]]));
+    if (preferences.systemMode !== undefined) {
+      normalized.systemMode = preferences.systemMode;
+    }
     await this.repository.initialize();
     const subjectHash = hashClientId(clientId, this.subjectSalt);
     await this.repository.upsertAutoCouponPreferences({
