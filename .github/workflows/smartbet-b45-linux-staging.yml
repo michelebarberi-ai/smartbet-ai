@@ -1,0 +1,77 @@
+name: SmartBet B45 Linux staging preflight
+
+# Separate from ios-testflight.yml. Only this named staging branch is accepted.
+on:
+  push:
+    branches:
+      - staging/b45-render-linux
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smartbet-b45-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-container:
+    # A manual run on a production branch cannot accidentally run this job.
+    if: github.ref == 'refs/heads/staging/b45-render-linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - name: Checkout staging source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify branch and no committed .env
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/staging/b45-render-linux'
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo 'ERROR: .env is tracked; do not build image'
+            exit 1
+          fi
+          test -f deploy/p20_3d/Dockerfile.headless
+          test -f pubspec.yaml
+          echo "Staging revision: $(git rev-parse --short=12 HEAD)"
+
+      - name: Build P20.3D Linux container (no secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --build-arg FLUTTER_REF=3.47.5 \
+            --file deploy/p20_3d/Dockerfile.headless \
+            --tag smartbet-b45-linux-preflight:${{ github.sha }} \
+            .
+
+      - name: Flutter SDK and Node smoke tests in Linux container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --entrypoint /bin/sh \
+            smartbet-b45-linux-preflight:${{ github.sha }} \
+            -c 'set -eu; flutter --version; node --version; node --check backend/auto_coupon/official_headless_runner.js; node --check backend/auto_coupon/background_worker.js'
+
+      - name: Backend and Flutter tests inside Linux container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --entrypoint /bin/sh \
+            smartbet-b45-linux-preflight:${{ github.sha }} \
+            -c 'set -eu; node --test backend/test/auto_coupon_*.test.js backend/test/learning_mobile_auth.test.js backend/test/learning_retrospective.test.js backend/test/learning_routes.test.js; flutter test --no-pub --reporter compact'
+
+      - name: Headless host is disabled by default
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/sh \
+            smartbet-b45-linux-preflight:${{ github.sha }} \
+            -c 'set +e; node backend/auto_coupon/official_headless_runner.js >/tmp/host-check.log 2>&1; rc=$?; test "$rc" -eq 2'
+          echo 'PASS: headless host stays disabled without explicit configuration.'
