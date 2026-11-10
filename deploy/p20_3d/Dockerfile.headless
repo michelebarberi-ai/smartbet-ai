@@ -11,6 +11,10 @@ RUN test -n "$FLUTTER_REF" && \
     git clone --depth 1 --branch "$FLUTTER_REF" \
       https://github.com/flutter/flutter.git /opt/flutter
 ENV PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}"
+# GNU tar normally restores archived file owners when running as root.
+# Render's build environment cannot chown Flutter's Gradle wrapper entries
+# (uid 397546/gid 5000); keep extraction under the current container user.
+ENV TAR_OPTIONS="--no-same-owner"
 RUN git config --global --add safe.directory /opt/flutter && \
     flutter config --no-analytics && flutter precache --linux
 WORKDIR /app
