@@ -107,3 +107,17 @@ test('batch limit and cursor are validated',async()=>{
   await assert.rejects(()=>worker.runBatch({limit:101}),RangeError);
   await assert.rejects(()=>worker.runBatch({limit:1,afterSubjectHash:'bad'}),RangeError);
 });
+
+test('coupon is not saved if matches start while official engine computes',async()=>{
+  const repo=makeRepo();
+  let instant=now;
+  const worker=new AutoCouponGenerationCoordinator({repository:repo,
+    now:()=>instant,generateOfficialCoupon:async()=>{
+      instant=new Date('2026-11-09T18:01:00Z');
+      return validCoupon;
+    }});
+  const outcome=await worker.runOne({subjectHash,preferences});
+  assert.equal(outcome.status,'retry');
+  assert.equal(repo.completed[0].outcome,'retry');
+  assert.equal(repo.completed[0].coupon,undefined);
+});

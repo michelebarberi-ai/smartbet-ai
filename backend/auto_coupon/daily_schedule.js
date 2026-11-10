@@ -123,6 +123,12 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
         !Number.isFinite(event.odds) || event.odds <= 1)) {
       return {valid: false, reason: 'invalid_odds'};
     }
+    // All three coordinated variants must have genuine quoted odds.
+    // Legacy SINGLE keeps its backward-compatible optional-odds contract.
+    if (preferences.systemMode === THREE_MODE &&
+        (!Object.hasOwn(event, 'odds') || event.odds < 1.25)) {
+      return {valid: false, reason: 'missing_or_low_triple_odds'};
+    }
   }
   return {valid: true, dayKey: scheduledDay};
 }

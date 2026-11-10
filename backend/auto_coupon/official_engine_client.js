@@ -29,7 +29,7 @@ function officialEngineConfiguration(env = process.env) {
 
 function createOfficialEngineAdapter({env = process.env, fetchImpl = fetch,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
-  maxPolls = MAX_POLLS} = {}) {
+  maxPolls = MAX_POLLS, clock = () => new Date()} = {}) {
   const config = officialEngineConfiguration(env);
   if (!config) return null;
 
@@ -83,7 +83,10 @@ function createOfficialEngineAdapter({env = process.env, fetchImpl = fetch,
       throw new Error('Unverified official engine response');
     }
     // Independent server-side pre-match validation (the coordinator repeats it).
-    const validation = validateGeneratedCoupon({coupon: parsed.coupon, preferences, now});
+    // A generation may take several minutes: the original request clock
+    // cannot certify that fixtures are still pre-match at completion.
+    const checkedAt = clock();
+    const validation = validateGeneratedCoupon({coupon: parsed.coupon, preferences, now:checkedAt});
     if (!validation.valid || validation.dayKey !== dayKey) {
       throw new Error('Invalid official coupon');
     }

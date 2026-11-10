@@ -12,6 +12,7 @@ const {spawn} = require('node:child_process');
 const {validToken} = require('../learning/learning_core');
 const {validatePreferences, localClock, validateGeneratedCoupon} = require('./daily_schedule');
 const {PROTOCOL} = require('./official_engine_client');
+const {createDurableHeadlessJobStore} = require('./durable_headless_job_store');
 
 const REVISION = /^[a-f0-9]{7,40}$/;
 const JOB_ID = /^[0-9a-f]{32}$/;
@@ -72,23 +73,41 @@ function createFlutterExecutor({projectRoot = path.resolve(__dirname, '../..'),
 }
 
 function createHeadlessEngineHost({token, revision, execute = createFlutterExecutor(),
-  now = () => new Date()} = {}) {
+  now = () => new Date(), jobStore = null} = {}) {
   if (typeof token !== 'string' || token.length < 32 ||
       !REVISION.test(revision || '')) throw new Error('Headless engine disabled');
   const jobs = new Map();
   let runningJob = null;
+  // Load the durable journal before handling any request. A corrupt or
+  // unavailable journal fails closed instead of silently using memory.
+  const loaded = jobStore ? jobStore.load().then(records => {
+    for (const [id, job] of records) jobs.set(id, job);
+  }) : Promise.resolve();
+  async function save(id, job) {
+    if (jobStore) await jobStore.save(id, job);
+    jobs.set(id, job);
+  }
   function respond(res, code, payload) {
     res.writeHead(code, {'Content-Type':'application/json; charset=utf-8',
       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     res.end(JSON.stringify(payload));
   }
   const server = http.createServer(async (req, res) => {
+    try { await loaded; } catch (_) {
+      return respond(res, 503, {error:'job_store_unavailable'});
+    }
     if (!validToken(/^Bearer ([A-Za-z0-9_-]{32,})$/.exec(req.headers.authorization || '')?.[1], token)) {
       return respond(res, 401, {error:'unauthorized'});
     }
     const current = now();
     for (const [id, job] of jobs) {
-      if (current.getTime() - job.createdAt.getTime() > JOB_TTL_MS && job.status !== 'running') jobs.delete(id);
+      if (current.getTime() - job.createdAt.getTime() > JOB_TTL_MS && job.status !== 'running') {
+        // Failure to remove an old record is not permission to forget it.
+        try { if (jobStore) await jobStore.remove(id); } catch (_) {
+          return respond(res, 503, {error:'job_store_unavailable'});
+        }
+        jobs.delete(id);
+      }
     }
     if (req.method === 'POST' && req.url === '/coupon/generate') {
       let raw = '';
@@ -100,30 +119,52 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
         const body = JSON.parse(raw);
         if (!validateRequest(body, current)) return respond(res, 400, {error:'invalid_request'});
         // Repeat requests for the same day/preferences share the same job.
-        const signature = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+        const signature = crypto.createHash('sha256').update(JSON.stringify({
+          revision, dayKey:body.dayKey, preferences:body.preferences,
+        })).digest('hex');
         for (const [id, job] of jobs) {
-          if (job.signature === signature) return respond(res, 202, {protocol:PROTOCOL,jobId:id});
+          if (job.signature !== signature || job.status === 'failed' ||
+              job.status === 'no_coupon') continue;
+          if (job.status === 'ready' && (job.result?.protocol !== PROTOCOL ||
+              job.result?.officialEngine !== true || job.result?.revision !== revision ||
+              !validateGeneratedCoupon({
+                coupon:job.result?.coupon, preferences:body.preferences, now:current,
+              }).valid)) continue;
+          return respond(res, 202, {protocol:PROTOCOL,jobId:id});
         }
         if (runningJob) return respond(res, 429, {error:'engine_busy'});
         const id = crypto.randomBytes(16).toString('hex');
         const job = {createdAt:current,signature,request:body,status:'running',result:null};
-        jobs.set(id, job); runningJob = id;
+        // Reserve the single executor BEFORE the first asynchronous journal
+        // write; concurrent POST handlers must not launch two Flutter jobs.
+        runningJob = id;
+        try { await save(id, job); } catch (_) {
+          runningJob = null;
+          return respond(res, 503, {error:'job_store_unavailable'});
+        }
         // Detached from HTTP response, but within this separate runner process.
-        Promise.resolve().then(() => execute(body, revision)).then(result => {
-          if (result?.status !== 'ready' || !result.coupon) {
-            job.status = 'no_coupon'; return;
+        Promise.resolve().then(() => execute(body, revision)).then(async result => {
+          let final = {...job, status:'no_coupon', result:null};
+          if (result?.status === 'ready' && result.coupon) {
+            const checkedAt = now();
+            const valid = validateGeneratedCoupon({coupon:result.coupon,
+              preferences:body.preferences,now:checkedAt});
+            if (result.protocol !== PROTOCOL || result.officialEngine !== true ||
+                result.revision !== revision || !valid.valid ||
+                valid.dayKey !== body.dayKey) {
+              final.status = 'failed';
+            } else {
+              final = {...job, status:'ready', result:{protocol:PROTOCOL,
+                officialEngine:true,revision,coupon:result.coupon}};
+            }
+          } else if (result?.status !== 'no_eligible_coupon') {
+            final.status = 'failed';
           }
-          const checkedAt = now();
-          const valid = validateGeneratedCoupon({coupon:result.coupon,
-            preferences:body.preferences,now:checkedAt});
-          if (result.protocol !== PROTOCOL || result.officialEngine !== true ||
-              result.revision !== revision || !valid.valid ||
-              valid.dayKey !== body.dayKey) {
-            job.status = 'failed';return;
-          }
-          job.result = {protocol:PROTOCOL,officialEngine:true,revision,coupon:result.coupon};
-          job.status = 'ready';
-        }).catch(() => {job.status = 'failed';}).finally(() => {runningJob = null;});
+          await save(id, final);
+        }).catch(async () => {
+          try { await save(id, {...job, status:'failed',result:null}); }
+          catch (_) { jobs.set(id, {...job, status:'failed',result:null}); }
+        }).finally(() => {runningJob = null;});
         return respond(res, 202, {protocol:PROTOCOL,jobId:id});
       } catch (_) {return respond(res, 400, {error:'invalid_json'});}
     }
@@ -132,7 +173,19 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
       const job = jobs.get(match[1]);
       if (!job) return respond(res, 404, {error:'unknown_job'});
       if (job.status === 'running') return respond(res, 202, {protocol:PROTOCOL,jobId:match[1]});
-      if (job.status === 'ready') return respond(res, 200, job.result);
+      if (job.status === 'ready') {
+        if (job.result?.protocol !== PROTOCOL ||
+            job.result?.officialEngine !== true ||
+            job.result?.revision !== revision) {
+          return respond(res, 503, {error:'invalid_stored_result'});
+        }
+        const valid = validateGeneratedCoupon({coupon:job.result?.coupon,
+          preferences:job.request.preferences,now:current});
+        if (!valid.valid || valid.dayKey !== job.request.dayKey) {
+          return respond(res, 503, {error:'expired_coupon'});
+        }
+        return respond(res, 200, job.result);
+      }
       return respond(res, 503, {error:job.status});
     }
     return respond(res, 404, {error:'not_found'});
@@ -146,8 +199,10 @@ if (require.main === module) {
     console.error('Headless engine disabled by default.'); process.exitCode = 2;
   } else {
     try {
+      const stateDir = env.AUTO_COUPON_HEADLESS_STATE_DIR;
+      const jobStore = stateDir ? createDurableHeadlessJobStore(stateDir) : null;
       const host = createHeadlessEngineHost({token:env.AUTO_COUPON_HEADLESS_TOKEN,
-        revision:env.AUTO_COUPON_HEADLESS_REVISION});
+        revision:env.AUTO_COUPON_HEADLESS_REVISION,jobStore});
       const port = Number(env.AUTO_COUPON_HEADLESS_PORT || '8799');
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
       host.listen(port, '127.0.0.1', () => console.log('Headless runner listening on loopback.'));

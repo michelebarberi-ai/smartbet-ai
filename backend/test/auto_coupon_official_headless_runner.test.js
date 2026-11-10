@@ -95,7 +95,7 @@ test('existing official adapter polls async jobs on the pinned host',async()=>{
   try {
     // HTTPS-only address is retained in configuration. The local test adapter
     // reroutes to loopback without changing production URL verification rules.
-    const adapter=createOfficialEngineAdapter({env:{
+    const adapter=createOfficialEngineAdapter({clock:()=>NOW,env:{
       AUTO_COUPON_OFFICIAL_ENGINE_ENABLED:'true',
       AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://engine.example.org/coupon/generate',
       AUTO_COUPON_OFFICIAL_ENGINE_TOKEN:TOKEN,
@@ -108,7 +108,7 @@ test('existing official adapter polls async jobs on the pinned host',async()=>{
 });
 
 test('poll rejects malicious ticket and never follows off-host URL',async()=>{
-  const adapter=createOfficialEngineAdapter({env:{
+  const adapter=createOfficialEngineAdapter({clock:()=>NOW,env:{
     AUTO_COUPON_OFFICIAL_ENGINE_ENABLED:'true',
     AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://engine.example.org/coupon/generate',
     AUTO_COUPON_OFFICIAL_ENGINE_TOKEN:TOKEN,

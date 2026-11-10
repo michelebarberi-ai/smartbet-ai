@@ -54,6 +54,15 @@ test('P20 rejects no variants, duplicates, changed fixture/date, below threshold
   assert.equal(check(wrongFamily,{...PREF,market:'OVER_UNDER'}).reason,'wrong_market');
 });
 
+test('P20 triple requires real odds at least 1.25 for every variant',()=>{
+  const missing=create();delete missing.coupons[2].events[0].odds;
+  assert.equal(check(missing).reason,'missing_or_low_triple_odds');
+  const low=create();low.coupons[1].events[0].odds=1.24;
+  assert.equal(check(low).reason,'missing_or_low_triple_odds');
+  const boundary=create();boundary.coupons[1].events[0].odds=1.25;
+  assert.equal(check(boundary).valid,true);
+});
+
 test('P20 legacy single without mode works, but triple not accepted without mode',()=>{
   const prefs={...PREF};delete prefs.systemMode;
   assert.equal(check({events:create().events},prefs).valid,true);

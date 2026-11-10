@@ -66,7 +66,10 @@ class AutoCouponGenerationCoordinator {
       return completed ? {status: 'retry', reason: 'provider_unavailable'} :
         {status: 'superseded'};
     }
-    const validation = validateGeneratedCoupon({coupon: proposed, preferences, now});
+    // Recheck at completion, not only at claim time. A multi-minute Flutter
+    // run must never persist a coupon after any of its fixtures started.
+    const checkedAt = this.now();
+    const validation = validateGeneratedCoupon({coupon: proposed, preferences, now:checkedAt});
     if (!validation.valid || validation.dayKey !== due.dayKey) {
       const completed = await this.repository.finishAutoCouponRun({
         subjectHash, dayKey: due.dayKey, attempts: claim.attempts,

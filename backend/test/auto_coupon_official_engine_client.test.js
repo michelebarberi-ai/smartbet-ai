@@ -28,7 +28,7 @@ test('engine transport remains OFF without explicit feature flag, pin and secret
     {...ENV,AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://user:pass@official.example.org/coupon/generate'},
     {...ENV,AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://official.example.org/coupon/generate?key=secret'},
     {...ENV,AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://official.example.org/'}]) {
-    assert.equal(createOfficialEngineAdapter({env}),null);
+    assert.equal(createOfficialEngineAdapter({clock:()=>NOW,env}),null);
   }
 });
 
@@ -40,7 +40,7 @@ test('valid configuration never leaks the secret in URL',()=>{
 
 test('only a pinned official engine can return a valid pre-match coupon',async()=>{
   let request;
-  const engine = createOfficialEngineAdapter({env:ENV,fetchImpl:async(url,options)=>{
+  const engine = createOfficialEngineAdapter({clock:()=>NOW,env:ENV,fetchImpl:async(url,options)=>{
     request={url,options};return response(good);
   }});
   assert.deepEqual(await engine(args),COUPON);
@@ -60,7 +60,7 @@ test('rejects wrong model revision, unverified source and malformed payload',asy
   for(const payload of [ {...good,revision:'fbe2771'},
     {...good,officialEngine:false},{...good,protocol:'unknown'},
     {success:true,coupon:COUPON},null,'invalid']) {
-    const engine = createOfficialEngineAdapter({env:ENV,fetchImpl:async()=>response(payload)});
+    const engine = createOfficialEngineAdapter({clock:()=>NOW,env:ENV,fetchImpl:async()=>response(payload)});
     await assert.rejects(engine(args));
   }
 });
@@ -72,7 +72,7 @@ test('rejects invalid coupons even if remote claims to be official',async()=>{
     {events:COUPON.events.map((event,index)=>({...event,fixtureId:index===1?1:event.fixtureId}))},
     {events:COUPON.events.map(event=>({...event,kickoffAt:'2026-11-10T18:00:00Z'}))},
   ]) {
-    const engine=createOfficialEngineAdapter({env:ENV,fetchImpl:async()=>response({...good,coupon})});
+    const engine=createOfficialEngineAdapter({clock:()=>NOW,env:ENV,fetchImpl:async()=>response({...good,coupon})});
     await assert.rejects(engine(args));
   }
 });
@@ -82,15 +82,22 @@ test('network failures, non-200, oversized and broken JSON fail closed',async()=
     async()=>response(good,200,65537),async()=>({status:200,headers:{get:()=>null},
       text:async()=>'{invalid'}),async()=>{throw Error('private provider error')}];
   for(const fetchImpl of badResponses) {
-    const engine=createOfficialEngineAdapter({env:ENV,fetchImpl});
+    const engine=createOfficialEngineAdapter({clock:()=>NOW,env:ENV,fetchImpl});
     await assert.rejects(engine(args));
   }
 });
 
 test('only same-day validated requests can invoke official engine',async()=>{
   let called=0;
-  const engine=createOfficialEngineAdapter({env:ENV,fetchImpl:async()=>{called++;return response(good)}});
+  const engine=createOfficialEngineAdapter({clock:()=>NOW,env:ENV,fetchImpl:async()=>{called++;return response(good)}});
   await assert.rejects(engine({...args,dayKey:'INVALID'}));
   await assert.rejects(engine({...args,now:new Date('invalid')}));
   assert.equal(called,0);
+});
+
+test('late official response is rejected if any match has kicked off meanwhile',async()=>{
+  const clock=()=>new Date('2026-11-09T19:01:00Z');
+  const engine=createOfficialEngineAdapter({env:ENV,clock,
+    fetchImpl:async()=>response(good)});
+  await assert.rejects(engine(args),/Invalid official coupon/);
 });
