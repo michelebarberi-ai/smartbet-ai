@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const {randomUUID} = require('node:crypto');
 
 class LearningRepository {
   constructor(pool) {
@@ -80,25 +81,59 @@ class LearningRepository {
     return result.rows;
   }
 
-  async claimAutoCouponRun({subjectHash, dayKey, now}) {
+  // P20.3B: Neon is the authority for a daily job. A fresh UUID fences each
+  // attempt: a timed-out worker can never finalize a newer attempt. Database
+  // time (not Render container time) is used for every lease comparison.
+  async claimAutoCouponRun({subjectHash, dayKey}) {
+    const leaseToken = randomUUID();
     const result = await this.pool.query(
       `INSERT INTO sb_auto_coupon_daily_runs_v1
-       (subject_hash, local_day, status, attempts, updated_at)
-       VALUES ($1,$2,'processing',1,$3)
+       (subject_hash, local_day, status, attempts, updated_at,
+        lease_token, lease_expires_at)
+       VALUES ($1,$2,'processing',1,clock_timestamp(),$3::uuid,
+               clock_timestamp() + INTERVAL '3 minutes')
        ON CONFLICT (subject_hash,local_day) DO UPDATE SET
-         status='processing', attempts=sb_auto_coupon_daily_runs_v1.attempts+1,
-         updated_at=EXCLUDED.updated_at, next_retry_at=NULL, failure_reason=NULL
+         status='processing',
+         attempts=sb_auto_coupon_daily_runs_v1.attempts+1,
+         updated_at=clock_timestamp(),
+         lease_token=EXCLUDED.lease_token,
+         lease_expires_at=clock_timestamp() + INTERVAL '3 minutes',
+         next_retry_at=NULL, failure_reason=NULL
        WHERE sb_auto_coupon_daily_runs_v1.attempts < 5 AND (
          (sb_auto_coupon_daily_runs_v1.status='retry'
-          AND sb_auto_coupon_daily_runs_v1.next_retry_at <= $3)
-         OR (sb_auto_coupon_daily_runs_v1.status='processing'
-          AND sb_auto_coupon_daily_runs_v1.updated_at <= $3 - INTERVAL '15 minutes')
-       ) RETURNING attempts`, [subjectHash, dayKey, now]
+           AND sb_auto_coupon_daily_runs_v1.next_retry_at <= clock_timestamp())
+         OR (sb_auto_coupon_daily_runs_v1.status='processing' AND (
+           sb_auto_coupon_daily_runs_v1.lease_expires_at <= clock_timestamp()
+           OR (sb_auto_coupon_daily_runs_v1.lease_expires_at IS NULL
+             AND sb_auto_coupon_daily_runs_v1.updated_at <=
+                 clock_timestamp() - INTERVAL '15 minutes')))
+       )
+       RETURNING attempts, lease_token AS "leaseToken"`,
+      [subjectHash, dayKey, leaseToken]
     );
-    return result.rowCount === 1 ? {attempts: result.rows[0].attempts} : null;
+    return result.rowCount === 1
+      ? {attempts: Number(result.rows[0].attempts), leaseToken: result.rows[0].leaseToken}
+      : null;
   }
 
-  async finishAutoCouponRun({subjectHash, dayKey, attempts, outcome,
+  // Keep a long-running official Flutter generation alive, without allowing a
+  // lost/replaced lease to be renewed by the old worker. Do not persist payloads.
+  async renewAutoCouponLease({subjectHash, dayKey, attempts, leaseToken}) {
+    const result = await this.pool.query(
+      `UPDATE sb_auto_coupon_daily_runs_v1 SET
+         updated_at=clock_timestamp(),
+         lease_expires_at=clock_timestamp() + INTERVAL '3 minutes'
+       WHERE subject_hash=$1 AND local_day=$2 AND status='processing'
+         AND attempts=$3 AND lease_token=$4::uuid
+         AND lease_expires_at > clock_timestamp()
+         AND EXISTS (SELECT 1 FROM sb_auto_coupon_preferences_v1 p
+           WHERE p.subject_hash=$1 AND p.preferences->>'requested'='true')`,
+      [subjectHash, dayKey, attempts, leaseToken]
+    );
+    return result.rowCount === 1;
+  }
+
+  async finishAutoCouponRun({subjectHash, dayKey, attempts, leaseToken, outcome,
     reason = null, coupon = null, now, retryMinutes = 60}) {
     const isReady = outcome === 'ready';
     const result = await this.pool.query(
@@ -110,13 +145,31 @@ class LearningRepository {
          next_retry_at=CASE WHEN NOT $4::boolean AND attempts < 5
             THEN $6::timestamptz + ($8::integer * INTERVAL '1 minute') ELSE NULL END,
          failure_reason=CASE WHEN $4::boolean THEN NULL ELSE $7 END,
-         updated_at=$6
+         updated_at=clock_timestamp(), lease_token=NULL, lease_expires_at=NULL
        WHERE subject_hash=$1 AND local_day=$2 AND status='processing'
-         AND attempts=$3`,
+         AND attempts=$3 AND lease_token=$9::uuid
+         AND lease_expires_at > clock_timestamp()
+         AND EXISTS (SELECT 1 FROM sb_auto_coupon_preferences_v1 p
+           WHERE p.subject_hash=$1 AND p.preferences->>'requested'='true')`,
       [subjectHash, dayKey, attempts, isReady,
-        isReady ? JSON.stringify(coupon) : null, now, reason, retryMinutes]
+        isReady ? JSON.stringify(coupon) : null, now, reason, retryMinutes, leaseToken]
     );
     return result.rowCount === 1;
+  }
+
+  // After the fifth expired attempt there is no claimant left to mark the
+  // record terminal. A scheduled worker marks it unavailable on its next pass.
+  async finalizeExpiredAutoCouponRuns() {
+    const result = await this.pool.query(
+      `UPDATE sb_auto_coupon_daily_runs_v1 SET status='unavailable',
+         failure_reason='provider_unavailable',
+         lease_token=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
+       WHERE status='processing' AND attempts >= 5 AND (
+         lease_expires_at <= clock_timestamp() OR
+         (lease_expires_at IS NULL AND
+          updated_at <= clock_timestamp() - INTERVAL '15 minutes'))`
+    );
+    return result.rowCount;
   }
 
   async readAutoCouponDay({subjectHash, dayKey}) {

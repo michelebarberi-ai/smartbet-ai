@@ -71,7 +71,7 @@ test('P20 legacy single without mode works, but triple not accepted without mode
 
 test('P20 coordinator saves sanitized three-coupon bundle, one daily claim',async()=>{
   const stored=[];
-  const repo={async initialize(){},async claimAutoCouponRun(){return {attempts:1}},
+  const repo={async initialize(){},async renewAutoCouponLease(){return true;},async claimAutoCouponRun(){return {attempts:1, leaseToken: '11111111-1111-4111-8111-111111111111'}},
     async finishAutoCouponRun(v){stored.push(v);return true;}};
   const coordinator=new AutoCouponGenerationCoordinator({repository:repo,
     now:()=>NOW,generateOfficialCoupon:async()=>({...create(),secrets:'not stored'})});

@@ -19,7 +19,8 @@ function makeRepo() {
   let init = 0;
   return {claimed, completed, get init(){return init;},
     async initialize(){init++;},
-    async claimAutoCouponRun(args){claimed.push(args); return {attempts: 1};},
+    async renewAutoCouponLease(){return true;},
+    async claimAutoCouponRun(args){claimed.push(args); return {attempts: 1, leaseToken: '11111111-1111-4111-8111-111111111111'};},
     async finishAutoCouponRun(args){completed.push(args);return true;},
     async listAutoCouponSubscribers(limit,cursor){
       assert.equal(limit, 2);

@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS sb_auto_coupon_daily_runs_v1 (
 CREATE INDEX IF NOT EXISTS sb_auto_coupon_retry_v1
   ON sb_auto_coupon_daily_runs_v1(next_retry_at) WHERE status='retry';
 
+-- B45 P20.3B: additive migration for durable Neon leases. Existing ready
+-- coupons and daily claims are preserved; no table is replaced or truncated.
+ALTER TABLE sb_auto_coupon_daily_runs_v1
+  ADD COLUMN IF NOT EXISTS lease_token UUID;
+ALTER TABLE sb_auto_coupon_daily_runs_v1
+  ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS sb_auto_coupon_processing_lease_v1
+  ON sb_auto_coupon_daily_runs_v1(lease_expires_at)
+  WHERE status='processing';
+
 -- B45 P12: explicit push registration only. Tokens are AES-256-GCM encrypted
 -- with a separate server-side key and purged when consent/device is revoked.
 CREATE TABLE IF NOT EXISTS sb_auto_coupon_push_devices_v1 (

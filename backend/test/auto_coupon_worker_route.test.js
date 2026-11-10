@@ -29,7 +29,7 @@ function fakeRes() {
 function setup({env = configuredEnv,official = async()=>coupon,repository}={}) {
   const repo = repository || {calls:0,async initialize(){this.calls++;},
     async listAutoCouponSubscribers(){return [{subjectHash:HASH,preferences}];},
-    async claimAutoCouponRun(){return {attempts:1};},
+    async renewAutoCouponLease(){return true;},async claimAutoCouponRun(){return {attempts:1, leaseToken: '11111111-1111-4111-8111-111111111111'};},
     async finishAutoCouponRun(){return true;}};
   const service = new LearningService({repository:repo,subjectSalt:env.LEARNING_SUBJECT_SALT,
     now:()=>now});
@@ -101,7 +101,7 @@ test('valid worker creates only verified official coupon and returns no PII',asy
 
 test('low-probability coupon never marked ready',async()=>{
   const repo={async initialize(){},async listAutoCouponSubscribers(){return [{subjectHash:HASH,preferences}]},
-    async claimAutoCouponRun(){return {attempts:1}},
+    async renewAutoCouponLease(){return true;},async claimAutoCouponRun(){return {attempts:1, leaseToken: '11111111-1111-4111-8111-111111111111'}},
     async finishAutoCouponRun(args){this.saved=args;return true;}};
   const {app}=setup({repository:repo,official:async()=>({...coupon,events:coupon.events.map(
     (event,i)=>({...event,marketProbability:i===0?12:75}))})});
