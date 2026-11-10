@@ -1,0 +1,24 @@
+# Dockerfile-specific ignore; BuildKit uses this for Dockerfile.headless.
+.git
+**/.git
+**/.env
+**/.env.*
+**/.DS_Store
+**/.dart_tool
+**/build
+**/.flutter-plugins*
+**/node_modules
+**/.gradle
+**/Pods
+**/*.p8
+**/*.p12
+**/*.mobileprovision
+**/*.pem
+**/*.key
+**/GoogleService-Info.plist
+**/google-services.json
+**/*service-account*.json
+**/*.pre_*
+**/*.bak
+**/*.zip
+**/*.patch

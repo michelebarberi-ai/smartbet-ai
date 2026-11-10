@@ -17,8 +17,24 @@ function officialEngineConfiguration(env = process.env) {
   const rawUrl = env.AUTO_COUPON_OFFICIAL_ENGINE_URL;
   const token = env.AUTO_COUPON_OFFICIAL_ENGINE_TOKEN;
   const revision = env.AUTO_COUPON_OFFICIAL_ENGINE_REVISION;
-  if (typeof rawUrl !== 'string' || typeof token !== 'string' || token.length < 32 ||
+  if (typeof token !== 'string' || token.length < 32 ||
       typeof revision !== 'string' || !REVISION_PATTERN.test(revision)) return null;
+
+  // P20.3D: a dedicated, explicit STAGING-ONLY path for an exact named Render
+  // private service. This is plain HTTP on Render's *private* network, not
+  // end-to-end TLS. Never allow general hostnames, IPs, public domains or a
+  // caller-supplied path; keep the existing public HTTPS path unchanged.
+  if (env.AUTO_COUPON_OFFICIAL_ENGINE_PRIVATE_RENDER_ENABLED === 'true') {
+    if (rawUrl !== undefined && rawUrl !== '') return null;
+    const hostport = env.AUTO_COUPON_OFFICIAL_ENGINE_HOSTPORT;
+    if (typeof hostport !== 'string' ||
+        !/^smartbet-b45-flutter-staging(?:-[a-z0-9]+)?:8799$/.test(hostport)) {
+      return null;
+    }
+    return {url:`http://${hostport}/coupon/generate`, token, revision};
+  }
+
+  if (typeof rawUrl !== 'string') return null;
   let url;
   try { url = new URL(rawUrl); } catch (_) { return null; }
   // No embedded credentials or secrets in URL. TLS must terminate at the official service.

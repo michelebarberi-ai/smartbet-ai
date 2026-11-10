@@ -1,0 +1,71 @@
+# EXAMPLE ONLY: does NOT activate until manually configured/synced in Render.
+# Do not rename to render.yaml or point to production Neon until staging is verified.
+# IMPORTANT: Both services must be in the same Render workspace and region.
+services:
+  - type: pserv
+    name: smartbet-b45-flutter-staging
+    runtime: docker
+    plan: 2c-4g
+    dockerfilePath: ./deploy/p20_3d/Dockerfile.headless
+    dockerContext: .
+    disk:
+      name: official-job-journal
+      mountPath: /var/lib/goalvdline-jobs
+      sizeGB: 1
+    envVars:
+      - key: FLUTTER_REF
+        sync: false
+      - key: AUTO_COUPON_HEADLESS_HOST_ENABLED
+        value: 'true'
+      - key: AUTO_COUPON_HEADLESS_PRIVATE_RENDER_BIND
+        value: 'true'
+      - key: AUTO_COUPON_HEADLESS_PORT
+        value: '8799'
+      - key: AUTO_COUPON_HEADLESS_STATE_DIR
+        value: /var/lib/goalvdline-jobs
+      - key: AUTO_COUPON_HEADLESS_TOKEN
+        sync: false
+      - key: AUTO_COUPON_HEADLESS_REVISION
+        sync: false
+  - type: worker
+    name: smartbet-b45-coupon-worker-staging
+    runtime: node
+    plan: 1c-2g
+    buildCommand: cd backend && npm ci --omit=dev
+    startCommand: node backend/auto_coupon/background_worker.js
+    envVars:
+      # Worker is FAIL-CLOSED by default; don't sync until staging is ready.
+      # With these gates false, worker intentionally exits instead of running.
+      - key: AUTO_COUPON_BACKGROUND_ENABLED
+        value: 'false'
+      - key: AUTO_COUPON_WORKER_ENABLED
+        value: 'false'
+      - key: AUTO_COUPON_PREFERENCES_ENABLED
+        value: 'false'
+      - key: AUTO_COUPON_OFFICIAL_ENGINE_ENABLED
+        value: 'false'
+      - key: AUTO_COUPON_OFFICIAL_ENGINE_PRIVATE_RENDER_ENABLED
+        value: 'true'
+      - key: AUTO_COUPON_OFFICIAL_ENGINE_HOSTPORT
+        fromService:
+          type: pserv
+          name: smartbet-b45-flutter-staging
+          property: hostport
+      - key: AUTO_COUPON_OFFICIAL_ENGINE_TOKEN
+        fromService:
+          type: pserv
+          name: smartbet-b45-flutter-staging
+          envVarKey: AUTO_COUPON_HEADLESS_TOKEN
+      - key: AUTO_COUPON_OFFICIAL_ENGINE_REVISION
+        fromService:
+          type: pserv
+          name: smartbet-b45-flutter-staging
+          envVarKey: AUTO_COUPON_HEADLESS_REVISION
+      - key: DATABASE_URL
+        sync: false
+      - key: LEARNING_PG_SSL
+        value: 'true'
+      - key: AUTO_COUPON_BACKGROUND_INTERVAL_SECONDS
+        value: '120'
+      - key: AUTO_COUPON_BACKGROUND_PAGE_SIZE
+        value: '20'

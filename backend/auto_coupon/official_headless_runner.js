@@ -193,6 +193,18 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
   return server;
 }
 
+// P20.3D: never bind beyond loopback unless explicitly enabled for a Render
+// PRIVATE service with a mounted durable journal. An exposed web service is
+// not a supported deployment topology for this flag.
+function headlessListenAddress(env = process.env) {
+  if (env.AUTO_COUPON_HEADLESS_PRIVATE_RENDER_BIND !== 'true') return '127.0.0.1';
+  if (typeof env.AUTO_COUPON_HEADLESS_STATE_DIR !== 'string' ||
+      !env.AUTO_COUPON_HEADLESS_STATE_DIR.startsWith('/')) {
+    throw new Error('Private headless bind requires durable state directory');
+  }
+  return '0.0.0.0';
+}
+
 if (require.main === module) {
   const env = process.env;
   if (env.AUTO_COUPON_HEADLESS_HOST_ENABLED !== 'true') {
@@ -205,9 +217,9 @@ if (require.main === module) {
         revision:env.AUTO_COUPON_HEADLESS_REVISION,jobStore});
       const port = Number(env.AUTO_COUPON_HEADLESS_PORT || '8799');
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
-      host.listen(port, '127.0.0.1', () => console.log('Headless runner listening on loopback.'));
+      host.listen(port, headlessListenAddress(env), () => console.log('Headless runner listening (authenticated).'));
     } catch (_) {console.error('Invalid headless runner configuration.');process.exitCode = 2;}
   }
 }
 
-module.exports = {validateRequest,createFlutterExecutor,createHeadlessEngineHost};
+module.exports = {validateRequest,createFlutterExecutor,createHeadlessEngineHost,headlessListenAddress};
