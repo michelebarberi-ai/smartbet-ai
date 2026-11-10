@@ -49,7 +49,7 @@ class _SmartBetAudit {
   });
 
   static const neutral = _SmartBetAudit(
-    status: 'CONFIRM',
+    status: 'NOT_RUN',
     riskScore: 0,
     confidencePenalty: 0,
     homeAdjustment: 0,
@@ -93,7 +93,7 @@ class SmartBetFeasibilityAudit {
 
   bool get isBlocked => status == 'STRONG_CONTRADICTION';
   bool get isDoubt => status == 'DOUBT';
-  bool get isConfirmed => !isBlocked && !isDoubt;
+  bool get isConfirmed => status == 'CONFIRM';
 
   bool blocksMarket(String market) {
     final wanted = _normalizeMarket(market);
@@ -112,7 +112,7 @@ class SmartBetFeasibilityAudit {
   }
 
   static const neutral = SmartBetFeasibilityAudit(
-    status: 'CONFIRM',
+    status: 'NOT_RUN',
     reasons: <String>[],
     missingFactors: <String>[],
     blockedMarkets: <String>[],
@@ -652,7 +652,12 @@ class SmartBetAiService {
         'SMARTBET AUDITOR: snapshot non disponibile per fixture '
         '${match.fixtureId}; fallback neutro.',
       );
-      return SmartBetFeasibilityAudit.neutral;
+      return const SmartBetFeasibilityAudit(
+        status: 'NOT_RUN',
+        reasons: <String>[],
+        missingFactors: <String>[],
+        blockedMarkets: <String>[],
+      );
     }
 
     final audit = await _runAudit(
@@ -662,7 +667,9 @@ class SmartBetAiService {
     );
 
     return SmartBetFeasibilityAudit(
-      status: audit.status,
+      status: identical(audit, _SmartBetAudit.neutral)
+          ? 'NOT_RUN'
+          : audit.status,
       reasons: List<String>.unmodifiable(audit.reasons),
       missingFactors: List<String>.unmodifiable(audit.missingFactors),
       blockedMarkets: List<String>.unmodifiable(audit.blockedMarkets),
@@ -711,7 +718,16 @@ class SmartBetAiService {
           ? adjustment
           : <String, dynamic>{};
 
-      final status = rawAudit['status']?.toString() ?? 'CONFIRM';
+      final status = rawAudit['status']?.toString().trim().toUpperCase();
+
+      if (status == null ||
+          !const {
+            'CONFIRM',
+            'DOUBT',
+            'STRONG_CONTRADICTION',
+          }.contains(status)) {
+        return _SmartBetAudit.neutral;
+      }
 
       final audit = _SmartBetAudit(
         status: status,
