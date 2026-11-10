@@ -40,3 +40,15 @@ Then run a Linux Docker build with a pinned Flutter tag, verify the P18 headless
 ### Release guard
 
 The existing `.github/workflows/ios-testflight.yml` triggers on pushes to `feature/v1.2.4-simulation`; **do not push this branch merely to stage Render** until release orchestration is explicitly reviewed. A local Git commit does not trigger that workflow.
+
+## P20.3G: explicit staging source, region and cost guard (no deployment)
+
+The example now pins both services to repository `michelebarberi-ai/smartbet-ai`, branch `staging/b45-render-linux`, region `frankfurt`, and `autoDeployTrigger: off`. These guardrails prevent silently targeting the default branch or default Render region. They do not constitute an operational deployment.
+
+**Do not sync this Blueprint yet:** the worker remains disabled and intentionally exits on start. Create/test the private Flutter service first, and only then configure the worker for a controlled test. Never enable it to satisfy Render's process-health check.
+
+Review [Render's current pricing](https://render.com/pricing) and your workspace Billing page *before* creating any paid resources. Indicative full-month continuous rates: `2c-4g` private service USD 85/month plus `1c-2g` background worker USD 25/month, about USD 110/month excluding persistent disk, workspace, bandwidth, tax and extras. Billing for compute is prorated while services run. The 1 GB persistent journal disk also costs money. These prices may change.
+
+Neon staging `smartbet-b45-staging` is scheduled to expire on **2026-11-17 at 18:17 Europe/Rome**. Do not create a permanent service that points to an expired staging branch. Do not paste Neon passwords in chat, store them in Git, or point `DATABASE_URL` to production.
+
+Before any paid rollout: set `FLUTTER_REF=3.47.5` (build-only, not a secret), use Render dashboard for credentials, pin both engine revisions to the same *actually deployed* 40-character Git SHA, confirm the private `hostport` matches the allowlist, audit the Docker build context for secrets, and test the authenticated headless host. The successful CI Linux preflight was not an end-to-end football API test or Render private-network test.

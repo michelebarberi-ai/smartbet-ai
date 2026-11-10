@@ -1,9 +1,14 @@
 # EXAMPLE ONLY: does NOT activate until manually configured/synced in Render.
 # Do not rename to render.yaml or point to production Neon until staging is verified.
 # IMPORTANT: Both services must be in the same Render workspace and region.
+# P20.3G: explicit staging source, EU region, manual deploy only.
 services:
   - type: pserv
     name: smartbet-b45-flutter-staging
+    repo: https://github.com/michelebarberi-ai/smartbet-ai
+    branch: staging/b45-render-linux
+    region: frankfurt
+    autoDeployTrigger: off
     runtime: docker
     plan: 2c-4g
     dockerfilePath: ./deploy/p20_3d/Dockerfile.headless
@@ -29,6 +34,10 @@ services:
         sync: false
   - type: worker
     name: smartbet-b45-coupon-worker-staging
+    repo: https://github.com/michelebarberi-ai/smartbet-ai
+    branch: staging/b45-render-linux
+    region: frankfurt
+    autoDeployTrigger: off
     runtime: node
     plan: 1c-2g
     buildCommand: cd backend && npm ci --omit=dev
