@@ -9,6 +9,8 @@ const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const {spawn} = require('node:child_process');
+const {limitedAppend, classifyFlutterFailure, diagnosticError, reportFailure} =
+  require('./headless_failure_diagnostics');
 const {validToken} = require('../learning/learning_core');
 const {validatePreferences, localClock, validateGeneratedCoupon} = require('./daily_schedule');
 const {PROTOCOL} = require('./official_engine_client');
@@ -41,6 +43,8 @@ function createFlutterExecutor({projectRoot = path.resolve(__dirname, '../..'),
     try {
       const input = Buffer.from(JSON.stringify(request), 'utf8').toString('base64');
       await new Promise((resolve, reject) => {
+        const diagnostics = process.env.AUTO_COUPON_HEADLESS_DIAGNOSTICS === 'true';
+        let captured = '';
         const child = spawnImpl(flutterBinary, ['test', '--reporter', 'compact',
           'test/engine/goalvdline_official_headless_worker_test.dart'], {
           cwd: projectRoot, shell: false,
@@ -48,22 +52,47 @@ function createFlutterExecutor({projectRoot = path.resolve(__dirname, '../..'),
             GOALVDLINE_HEADLESS_REQUEST_B64: input,
             GOALVDLINE_HEADLESS_REVISION: revision,
             GOALVDLINE_HEADLESS_RESULT_PATH: output},
-          stdio: ['ignore', 'ignore', 'ignore'],
+          stdio: diagnostics ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'ignore', 'ignore'],
         });
-        const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
-        child.once('error', error => {clearTimeout(timer); reject(error);});
-        child.once('exit', code => {
+        // Capture a bounded diagnostic sample only when explicitly enabled.
+        // Do not emit the sample or include it in any API response/journal.
+        if (diagnostics) {
+          for (const stream of [child.stdout, child.stderr]) {
+            if (stream && typeof stream.on === 'function') {
+              stream.on('data', bytes => {captured = limitedAppend(captured, bytes);});
+            }
+          }
+        }
+        let timedOut = false;
+        const timer = setTimeout(() => {timedOut = true; child.kill('SIGKILL');}, timeoutMs);
+        child.once('error', () => {
+          clearTimeout(timer); reject(diagnosticError('flutter_spawn_failed'));
+        });
+        child.once('exit', (code, signal) => {
           clearTimeout(timer);
-          code === 0 ? resolve() : reject(new Error('Flutter engine failed'));
+          if (code === 0) resolve();
+          else reject(diagnosticError(timedOut ? 'flutter_timeout' :
+            (signal === 'SIGKILL' ? 'flutter_process_killed' :
+              (diagnostics ? classifyFlutterFailure(captured) : 'flutter_exit_nonzero'))));
         });
       });
-      const stats = await fs.stat(output);
-      if (stats.size > MAX_RESULT_BYTES) throw new Error('Result too large');
-      const result = JSON.parse(await fs.readFile(output, 'utf8'));
+      let stats;
+      try { stats = await fs.stat(output); } catch (_) {
+        throw diagnosticError('result_file_missing');
+      }
+      if (stats.size > MAX_RESULT_BYTES) throw diagnosticError('result_read_failed');
+      let raw;
+      try { raw = await fs.readFile(output, 'utf8'); } catch (_) {
+        throw diagnosticError('result_read_failed');
+      }
+      let result;
+      try { result = JSON.parse(raw); } catch (_) {
+        throw diagnosticError('result_invalid_json');
+      }
       if (result.protocol !== PROTOCOL || result.officialEngine !== true ||
           result.revision !== revision ||
           (result.status !== 'ready' && result.status !== 'no_eligible_coupon')) {
-        throw new Error('Unverified engine output');
+        throw diagnosticError('result_contract_invalid');
       }
       return result;
     } finally {
@@ -153,15 +182,18 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
                 result.revision !== revision || !valid.valid ||
                 valid.dayKey !== body.dayKey) {
               final.status = 'failed';
+              reportFailure('coupon_validation_failed');
             } else {
               final = {...job, status:'ready', result:{protocol:PROTOCOL,
                 officialEngine:true,revision,coupon:result.coupon}};
             }
           } else if (result?.status !== 'no_eligible_coupon') {
             final.status = 'failed';
+            reportFailure('result_contract_invalid');
           }
           await save(id, final);
-        }).catch(async () => {
+        }).catch(async error => {
+          reportFailure(error?.headlessCategory);
           try { await save(id, {...job, status:'failed',result:null}); }
           catch (_) { jobs.set(id, {...job, status:'failed',result:null}); }
         }).finally(() => {runningJob = null;});
