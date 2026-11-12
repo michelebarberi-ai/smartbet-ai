@@ -60,15 +60,64 @@ echo "Branch: $(git branch --show-current)"
 echo "Commit: ${GOALVDLINE_HEADLESS_REVISION:0:12}"
 echo "Motore Flutter reale, 3 schedine da 3 eventi, finestra di 3 giorni"
 echo "Nessun token Render / nessuna connessione Neon"
+echo "La generazione può richiedere diversi minuti. Stato ogni 20 secondi."
+echo "CTRL+C interrompe la prova (non è un errore del motore)."
 echo
-if ! flutter test --no-pub --reporter compact \
-  test/engine/goalvdline_official_headless_worker_test.dart >"$TMP_DIR/flutter.log" 2>&1; then
-  echo "P20.4 MOTORE: ERRORE FLUTTER (nessuna modifica a Render/Neon)"
+# Drive Flutter from a foreground monitor: the tool intentionally writes its
+# verbose log to a private temporary file, while users see a heartbeat.
+# Give the Flutter subprocess its own process group, so CTRL+C is handled by
+# the monitor and kills the whole local process group before returning.
+set +e
+python3 - "$TMP_DIR/flutter.log" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+log_file = sys.argv[1]
+command = [
+    'flutter', 'test', '--no-pub', '--reporter', 'compact',
+    'test/engine/goalvdline_official_headless_worker_test.dart',
+]
+with open(log_file, 'w', encoding='utf-8', errors='replace') as log:
+    proc = subprocess.Popen(
+        command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+    )
+    try:
+        while True:
+            try:
+                exit_code = proc.wait(timeout=20)
+                break
+            except subprocess.TimeoutExpired:
+                print('P20.4 IN CORSO: Flutter sta ancora elaborando...', flush=True)
+    except KeyboardInterrupt:
+        print('P20.4 INTERROTTO: test fermato manualmente; risultato non disponibile.', flush=True)
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+        except ProcessLookupError:
+            pass
+        sys.exit(130)
+sys.exit(exit_code)
+PY
+flutter_rc=$?
+set -e
+if [[ "$flutter_rc" -eq 130 ]]; then
+  echo "P20.4 PROVA INCOMPLETA: interrotta con CTRL+C, nessun verdetto."
+  exit 130
+fi
+if [[ "$flutter_rc" -ne 0 ]]; then
+  echo "P20.4 MOTORE: ERRORE FLUTTER (codice $flutter_rc)"
   tail -n 16 "$TMP_DIR/flutter.log"
   exit 1
 fi
 if [[ ! -f "$GOALVDLINE_HEADLESS_RESULT_PATH" ]]; then
-  echo "P20.4 MOTORE: file ufficiale mancante"
+  echo "P20.4 PROVA INCOMPLETA: file ufficiale assente."
+  echo "Potrebbe trattarsi di un'interruzione o di un risultato non scritto."
+  tail -n 12 "$TMP_DIR/flutter.log"
   exit 1
 fi
 node <<'NODE'
