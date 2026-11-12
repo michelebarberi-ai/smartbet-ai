@@ -467,15 +467,16 @@ class SmartBetAutoCouponService {
       for (final match in matches) {
         final kickoff = DateTime.tryParse(match.date);
         if (match.fixtureId > 0 &&
-            seen.add(match.fixtureId) &&
             kickoff != null &&
             GoalVdLineRomeDayWindow.includes(
-                kickoff: kickoff, now: now, windowDays: windowDays)) {
+                kickoff: kickoff, now: now, windowDays: windowDays) &&
+            seen.add(match.fixtureId)) {
           result.add(match);
         }
       }
     }
-    result.sort((a, b) => a.date.compareTo(b.date));
+    result.sort((a, b) =>
+        DateTime.parse(a.date).compareTo(DateTime.parse(b.date)));
     return result;
   }
 
