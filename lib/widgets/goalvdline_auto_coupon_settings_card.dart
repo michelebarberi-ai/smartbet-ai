@@ -227,6 +227,20 @@ class _GoalVdLineAutoCouponSettingsCardState
             onTap: _chooseTime,
           ),
           const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
+            initialValue: _value.windowDays,
+            dropdownColor: const Color(0xFF111827),
+            decoration: const InputDecoration(labelText: 'Giornate delle partite'),
+            items: const [
+              DropdownMenuItem(value: 1, child: Text('Solo oggi')),
+              DropdownMenuItem(value: 2, child: Text('Oggi e domani')),
+              DropdownMenuItem(value: 3, child: Text('Oggi, domani e dopodomani')),
+            ],
+            onChanged: (next) {
+              if (next != null) _update(_value.copyWith(windowDays: next));
+            },
+          ),
+          const SizedBox(height: 8),
           Text(
             'Numero eventi: ${_value.events}',
             style: const TextStyle(color: Colors.white),

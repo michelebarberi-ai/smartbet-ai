@@ -1,4 +1,5 @@
 import 'goalvdline_auto_coupon_preferences.dart';
+import 'goalvdline_rome_day_window.dart';
 import 'goalvdline_three_coupon_system.dart';
 import 'smartbet_coupon_service.dart';
 
@@ -72,7 +73,6 @@ class GoalVdLineOfficialCouponContract {
   }) {
     if (!preferences.isValid || !preferences.requested) return null;
     final utcNow = now.toUtc();
-    final today = _romeDay(utcNow);
     final usedFixtures = <int>{};
     final events = <Map<String, Object>>[];
     for (final selection in coupon.selections) {
@@ -91,8 +91,8 @@ class GoalVdLineOfficialCouponContract {
       if (!pick.odd.isFinite || pick.odd <= 1.0) continue;
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();
       if (kickoff == null ||
-          !kickoff.isAfter(utcNow) ||
-          _romeDay(kickoff) != today)
+          !GoalVdLineRomeDayWindow.includes(
+            kickoff: kickoff, now: utcNow, windowDays: preferences.windowDays))
         continue;
       final status = selection.match.statusShort.trim().toUpperCase();
       if (status.isNotEmpty && status != 'NS') continue;
@@ -108,7 +108,10 @@ class GoalVdLineOfficialCouponContract {
       if (events.length == preferences.events) break;
     }
     if (events.length != preferences.events) return null;
-    return <String, Object>{'events': events};
+    return <String, Object>{
+      if (preferences.windowDays > 1) 'windowDays': preferences.windowDays,
+      'events': events,
+    };
   }
 
   /// P20: builds THREE coordinated coupons using only the selections produced
@@ -126,7 +129,6 @@ class GoalVdLineOfficialCouponContract {
             GoalVdLineAutoCouponPreferences.threeSameFixtures)
       return null;
     final utcNow = now.toUtc();
-    final dayKey = _romeDay(utcNow);
     final seen = <int, Map<String, SmartBetCouponSelection>>{};
     // I profili restano intatti. Il catalogo opzionale P20.1 contiene
     // ulteriori selezioni della STESSA analisi, non risultati sintetici.
@@ -154,8 +156,8 @@ class GoalVdLineOfficialCouponContract {
       }
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();
       if (kickoff == null ||
-          !kickoff.isAfter(utcNow) ||
-          _romeDay(kickoff) != dayKey) {
+          !GoalVdLineRomeDayWindow.includes(
+            kickoff: kickoff, now: utcNow, windowDays: preferences.windowDays)) {
         continue;
       }
       final status = selection.match.statusShort.trim().toUpperCase();
@@ -295,28 +297,10 @@ class GoalVdLineOfficialCouponContract {
     // Redundant first coupon keeps old consumers compatible. Node validates
     // that the full three-coupon bundle is present before persisting.
     return <String, Object>{
+      if (preferences.windowDays > 1) 'windowDays': preferences.windowDays,
       'events': result.first['events']!,
       'coupons': result,
     };
   }
 
-  static String _romeDay(DateTime utcInstant) {
-    final utc = utcInstant.toUtc();
-    final year = utc.year;
-    DateTime lastSunday(int month) {
-      final lastDay = DateTime.utc(year, month + 1, 0);
-      return DateTime.utc(
-        year,
-        month,
-        lastDay.day - (lastDay.weekday % DateTime.daysPerWeek),
-        1,
-      );
-    }
-
-    final dst = !utc.isBefore(lastSunday(3)) && utc.isBefore(lastSunday(10));
-    final rome = utc.add(Duration(hours: dst ? 2 : 1));
-    return '${rome.year.toString().padLeft(4, '0')}-'
-        '${rome.month.toString().padLeft(2, '0')}-'
-        '${rome.day.toString().padLeft(2, '0')}';
-  }
 }

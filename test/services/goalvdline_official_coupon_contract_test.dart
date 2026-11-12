@@ -145,6 +145,37 @@ void main() {
     expect(signatures.length, 3);
   });
 
+  test('P20.4: richiede la finestra corretta per tre giornate', () {
+    final set = SmartBetCouponSet(
+      premium: coupon([]), balanced: coupon([]),
+      value: coupon([
+        pick(1, 'OVER 1.5', 76),
+        pick(2, 'OVER 1.5', 76,
+            date: '2026-11-10T20:30:00+01:00'),
+        pick(3, 'OVER 1.5', 76,
+            date: '2026-11-11T20:30:00+01:00'),
+      ]),
+      verifiedMarketAlternatives: [
+        pick(1, 'GOAL', 70),
+        pick(2, 'GOAL', 70, date: '2026-11-10T20:30:00+01:00'),
+        pick(3, 'GOAL', 70, date: '2026-11-11T20:30:00+01:00'),
+      ],
+    );
+    final mode = prefs().copyWith(
+      systemMode: GoalVdLineAutoCouponPreferences.threeSameFixtures,
+      windowDays: 3,
+    );
+    final result = GoalVdLineOfficialCouponContract.serializeThreeSet(
+      coupons: set, preferences: mode, now: now,
+    );
+    expect(result, isNotNull);
+    expect(result!['windowDays'], 3);
+    expect((result['coupons'] as List).length, 3);
+    expect(GoalVdLineOfficialCouponContract.serializeThreeSet(
+      coupons: set, preferences: mode.copyWith(windowDays: 2), now: now,
+    ), isNull);
+  });
+
   test('P20: richiede mercato alternativo reale e non crea tre copie', () {
     final set = SmartBetCouponSet(
       premium: coupon([]),

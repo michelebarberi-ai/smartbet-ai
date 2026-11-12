@@ -3,6 +3,7 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import 'settings_store.dart';
+import 'goalvdline_rome_day_window.dart';
 import 'smartbet_coupon_service.dart';
 
 class SmartBetAutoCouponProgress {
@@ -152,7 +153,12 @@ class SmartBetAutoCouponService {
   Future<SmartBetAutoCouponResult> build({
     void Function(SmartBetAutoCouponProgress progress)? onProgress,
     int? requestedEvents, // headless only; manual app settings stay 2..6
+    int windowDays = 1, // Rome calendar days, headless only
   }) async {
+    if (windowDays < 1 || windowDays > 3 ||
+        (requestedEvents == null && windowDays != 1)) {
+      throw ArgumentError.value(windowDays, 'windowDays');
+    }
     if (requestedEvents != null &&
         (requestedEvents < 3 || requestedEvents > 15)) {
       throw ArgumentError.value(requestedEvents, 'requestedEvents');
@@ -171,15 +177,17 @@ class SmartBetAutoCouponService {
         phase: 'matches',
         current: 0,
         total: 1,
-        message: 'Caricamento partite del giorno...',
+        message: 'Caricamento partite disponibili...',
       ),
     );
 
-    final allMatches = await MatchRepository.getTodayMatches();
+    final allMatches = windowDays == 1
+        ? await MatchRepository.getTodayMatches()
+        : await _loadMultiDayMatches(windowDays);
 
     if (allMatches.isEmpty) {
       return SmartBetAutoCouponResult(
-        coupons: _emptyCouponSet('Nessuna partita disponibile oggi.'),
+        coupons: _emptyCouponSet('Nessuna partita disponibile nel periodo scelto.'),
         totalMatches: 0,
         metadataCandidates: 0,
         preliminaryAnalyzed: 0,
@@ -417,9 +425,12 @@ class SmartBetAutoCouponService {
     // ==========================================================
 
     final coupons = SmartBetCouponSet(
-      premium: _applySelectionLimit(rawCoupons.premium, eventTarget),
-      balanced: _applySelectionLimit(rawCoupons.balanced, eventTarget),
-      value: _applySelectionLimit(rawCoupons.value, eventTarget),
+      premium: _applySelectionLimit(rawCoupons.premium, eventTarget,
+          headless: requestedEvents != null),
+      balanced: _applySelectionLimit(rawCoupons.balanced, eventTarget,
+          headless: requestedEvents != null),
+      value: _applySelectionLimit(rawCoupons.value, eventTarget,
+          headless: requestedEvents != null),
       verifiedMarketAlternatives: rawCoupons.verifiedMarketAlternatives,
     );
 
@@ -442,6 +453,30 @@ class SmartBetAutoCouponService {
       preliminaryValid: preliminary.length,
       advancedCandidates: advancedShortlist.length,
     );
+  }
+
+  /// Fetch only Rome calendar days in the requested headless window.
+  /// Deduping by the real fixture ID prevents cross-date duplicates.
+  Future<List<MatchModel>> _loadMultiDayMatches(int windowDays) async {
+    final now = DateTime.now().toUtc();
+    final seen = <int>{};
+    final result = <MatchModel>[];
+    for (final day in GoalVdLineRomeDayWindow.dates(now: now,
+        windowDays: windowDays)) {
+      final matches = await MatchRepository.getMatchesByDate(day);
+      for (final match in matches) {
+        final kickoff = DateTime.tryParse(match.date);
+        if (match.fixtureId > 0 &&
+            seen.add(match.fixtureId) &&
+            kickoff != null &&
+            GoalVdLineRomeDayWindow.includes(
+                kickoff: kickoff, now: now, windowDays: windowDays)) {
+          result.add(match);
+        }
+      }
+    }
+    result.sort((a, b) => a.date.compareTo(b.date));
+    return result;
   }
 
   // ============================================================
@@ -686,13 +721,14 @@ class SmartBetAutoCouponService {
 
   SmartBetCouponResult _applySelectionLimit(
     SmartBetCouponResult original,
-    int requestedSelections,
-  ) {
+    int requestedSelections, {
+    bool headless = false,
+  }) {
     if (!original.hasCoupon) {
       return original;
     }
 
-    final limit = requestedSelections.clamp(2, 6);
+    final limit = requestedSelections.clamp(2, headless ? 15 : 6);
 
     if (original.selections.length <= limit) {
       return original;

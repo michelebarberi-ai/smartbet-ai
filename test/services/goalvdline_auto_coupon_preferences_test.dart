@@ -16,6 +16,7 @@ void main() {
     expect(value.requested, isFalse);
     expect(value.formattedTime, '08:00');
     expect(value.events, 6);
+    expect(value.windowDays, 1);
     expect(value.minimumMarketProbability, 65);
     expect(value.market, GoalVdLineAutoCouponPreferences.multiMarket);
     expect(value.notifyChanges, isTrue);
@@ -42,6 +43,20 @@ void main() {
       )!.systemMode,
       GoalVdLineAutoCouponPreferences.single,
     );
+  });
+
+  test('P20.4: 3 calendar days persisted, old JSON defaults to today', () async {
+    const store = GoalVdLineAutoCouponPreferencesStore();
+    final value = const GoalVdLineAutoCouponPreferences()
+        .copyWith(windowDays: 3, events: 15);
+    expect(await store.save(value), isTrue);
+    final loaded = await store.load();
+    expect(loaded.windowDays, 3);
+    expect(loaded.events, 15);
+    expect(const GoalVdLineAutoCouponPreferences(windowDays: 0).isValid, isFalse);
+    expect(const GoalVdLineAutoCouponPreferences(windowDays: 4).isValid, isFalse);
+    final old = value.toJson()..remove('windowDays');
+    expect(GoalVdLineAutoCouponPreferences.fromJson(old)!.windowDays, 1);
   });
 
   test('B45 P5: salva e ricarica tutte le preferenze sul telefono', () async {

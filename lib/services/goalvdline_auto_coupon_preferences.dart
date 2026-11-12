@@ -28,6 +28,8 @@ class GoalVdLineAutoCouponPreferences {
   final String market;
   final bool notifyChanges;
   final String systemMode;
+  /// Inclusive Rome calendar days starting today: 1 (legacy), 2 or 3.
+  final int windowDays;
 
   const GoalVdLineAutoCouponPreferences({
     this.requested = false,
@@ -38,6 +40,7 @@ class GoalVdLineAutoCouponPreferences {
     this.market = multiMarket,
     this.notifyChanges = true,
     this.systemMode = threeSameFixtures,
+    this.windowDays = 1,
   });
 
   bool get isValid =>
@@ -51,6 +54,7 @@ class GoalVdLineAutoCouponPreferences {
       minimumMarketProbability <= 90 &&
       minimumMarketProbability % 5 == 0 &&
       allowedMarkets.contains(market) &&
+      windowDays >= 1 && windowDays <= 3 &&
       (systemMode == single || systemMode == threeSameFixtures);
 
   String get formattedTime =>
@@ -65,6 +69,7 @@ class GoalVdLineAutoCouponPreferences {
     String? market,
     bool? notifyChanges,
     String? systemMode,
+    int? windowDays,
   }) => GoalVdLineAutoCouponPreferences(
     requested: requested ?? this.requested,
     hour: hour ?? this.hour,
@@ -75,6 +80,7 @@ class GoalVdLineAutoCouponPreferences {
     market: market ?? this.market,
     notifyChanges: notifyChanges ?? this.notifyChanges,
     systemMode: systemMode ?? this.systemMode,
+    windowDays: windowDays ?? this.windowDays,
   );
 
   Map<String, Object> toJson() => {
@@ -86,6 +92,7 @@ class GoalVdLineAutoCouponPreferences {
     'market': market,
     'notifyChanges': notifyChanges,
     'systemMode': systemMode,
+    'windowDays': windowDays,
   };
 
   static GoalVdLineAutoCouponPreferences? fromJson(Object? json) {
@@ -99,6 +106,7 @@ class GoalVdLineAutoCouponPreferences {
     final notifyChanges = json['notifyChanges'];
     // Old saved settings are SINGLE, not silently upgraded to three.
     final systemMode = json['systemMode'] ?? single;
+    final windowDays = json['windowDays'] ?? 1;
     if (requested is! bool ||
         hour is! int ||
         minute is! int ||
@@ -106,7 +114,8 @@ class GoalVdLineAutoCouponPreferences {
         minimum is! int ||
         market is! String ||
         notifyChanges is! bool ||
-        systemMode is! String) {
+        systemMode is! String ||
+        windowDays is! int) {
       return null;
     }
     final result = GoalVdLineAutoCouponPreferences(
@@ -118,6 +127,7 @@ class GoalVdLineAutoCouponPreferences {
       market: market,
       notifyChanges: notifyChanges,
       systemMode: systemMode,
+      windowDays: windowDays,
     );
     return result.isValid ? result : null;
   }
