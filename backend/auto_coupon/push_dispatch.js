@@ -4,7 +4,7 @@
 // or a coupon engine. A trusted external scheduler must invoke it only AFTER
 // the official coupon worker has saved a validated daily coupon.
 const {validToken} = require('../learning/learning_core');
-const {localClock} = require('./daily_schedule');
+const {localClock, allowedRomeDays} = require('./daily_schedule');
 const {decryptDeviceToken} = require('./device_registration');
 const {sendAutoCouponReadyPush} = require('./apns_provider');
 
@@ -23,7 +23,10 @@ function normalizePushBatch(value) {
 }
 
 function futureCoupon(coupon, dayKey, now) {
-  if (!coupon || !Array.isArray(coupon.events) ||
+  const windowDays = coupon?.windowDays ?? 1;
+  if (![1, 2, 3].includes(windowDays) ||
+      localClock(now).dayKey !== dayKey ||
+      !coupon || !Array.isArray(coupon.events) ||
       coupon.events.length < 3 || coupon.events.length > 15) return false;
   if (coupon.coupons !== undefined) {
     if (!Array.isArray(coupon.coupons) || coupon.coupons.length !== 3) return false;
@@ -47,6 +50,7 @@ function futureCoupon(coupon, dayKey, now) {
     if (signatures.size!==3) return false;
   }
   const ids = new Set();
+  const allowedDays = allowedRomeDays(now, windowDays);
   return coupon.events.every(event => {
     if (!Number.isSafeInteger(event?.fixtureId) || event.fixtureId <= 0 ||
         ids.has(event.fixtureId) || typeof event.market !== 'string' ||
@@ -56,7 +60,7 @@ function futureCoupon(coupon, dayKey, now) {
     ids.add(event.fixtureId);
     const kickoff = new Date(event.kickoffAt);
     return Number.isFinite(kickoff.getTime()) && kickoff > now &&
-      localClock(kickoff).dayKey === dayKey;
+      allowedDays.has(localClock(kickoff).dayKey);
   });
 }
 

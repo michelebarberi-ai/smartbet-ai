@@ -21,8 +21,11 @@ function publicEvents(events) {
 }
 function publicCoupon(coupon) {
   const events = publicEvents(coupon.events);
-  if (!coupon.coupons) return {events};
-  return {events, coupons:coupon.coupons.map(({name,events}) => ({
+  // Retain only the bounded official day window needed by push validation.
+  const dateWindow = coupon.windowDays === 2 || coupon.windowDays === 3
+    ? {windowDays:coupon.windowDays} : {};
+  if (!coupon.coupons) return {...dateWindow, events};
+  return {...dateWindow, events, coupons:coupon.coupons.map(({name,events}) => ({
     name, events:publicEvents(events),
   }))};
 }

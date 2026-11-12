@@ -18,6 +18,7 @@ function validatePreferences(value) {
     integerIn(value.events, 3, 15) &&
     integerIn(value.minimumMarketProbability, 50, 90) &&
     value.minimumMarketProbability % 5 === 0 &&
+    (value.windowDays === undefined || integerIn(value.windowDays, 1, 3)) &&
     ALLOWED_MARKETS.has(value.market) &&
     typeof value.notifyChanges === 'boolean' &&
     (value.systemMode === undefined || value.systemMode === SINGLE_MODE ||
@@ -38,6 +39,19 @@ function localClock(instant, timeZone = DEFAULT_TIME_ZONE) {
     dayKey: `${values.year}-${values.month}-${values.day}`,
     minutesSinceMidnight: Number(values.hour) * 60 + Number(values.minute),
   };
+}
+
+/**
+ * Calendar days (rather than 24-hour durations) handle Rome DST changes.
+ * The schedule is still claimed once per generation day, not per fixture day.
+ */
+function allowedRomeDays(now, windowDays = 1, timeZone = DEFAULT_TIME_ZONE) {
+  if (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 3) {
+    throw new RangeError('Invalid coupon day window');
+  }
+  const [year, month, day] = localClock(now, timeZone).dayKey.split('-').map(Number);
+  return new Set(Array.from({length: windowDays}, (_, offset) =>
+    new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10)));
 }
 
 /**
@@ -90,6 +104,7 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
     return {valid: false, reason: 'insufficient_events'};
   }
   const scheduledDay = localClock(now, timeZone).dayKey;
+  const allowedDays = allowedRomeDays(now, preferences.windowDays ?? 1, timeZone);
   const uniqueFixtures = new Set();
   for (const event of coupon.events) {
     if (!event || !Number.isSafeInteger(event.fixtureId) || event.fixtureId <= 0 ||
@@ -116,7 +131,7 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
     }
     const kickoff = new Date(event.kickoffAt);
     if (!Number.isFinite(kickoff.getTime()) || kickoff <= now ||
-        localClock(kickoff, timeZone).dayKey !== scheduledDay) {
+        !allowedDays.has(localClock(kickoff, timeZone).dayKey)) {
       return {valid: false, reason: 'invalid_or_out_of_day_kickoff'};
     }
     if ('odds' in event && (typeof event.odds !== 'number' ||
@@ -142,6 +157,10 @@ function validateGeneratedCoupon({coupon, preferences, now = new Date(),
   timeZone = DEFAULT_TIME_ZONE} = {}) {
   const first = validateSingleCoupon({coupon, preferences, now, timeZone});
   if (!first.valid) return first;
+  // A wider date window must be explicitly certified by the official engine.
+  if ((coupon.windowDays ?? 1) !== (preferences.windowDays ?? 1)) {
+    return {valid: false, reason: 'window_mismatch'};
+  }
   if (preferences.systemMode !== THREE_MODE) {
     if (coupon.coupons !== undefined) return {valid:false, reason:'unexpected_variants'};
     return first;
@@ -179,5 +198,5 @@ function validateGeneratedCoupon({coupon, preferences, now = new Date(),
   return first;
 }
 
-module.exports = {DEFAULT_TIME_ZONE, validatePreferences, localClock,
+module.exports = {DEFAULT_TIME_ZONE, validatePreferences, localClock, allowedRomeDays,
   dailyRunStatus, validateGeneratedCoupon, officialMarketFamily};

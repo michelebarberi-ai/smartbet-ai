@@ -76,6 +76,9 @@ class LearningService {
     if (preferences.systemMode !== undefined) {
       normalized.systemMode = preferences.systemMode;
     }
+    if (preferences.windowDays !== undefined) {
+      normalized.windowDays = preferences.windowDays;
+    }
     await this.repository.initialize();
     const subjectHash = hashClientId(clientId, this.subjectSalt);
     await this.repository.upsertAutoCouponPreferences({
