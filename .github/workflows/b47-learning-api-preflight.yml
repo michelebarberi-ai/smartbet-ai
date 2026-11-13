@@ -98,7 +98,7 @@ jobs:
           echo "FAIL: cannot certify Render-Neon connectivity"
           exit 1
 
-render-private-engine-health:
+  render-private-engine-health:
     # GET only: verifies the authenticated Render private link without a coupon.
     needs: backend-and-postgres
     if: github.ref == 'refs/heads/deploy/b47-learning-api'
