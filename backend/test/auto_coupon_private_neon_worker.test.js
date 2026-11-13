@@ -87,3 +87,26 @@ test('B47 runner wake accepts only secondary credential and starts no synthetic 
     await new Promise(resolve=>server.close(resolve));
   }
 });
+
+
+test('B47 worker must not advertise readiness when Neon fails',async()=>{
+  let scheduled=0,interval=0;
+  const worker=createPrivateNeonWorker({
+    env:ENV,
+    poolFactory:()=>({end:async()=>{}}),
+    repositoryFactory:()=>({
+      async initialize(){throw Error('Neon unreachable');},
+      async claimOnDemandCoupon(){throw Error('Must never claim after schema failure');},
+    }),
+    timerFn:(_,delay)=>{
+      scheduled++;interval=delay;
+      return {unref(){}};
+    },
+    clearFn:()=>{},
+  });
+  worker.start();
+  for(let i=0;i<30 && !scheduled;i++)await new Promise(r=>setTimeout(r,2));
+  assert.equal(worker.ready,false);
+  assert.equal(interval,2*60*1000);
+  await worker.stop();
+});
