@@ -18,7 +18,7 @@ void main() {
   test('B45 local-only: invalid empty and oversized coupon never replace latest', () async {
     expect(await store.save('GOALVDLINE - previous'), true);
     expect(await store.save('   '), false);
-    expect(await store.save('x' * (GoalVdLineReadyCouponLocalStore.maxLength + 1)), false);
+    expect(await store.save(List.filled(GoalVdLineReadyCouponLocalStore.maxLength + 1, 'x').join()), false);
     expect(await store.load(), 'GOALVDLINE - previous');
   });
 
