@@ -44,3 +44,12 @@ Versione preparata: **1.2.5+45**. La versione non è ancora su TestFlight.
 - Il tentativo GitHub #51 ha superato Flutter analyze, firma e archive; Apple ha rifiutato `CFBundleShortVersionString = 1.2.4` per train chiuso (`90186`, `90062`).
 - Per il tentativo di rilascio seguente la versione pubblicabile è **1.2.5 (45)**: cambia solo il numero versione marketing; il numero build rimane **45**, e il codice applicativo rimane invariato.
 - Non dichiarare TestFlight caricato finché GitHub Actions non conferma `Upload SmartBet to TestFlight` riuscito.
+
+## Correzione TestFlight 1.2.5 (46) — 13 novembre 2026
+
+- Correzioni portate dal branch `fix/b45-noquote-preview`, dopo QA GitHub `43418981751`: Flutter analyze, test Sisal/quote, compilazione iOS senza firma tutti superati.
+- Selettore manuale con elenco ordinato per nazione e competizione, ricerca mantenuta e righe selezionate compatte.
+- Anteprime sportive read-only quando non esiste un'adeguata quota Sisal: non sono schedine giocabili, non si inventano quote, non si abbassano le soglie delle selezioni.
+- Diagnostica del feed e scadenza della cache negativa delle quote; notifica di prova e delegate notifiche iOS in primo piano; messaggio se la programmazione non riesce.
+- Solo TestFlight: niente pubblicazione automatica App Store, niente nuove attivazioni server/APNs. Verificare sull'iPhone permessi, banner, tap e apertura del riepilogo.
+- Numero build incrementato da 45 a **46** per accettazione Apple, stessa versione marketing 1.2.5.

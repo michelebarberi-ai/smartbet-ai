@@ -208,14 +208,14 @@ jobs:
 
           KEY_PATH="$RUNNER_TEMP/AuthKey_${APPSTORE_KEY_ID}.p8"
 
-          # Pin Build 45 on the isolated release branch. Other existing
+          # Pin the approved corrective build number on the isolated release branch. Other existing
           # workflow branches retain their previous build numbering.
           if [[ "$GITHUB_REF" == "refs/heads/release/b45-testflight" ]]; then
-            grep -qx 'version: 1.2.5+45' pubspec.yaml || {
+            grep -qx 'version: 1.2.5+46' pubspec.yaml || {
               echo "ERROR: Build 45 release version mismatch"
               exit 1
             }
-            BUILD_NUMBER="45"
+            BUILD_NUMBER="46"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
