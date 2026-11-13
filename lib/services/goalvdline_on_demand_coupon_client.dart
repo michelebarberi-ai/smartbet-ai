@@ -225,6 +225,75 @@ class GoalVdLineOnDemandStatus {
     r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[89abAB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$',
   );
 
+  /// Defense in depth: a server-side READY flag alone does not prove
+  /// that all selections have identifiable fixtures and live attributed odds.
+  static bool _validEvents(Object? raw) {
+    if (raw is! List || raw.length < 3 || raw.length > 15) return false;
+    final seen = <int>{};
+    for (final item in raw) {
+      if (item is! Map) return false;
+      final id = item['fixtureId'];
+      final market = item['market'];
+      final probability = item['marketProbability'];
+      final odd = item['odds'];
+      final bookmaker = item['bookmaker'];
+      final home = item['homeTeam'];
+      final away = item['awayTeam'];
+      final kickoff = item['kickoffAt'];
+      if (id is! int || id <= 0 || !seen.add(id) ||
+          market is! String || market.trim().isEmpty || market.length > 100 ||
+          probability is! num || !probability.isFinite ||
+          probability < 0 || probability > 100 ||
+          odd is! num || !odd.isFinite || odd <= 1.20 ||
+          bookmaker is! String || bookmaker.trim().isEmpty ||
+          bookmaker.length > 80 ||
+          const <String>{'n/d','unknown','sconosciuto','n.a.'}
+              .contains(bookmaker.trim().toLowerCase()) ||
+          home is! String || home.trim().isEmpty || home.length > 120 ||
+          away is! String || away.trim().isEmpty || away.length > 120 ||
+          kickoff is! String || DateTime.tryParse(kickoff) == null) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _validCoupon(Object? raw) {
+    if (raw is! Map<String, dynamic> || !_validEvents(raw['events'])) {
+      return false;
+    }
+    final variants = raw['coupons'];
+    if (variants == null) return true;
+    if (variants is! List || variants.length != 3) return false;
+    final primary = raw['events'] as List;
+    const expectedNames = ['PRINCIPALE', 'ALTERNATIVA_1', 'ALTERNATIVA_2'];
+    final signatures = <String>{};
+    for (var i = 0; i < variants.length; i++) {
+      final variant = variants[i];
+      if (variant is! Map || variant['name'] != expectedNames[i] ||
+          !_validEvents(variant['events'])) return false;
+      final events = variant['events'] as List;
+      if (events.length != primary.length) return false;
+      for (var j = 0; j < events.length; j++) {
+        final selected = events[j] as Map;
+        final first = primary[j] as Map;
+        for (final field in ['fixtureId','kickoffAt','homeTeam','awayTeam']) {
+          if (selected[field] != first[field]) return false;
+        }
+        if (i == 0) {
+          for (final field in ['market','marketProbability','odds','bookmaker']) {
+            if (selected[field] != first[field]) return false;
+          }
+        }
+      }
+      signatures.add(events.map((e) {
+        final m = e as Map;
+        return '${m['fixtureId']}:${m['market']}';
+      }).join('|'));
+    }
+    return signatures.length == 3;
+  }
+
   static GoalVdLineOnDemandStatus fromJson(Object? data) {
     if (data is! Map<String, dynamic> || data['success'] != true ||
         data['jobId'] is! String ||
@@ -237,11 +306,10 @@ class GoalVdLineOnDemandStatus {
     }
     final status = data['status'] as String;
     final coupon = data['coupon'];
-    if (status == 'ready' && (coupon is! Map<String, dynamic> ||
-        coupon['events'] is! List ||
-        (coupon['events'] as List).length < 3 ||
-        (coupon['events'] as List).length > 15)) {
-      return const GoalVdLineOnDemandStatus.error('Schedina remota non valida.');
+    if (status == 'ready' && !_validCoupon(coupon)) {
+      return const GoalVdLineOnDemandStatus.error(
+        'Schedina remota non verificabile: partita, quota o bookmaker mancanti.',
+      );
     }
     return GoalVdLineOnDemandStatus(
       status: status,
