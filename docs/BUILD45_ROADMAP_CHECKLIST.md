@@ -17,6 +17,12 @@ Legenda:
 - [x] **Nuovo gate Mac su commit `5c969a7` (13/11/2026)**: 5/5 test mirati superati, `EXIT TEST: 0`; `flutter build ios --no-codesign`: `EXIT IOS: 0`, Xcode 82,6 s, Runner.app 24,3 MB. Questi risultati certificano il codice e la compilazione, non il comportamento runtime della notifica.
 - [ ] **Test dispositivo reale ancora necessario**: attivazione consenso, generazione su richiesta completata, banner in primo piano, tap e lettura dello snapshot locale dopo riapertura. Una build senza firma non è installabile direttamente: usare una build firmata con percorso già previsto (Xcode o singola Build 45 TestFlight) soltanto quando pronto il release gate.
 - [ ] La vista da notifica è un riepilogo testuale locale dell'**ultima** schedina creata su richiesta, non l'intero editor interattivo; quote snapshot al momento della creazione. Richiesta eventuale UI completa dopo release.
+### Preparazione Build 45 — revisione GitHub (13/11/2026)
+- [x] `pubspec.yaml` preparato come `version: 1.2.4+45` su sola feature branch (commit `52309cd`); **non implica TestFlight già distribuita**.
+- [x] Workflow iOS TestFlight predisposto anche per il futuro branch `release/b45-testflight` (commit `ced35bb`), con numero Build 45 fissato su tale branch. Nessuna modifica ai trigger delle branch storiche; nessuna esecuzione del workflow avviata da questa preparazione.
+- [x] Release notes interne in `docs/BUILD45_RELEASE_NOTES.md`, con limiti funzionali dichiarati.
+- [ ] Prima del rilascio: verifica quote Sisal e soglia probabilità realmente applicata nelle schermate, collaudo iPhone della notifica/snapshot, poi **creazione deliberata del branch release** soltanto dopo l'esito positivo. Non fare merge PR #1 sullo staging Render.
+- [ ] Pipeline GitHub TestFlight e certificati/segreti **non ancora collaudati** su questa revisione; una build senza firma non è un upload Apple.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
 **Decisione dell'utente: velocizzare senza nuovi costi fissi.** Conservare tutto il codice; rinviato NON significa collaudato.
