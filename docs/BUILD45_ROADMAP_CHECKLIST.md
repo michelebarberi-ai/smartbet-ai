@@ -82,3 +82,19 @@ Legenda:
 - [ ] Verificare che classifiche e ordini non cambino quando cambia solo la quota Sisal (test metamorfici).
 
 Non portare il PR draft in staging/Render prima che i test siano verdi e il vincolo forecast-first sia rispettato anche senza quote.
+
+## P21W — Affidabilità osservata per campionato × mercato (13/11/2026)
+
+- [x] Aggiunto un **servizio in sola lettura** (`smartbet_league_market_reliability_service.dart`) che raggruppa solo pronostici prospettici realmente risolti per paese, campionato, mercato e motore. Non legge quote e non cambia pronostici o schedine.
+- [x] Deduplica fixture/mercato/motore, esclude conflitti e dati non noti al momento del report (anti look-ahead).
+- [x] Riporta successi osservati, campioni, giornate distinte, probabilità media originaria, gap di calibrazione e Brier Score; aggiunge intervallo Wilson al 95% e stati insufficient / exploratory / signal / strongShadowCandidate (solo suggerimento sperimentale).
+- [ ] **TEST DA ESEGUIRE sul Mac**: nuovi test in `test/services/smartbet_league_market_reliability_service_test.dart` e suite completa sulla nuova revisione. Nessun esito verificato per P21W finché il Mac non risponde.
+- [ ] UI dashboard locale e conteggi effettivi iPhone: ancora aperti. Il report non contiene dati del dispositivo finché non viene interrogato il suo archivio tramite un flusso di consenso.
+- [ ] Solo dopo verifica prospettica SHADOW e gate espliciti valutare come usare queste statistiche nel ranking automatico; **nessun cambiamento automatico al motore adesso**.
+
+### Collaudo precedente P20.6 — commit 34b0f92 (Mac, 13/11/2026)
+- Backend: 134 test passati, 0 falliti, exit 0 (`backend/test/auto_coupon_*.test.js`).
+- Flutter: 651 superati, 3 saltati, exit 0 (`flutter test --no-pub`).
+- Analisi: exit 0 con `--no-fatal-infos`, 706 segnalazioni non bloccanti riportate. L'output condiviso non mostra errori/warning.
+- ZIP sorgenti creato e verificato in `~/Downloads`, commit 34b0f92, circa 3,9 MB. È uno snapshot precedente alla P21W.
+- Questa evidenza non prova disponibilità live delle quote Sisal né la riuscita end-to-end su Render/Neon.
