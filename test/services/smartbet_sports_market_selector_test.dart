@@ -23,13 +23,13 @@ void main() {
     expect(pick?.market, 'GOAL');
   });
 
-  test('Il limite di 1.20 e incluso', () {
+  test('La quota 1.20 e esclusa e passa al secondo mercato', () {
     final pick = SmartBetSportsMarketSelector.bestPlayable(
       sportsProbabilities: probabilities,
       quotedOdds: const {'GOAL': 1.20, 'OVER 2.5': 2.40},
     );
 
-    expect(pick?.market, 'GOAL');
+    expect(pick?.market, 'OVER 2.5');
   });
 
   test('Quota sotto 1.20 passa al secondo mercato sportivo', () {
@@ -77,14 +77,14 @@ void main() {
   test('P20.6: an unplayable top odd never changes primary forecast', () {
     final recommendation = SmartBetSportsMarketSelector.recommend(
       sportsProbabilities: const {'GOAL': 82, 'OVER 2.5': 75, '2': 11},
-      quotedOdds: const {'GOAL': 1.19, 'OVER 2.5': 1.20, '2': 20},
+      quotedOdds: const {'GOAL': 1.19, 'OVER 2.5': 1.21, '2': 20},
       minimumProbability: 65,
     )!;
     expect(recommendation.primary.market, 'GOAL');
     expect(recommendation.primary.probability, 82);
     expect(recommendation.couponPick?.market, 'OVER 2.5');
     expect(recommendation.couponPick?.probability, 75);
-    expect(recommendation.couponPick?.odd, 1.20);
+    expect(recommendation.couponPick?.odd, 1.21);
     expect(recommendation.usesAlternative, true);
   });
 
