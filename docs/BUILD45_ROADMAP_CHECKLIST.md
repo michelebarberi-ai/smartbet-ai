@@ -7,7 +7,8 @@ Aggiornamento: 12 novembre 2026. Riferimento: feature/b45-p20-4-multiday, PR #1 
 ## Segnalazioni TestFlight Build 46 — 13/11/2026
 
 - [ ] **Modifica 1 / priorità alta:** le schedine **su richiesta** devono continuare a essere elaborate sul server anche se l'iPhone va in background, viene bloccato o l'app si chiude. Riutilizzare **prima** Render/Flutter già pagati e Neon solo dopo verifica, con richiesta autenticata, job persistente, stato e recupero su iPhone, notifica solo a READY. Nessun servizio aggiuntivo o flag AutoSchedina giornaliera abilitato automaticamente.
-- [ ] Altri bug segnalati durante il collaudo: dettagli ancora da ricevere; numerare dal punto 2 in avanti.
+- [ ] **Modifica 2 / priorità alta:** il pronostico AI con probabilità sportiva maggiore deve apparire sempre per primo, anche con quota reale <1,20 o N/D; subito sotto, quando disponibile, la migliore alternativa con quota reale >=1,20 che supera soglia e Auditor. Se Sisal non offre quote, usare fonte bookmaker verificata alternativa con nome esatto (mai etichettarla Sisal). Non inventare quote né forzare schedine.
+- [ ] Altri bug del collaudo: numerare dal punto 3 in avanti.
 - Registro dedicato: [`docs/BUILD46_TESTFLIGHT_BUGS.md`](BUILD46_TESTFLIGHT_BUGS.md). La modifica 1 è **registrata, non ancora implementata**. Nessun deploy Render, Neon o TestFlight autorizzato dal solo registro.
 
 Legenda:
