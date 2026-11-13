@@ -48,3 +48,32 @@ jobs:
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
             test/services/goalvdline_official_coupon_contract_test.dart
+
+  qa-ios-compile:
+    # Validate the Swift notification test handler without any signing or upload.
+    needs: qa-flutter
+    if: github.ref == 'refs/heads/fix/b45-noquote-preview'
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter dependencies and pods
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter precache --ios
+          flutter pub get
+          cd ios && pod install
+
+      - name: Compile iOS without code signing
+        run: flutter build ios --no-codesign
