@@ -60,8 +60,13 @@ import UserNotifications
               : "\(coupons) schedine AI pronte. \(fixtures) partite nella principale."
             content.sound = .default
             content.userInfo = ["kind": "on_demand_coupon_ready"]
+            // Only the latest locally saved coupon is actionable.
+            // Do not leave older notifications pointing to a newer snapshot.
+            let latestId = "goalvdline-on-demand-latest"
+            center.removePendingNotificationRequests(withIdentifiers: [latestId])
+            center.removeDeliveredNotifications(withIdentifiers: [latestId])
             let request = UNNotificationRequest(
-              identifier: "goalvdline-on-demand-\(UUID().uuidString)",
+              identifier: latestId,
               content: content,
               trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             )
