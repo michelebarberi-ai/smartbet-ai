@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
+import '../services/smartbet_league_market_shadow_service.dart';
 
 /// Local evidence only: does not resolve fixtures or modify the AI.
 class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
   const SmartBetLeagueMarketReliabilityPanel({
-    super.key, required this.report,
+    super.key, required this.report, this.shadowReport,
   });
 
   final SmartBetLeagueMarketReliabilityReport report;
+  final SmartBetLeagueMarketShadowReport? shadowReport;
 
   String _level(SmartBetLeagueMarketEvidenceLevel level) => switch (level) {
     SmartBetLeagueMarketEvidenceLevel.insufficient => 'Dati insufficienti',
@@ -73,6 +75,42 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
           }),
           if (segments.length > 12)
             Text('Mostrati 12 su ${segments.length} gruppi, ordinati per numerosità.'),
+          if (shadowReport != null) ...[
+            const SizedBox(height: 12),
+            const Text('P21W.4 · Validazione SHADOW prospettica',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Replay offline: per ogni pronostico usa solo risultati già noti '
+              'prima della previsione. Nessuna correzione live.'),
+            if (!shadowReport!.segments.any((s) => s.evaluatedFixtures > 0))
+              const Padding(
+                key: Key('p21w4-no-validation'),
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('Campione futuro indipendente insufficiente: confronto non disponibile.'),
+              ),
+            ...shadowReport!.segments.where((s) => s.evaluatedFixtures > 0).take(8).map((s) {
+              final engine = s.engine == SmartBetAnalysisEngine.diego
+                  ? 'Diego AI' : 'SmartBet AI';
+              final original = s.originalBrier!.toStringAsFixed(4);
+              final shadow = s.shadowBrier!.toStringAsFixed(4);
+              final improvement = s.brierImprovement!.toStringAsFixed(4);
+              return Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${s.country} · ${s.league} · ${s.market} · $engine',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Verifica: ${s.evaluatedFixtures} incontri su '
+                      '${s.distinctValidationDays} giornate'),
+                    Text('Brier originale $original · SHADOW $shadow · differenza $improvement'),
+                    Text(s.warrantsFurtherResearch
+                      ? 'Miglioramento esplorativo: richiede ulteriore validazione'
+                      : 'Nessuna evidenza sufficiente per promuovere correzioni'),
+                  ],
+                ),
+              );
+            }),
+          ],
           const Text('SHADOW: questi dati non cambiano il pronostico principale.',
             style: TextStyle(fontSize: 12)),
         ],
