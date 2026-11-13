@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../services/odds_service.dart';
 import '../services/sisal_odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
+import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_reliability_service.dart';
@@ -1035,6 +1037,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _notice = '${notes.join(' • ')}.';
         }
       });
+
+      if (_results.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Analisi completata: ${_results.length} partite.')),
+        );
+        unawaited(const GoalVdLineCouponReadyNotifier().notifyReady(
+          coupons: 1, fixturesInPrimary: _results.length,
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -1975,6 +1986,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               'dalla stessa analisi.';
         }
       });
+
+      // Show completion only after the final audited portfolio is ready.
+      // Local notifications are optional and do not start a server job.
+      if (_portfolioResults.isNotEmpty && _results.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Schedine AI pronte: ${_portfolioResults.length}. '
+            'Partite nella principale: ${_results.length}.',
+          )),
+        );
+        unawaited(const GoalVdLineCouponReadyNotifier().notifyReady(
+          coupons: _portfolioResults.length,
+          fixturesInPrimary: _results.length,
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
