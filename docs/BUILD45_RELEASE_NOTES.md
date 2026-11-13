@@ -1,6 +1,6 @@
 # GoalVdLine AI — Build 45 | Release notes interne
 
-Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
+Versione preparata: **1.2.5+45**. La versione non è ancora su TestFlight.
 
 ## Funzioni client previste
 
@@ -35,6 +35,12 @@ Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
 ## Autorizzazione alla pubblicazione
 
 - **13 novembre 2026:** pubblicazione dell'unica Build 45 su TestFlight autorizzata dall'utente in chat.
-- Versione e numero build: **1.2.4 (45)**; sorgente release branch `release/b45-testflight`.
+- Versione e numero build: **1.2.5 (45)**; sorgente release branch `release/b45-testflight`.
 - La pipeline GitHub Actions `SmartBet iOS TestFlight` è autorizzata a firmare e caricare la build su App Store Connect; lo stato effettivo va verificato nei job.
 - La PR di staging resta in bozza e AutoSchedina remota, worker Render e sincronizzazioni aggiuntive non devono essere attivati.
+
+## Apple pre-release train — correzione tecnica
+
+- Il tentativo GitHub #51 ha superato Flutter analyze, firma e archive; Apple ha rifiutato `CFBundleShortVersionString = 1.2.4` per train chiuso (`90186`, `90062`).
+- Per il tentativo di rilascio seguente la versione pubblicabile è **1.2.5 (45)**: cambia solo il numero versione marketing; il numero build rimane **45**, e il codice applicativo rimane invariato.
+- Non dichiarare TestFlight caricato finché GitHub Actions non conferma `Upload SmartBet to TestFlight` riuscito.
