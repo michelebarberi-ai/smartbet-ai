@@ -12,6 +12,7 @@ const JOB=/^\/learning\/v1\/mobile\/on-demand-coupon\/jobs\/([0-9a-f-]{36})$/i;
 
 function registerOnDemandCouponRoutes(app,{env,mobileEnabled,
   authorizeMobile,getLearningService,generateOfficialCoupon,
+  verifyExternalWorker=null,wakeExternalWorker=null,
   workerRunning=false,now=()=>new Date()}) {
   // Never let an iPhone queue work unless an actual server-side processing
   // loop has started. Configured HTTP worker triggers alone are not a queue.
@@ -40,9 +41,27 @@ function registerOnDemandCouponRoutes(app,{env,mobileEnabled,
   };
   app.post(BASE,authorizeMobile,(req,res)=>{
     if(!enabled) return res.status(503).json({success:false,error:'Schedine remote non abilitate.'});
-    return safe(res,()=>getService().submit({
-      clientId:req.learningClientId,body:req.body,
-    }));
+    return safe(res,async()=>{
+      const external=env.ON_DEMAND_COUPON_EXTERNAL_WORKER_ENABLED==='true';
+      // Fail closed before writing a queued job unless the private paid
+      // runner confirms its real worker is live and version-pinned.
+      if(external && (typeof verifyExternalWorker!=='function' ||
+          !(await verifyExternalWorker()))) {
+        return {status:503,body:{success:false,
+          error:'Elaboratore remoto temporaneamente non disponibile.'}};
+      }
+      const result=await getService().submit({
+        clientId:req.learningClientId,body:req.body,
+      });
+      if(external && result.status===202) {
+        const notified=typeof wakeExternalWorker==='function' &&
+          await wakeExternalWorker();
+        // Persisted jobId is always returned. A missed wake is recovered
+        // by the runner's periodic Neon sweep after an interrupted request.
+        result.body.workerNotified=notified===true;
+      }
+      return result;
+    });
   });
   app.get(BASE+'/:jobId',authorizeMobile,(req,res)=>{
     if(!enabled) return res.status(503).json({success:false,error:'Schedine remote non abilitate.'});
