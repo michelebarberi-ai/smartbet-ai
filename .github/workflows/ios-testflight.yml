@@ -12,6 +12,14 @@ on:
 
 jobs:
   build-ios:
+    # The B45 release branch may be created before the authorization commit.
+    # Start exactly one B45 upload only for the deliberate release commit.
+    # Preserve legacy branches and allow a manual workflow dispatch if needed.
+    if: >-
+      github.ref != 'refs/heads/release/b45-testflight' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       github.event.head_commit.message == 'release(build45): authorize TestFlight upload')
     runs-on: macos-26-intel
 
     steps:
