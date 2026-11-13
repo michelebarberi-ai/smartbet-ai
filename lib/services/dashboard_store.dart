@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/analysis_result.dart';
 import '../repositories/match_repository.dart';
 import 'live_match_service.dart';
-import 'italy_schedule_filter.dart';
+import 'goalvdline_daily_match_counter.dart';
 import 'smartbet_ai_service.dart';
 
 class DashboardStore extends ChangeNotifier {
@@ -184,38 +184,16 @@ class DashboardStore extends ChangeNotifier {
 
   Future<void> _loadTodayMatches() async {
     try {
-      final matches = await MatchRepository.getTodayMatches().timeout(
+      final now = DateTime.now();
+      // The original 'getTodayMatches' endpoint returns NEXT fixtures, which
+      // can include tomorrow or later. Query the actual day instead.
+      final matches = await MatchRepository.getMatchesByDate(now).timeout(
         const Duration(seconds: 8),
       );
-
-      final now = DateTime.now();
-
-      final analyzable = matches.where((match) {
-        if (!match.hasTeamIds) {
-          return false;
-        }
-
-        DateTime matchDate;
-
-        try {
-          matchDate = DateTime.parse(match.date).toLocal();
-        } catch (_) {
-          return false;
-        }
-
-        if (!matchDate.isAfter(now)) {
-          return false;
-        }
-
-        if (!ItalyScheduleFilter.allows(match)) {
-          return false;
-        }
-
-        return true;
-      }).length;
-
-      _todayMatches = analyzable;
-      _aiOnline = true;
+      // Fixture availability, not a forecast or a reliable coupon count.
+      _todayMatches = GoalVdLineDailyMatchCounter.countForToday(
+        matches, now: now,
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('Dashboard matches error: $e');
@@ -224,6 +202,7 @@ class DashboardStore extends ChangeNotifier {
     }
   }
 
+  // ============================================================
   // ============================================================
   // BACKEND AI
   // ============================================================
