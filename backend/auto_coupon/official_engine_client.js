@@ -85,6 +85,18 @@ function createOfficialEngineAdapter({env = process.env, fetchImpl = fetch,
           signal: AbortSignal.timeout(20000),
         });
         if (response?.status === 200) {finished = true; break;}
+        // The official runner reports a completed, legitimately empty result
+        // as HTTP 503 {error:'no_coupon'}. It is NOT a transport failure.
+        // Accept this minimal exact shape only after a valid pinned-host job
+        // ticket, never on an arbitrary initial HTTP error.
+        if (response?.status === 503) {
+          const outcome = await readBoundedJson(response);
+          if (outcome && !Array.isArray(outcome) &&
+              Object.keys(outcome).length === 1 &&
+              outcome.error === 'no_coupon') {
+            return {status:'no_coupon'};
+          }
+        }
         if (response?.status !== 202) throw new Error('Official engine unavailable');
       }
       if (!finished) throw new Error('Official engine timeout');
