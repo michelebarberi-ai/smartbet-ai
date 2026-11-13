@@ -319,16 +319,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
     required double expectedValue,
     required bool doubt,
   }) {
-    final edgePoints = edge * 100.0;
-    final evPoints = expectedValue * 100.0;
-
-    final base =
-        probability * 0.54 +
-        smartScore * 0.22 +
-        edgePoints.clamp(-8.0, 18.0).toDouble() * 0.10 +
-        evPoints.clamp(-10.0, 25.0).toDouble() * 0.14;
-
-    return base - (doubt ? 6.0 : 0.0);
+    // Economic factors are displayed only AFTER the sporting ranking.
+    return probability * 0.75 +
+        smartScore * 0.25 - (doubt ? 6.0 : 0.0);
   }
 
   bool _passesPrimary({
@@ -337,11 +330,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
     required double odd,
     required double expectedValue,
   }) {
-    return probability >= 58 &&
+    return probability >= 65 &&
         smartScore >= 55 &&
-        odd >= _minimumOdd &&
-        odd <= 4.50 &&
-        expectedValue >= -0.03;
+        odd.isFinite &&
+        odd >= _minimumOdd;
   }
 
   bool _passesAdaptive({
@@ -350,11 +342,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
     required double odd,
     required double expectedValue,
   }) {
-    return probability >= 52 &&
+    // The adaptive mode never lowers the 65% probability floor.
+    return probability >= 65 &&
         smartScore >= 50 &&
-        odd >= _minimumOdd &&
-        odd <= 5.50 &&
-        expectedValue >= -0.10;
+        odd.isFinite &&
+        odd >= _minimumOdd;
   }
 
   _DailyPick? _bestPickForMatch({
@@ -368,6 +360,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
     }
 
     final probabilities = _markets(analysis);
+    final sportsRanking = probabilities.entries
+        .where((entry) =>
+            entry.value > 0 && !_auditorBlocksMarket(analysis, entry.key))
+        .toList()
+      ..sort((a, b) {
+        final order = b.value.compareTo(a.value);
+        return order != 0 ? order : a.key.compareTo(b.key);
+      });
+    final topSport = sportsRanking.isEmpty ? null : sportsRanking.first;
     final exactScores = _exactScoreEstimates(analysis);
     final primary = <_DailyPick>[];
     final adaptive = <_DailyPick>[];
@@ -417,6 +418,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
           doubt: doubt,
         ),
         auditStatus: _auditStatus(analysis),
+        primaryForecastMarket: topSport?.key,
+        primaryForecastProbability: topSport?.value,
         exactPrimary: exactScores[0],
         exactAlternative: exactScores[1],
         exactThird: exactScores[2],
@@ -960,6 +963,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
             expectedValue: pick.expectedValue,
             rankScore: pick.rankScore,
             auditStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
+            primaryForecastMarket: pick.primaryForecastMarket,
+            primaryForecastProbability: pick.primaryForecastProbability,
             exactPrimary: pick.exactPrimary,
             exactAlternative: pick.exactAlternative,
             exactThird: pick.exactThird,
@@ -1156,6 +1161,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _resultCard(_DailyPick item, int position) {
+    final usesSisalAlternative = item.primaryForecastMarket != null &&
+        item.primaryForecastMarket != item.market;
     final scoreColor = _scoreColor(item.analysis.smartScore);
     final auditColor = _auditColor(item);
     final competition = _competitionLabel(item.match);
@@ -1218,11 +1225,25 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
           ),
           const SizedBox(height: 15),
+          if (usesSisalAlternative) ...[
+            Text(
+              'PRONOSTICO PRINCIPALE AI: '
+              '${_dailyMarketDisplayName(item.primaryForecastMarket!)} '
+              '· ${item.primaryForecastProbability}% (non modificato)',
+              style: const TextStyle(
+                color: Color(0xFF69F0AE),
+                fontSize: 11, fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 9),
+          ],
           Row(
             children: [
               Expanded(
                 child: _mainValueBox(
-                  label: 'SCELTA GOALVDLINE',
+                  label: usesSisalAlternative
+                      ? 'ALTERNATIVA SISAL'
+                      : 'PRONOSTICO PRINCIPALE AI',
                   value: _dailyMarketDisplayName(item.market),
                   valueColor: const Color(0xFF00C853),
                 ),
@@ -1925,6 +1946,8 @@ class _DailyPick {
   final double expectedValue;
   final double rankScore;
   final String auditStatus;
+  final String? primaryForecastMarket;
+  final int? primaryForecastProbability;
   final _ExactScoreEstimate exactPrimary;
   final _ExactScoreEstimate exactAlternative;
   final _ExactScoreEstimate exactThird;
@@ -1943,6 +1966,8 @@ class _DailyPick {
     required this.expectedValue,
     required this.rankScore,
     required this.auditStatus,
+    this.primaryForecastMarket,
+    this.primaryForecastProbability,
     required this.exactPrimary,
     required this.exactAlternative,
     required this.exactThird,
@@ -1963,6 +1988,8 @@ class _DailyPick {
       expectedValue: expectedValue,
       rankScore: rankScore,
       auditStatus: auditStatus,
+      primaryForecastMarket: primaryForecastMarket,
+      primaryForecastProbability: primaryForecastProbability,
       exactPrimary: exactPrimary,
       exactAlternative: exactAlternative,
       exactThird: exactThird,

@@ -430,18 +430,17 @@ class DualEngineAnalysisService {
       );
     }
 
-    // Stessa scelta sportiva utilizzata dalle schedine.
-    // Le quote verificano solo disponibilita' e minimo 1.20.
-    final pick = SmartBetSportsCouponAdapter.bestPlayable(
+    // Compare the independent SPORTING forecast. Sisal prices must
+    // never alter the main market evaluated by either AI engine.
+    final recommendation = SmartBetSportsCouponAdapter.recommend(
       analysis: result,
       odds: marketOdds,
+      minimumMarketProbability: 0,
     );
-
-    if (pick == null) return unavailable;
-
+    if (recommendation == null) return unavailable;
     return _EngineMarketChoice(
-      market: _normalizeMarket(pick.market),
-      probability: pick.probability / 100.0,
+      market: _normalizeMarket(recommendation.primary.market),
+      probability: recommendation.primary.probability / 100.0,
     );
   }
 
