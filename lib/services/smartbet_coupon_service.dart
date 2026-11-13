@@ -7,7 +7,6 @@ import 'smartbet_shared_local_learning_service.dart';
 import 'smartbet_live_calibration_service.dart';
 import 'smartbet_analysis_registration_service.dart';
 import 'odds_service.dart';
-import 'sisal_odds_service.dart';
 import 'goalvdline_quote_policy.dart';
 
 // ============================================================
@@ -409,7 +408,7 @@ class SmartBetCouponService {
         : await const SmartBetSharedLocalLearningService().prepare();
 
     final aiService = analysisProvider == null ? SmartBetAiService() : null;
-    final oddsService = oddsProvider == null ? SisalOddsService() : null;
+    final oddsService = oddsProvider == null ? OddsService() : null;
 
     final analyzed = <SmartBetCouponSelection>[];
     final verifiedMarketAlternatives = <SmartBetCouponSelection>[];
@@ -489,7 +488,7 @@ class SmartBetCouponService {
               market: sportsPick.market,
               originalPercent: sportsPick.probability,
               fixtureId: match.fixtureId,
-              hasRealOdd: sportsPick.odd.isFinite && sportsPick.odd >= minimumOdd,
+              hasRealOdd: sportsPick.odd.isFinite && sportsPick.odd > minimumOdd,
             );
             final effective =
                 learning.applied ? learning.percent : sportsPick.probability;
@@ -526,6 +525,7 @@ class SmartBetCouponService {
       }
     } finally {
       aiService?.dispose();
+      oddsService?.dispose();
     }
 
     if (analyzed.isEmpty) {
@@ -800,7 +800,7 @@ class SmartBetCouponService {
     final result = selection.analysis;
 
     if (selection.sportsPick == null ||
-        selection.odd < minimumOdd ||
+        selection.odd <= minimumOdd ||
         result.smartScore < profile.minimumSmartScore) {
       return null;
     }
@@ -841,7 +841,7 @@ class SmartBetCouponService {
     final result = selection.analysis;
 
     if (selection.sportsPick == null ||
-        selection.odd < minimumOdd ||
+        selection.odd <= minimumOdd ||
         result.smartScore < _smartFallbackMinimumScore) {
       return null;
     }
