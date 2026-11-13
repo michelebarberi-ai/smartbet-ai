@@ -85,9 +85,31 @@ La modalità X Premium appare funzionante negli screenshot; usa `SmartBetXPremiu
 
 **Stato:** riferimento registrato, **nessuna modifica al codice o nuova build** autorizzata da questa conferma.
 
+## 5. PRIORITÀ ALTA — Mercati OPPURE (OR) e parità delle famiglie fra Schedina e Combinazioni
+
+**Segnalazione iPhone TestFlight 1.2.5 (46):** l'utente ricorda la richiesta di «GOAL oppure OVER» e chiede che tutte le famiglie del motore siano disponibili soprattutto in Crea Schedina e anche in Combinazioni AI.
+
+**Verifica nel codice Build 46:** `lib/screens/create_ai_coupon_screen.dart` contiene `GOAL + O2.5` e `NO GOAL + U2.5` nella `_marketOrder`; `lib/screens/combinations_ai_screen.dart` e `SmartBetMultiMarketSelectionService` includono «COMBO AVANZATE» con mercati AND (`+`), ma **non** è presente il mercato unico `GOAL O OVER` (OR). Selezionare 2–3 famiglie diverse NON equivale a un mercato OR quotato. Non dichiararlo già realizzato.
+
+**Requisito funzionale:** aggiungere come categorie/mercati distinti, dove matematicamente e tecnicamente verificabili, quelli concordati per la Build 45: «GOAL O OVER», «1X O OVER», «X O OVER», «1 O OVER», «X O UNDER», «2 O UNDER», «1X O UNDER». Determinare e mostrare chiaramente **linea** (es. O1.5/O2.5, U2.5/U3.5), periodo e regole di vincita. Non confondere «oppure» (unione) con «e» (intersezione, `+`), né confondere una combinazione di famiglie con un singolo mercato.
+
+**Criteri:**
+- [ ] Inventario dei mercati: confronto completo fra Crea Schedina, Combinazioni AI, Risultati e analisi singola; rendere disponibile la stessa base di mercati supportati, con le eccezioni esplicitamente motivate (es. mercati non quotati).
+- [ ] Probabilità delle OR ricavate in modo coerente dalla distribuzione congiunta dei risultati, evitando la somma ingenua di probabilità sovrapposte. Distinguere simulazione/probabilità modello dal prezzo bookmaker.
+- [ ] Quote REALI da Sisal oppure altri bookmaker dove disponibili, con fonte/linea/periodo; **mai inventare una quota** per mercato composito non quotato.
+- [ ] Conservare il **pronostico principale** con probabilità più alta, indipendente dal prezzo, poi cercare una seconda scelta quotata tra **tutti** i mercati compatibili, non soltanto 1X2/Over/Goal. Applicare Auditor e probabilità minima all'alternativa prima di dichiararla giocabile.
+- [ ] Controlli combinazioni: selezione fino a tre famiglie come già prevista, ma includere nuovi mercati OR senza trattare erroneamente AND come OR; mantenere la diversificazione tra mercati e il divieto di duplicare la stessa fixture nella stessa schedina.
+- [ ] Test per semantica OR vs AND, linea corretta, mercati bookmaker assenti, soglia, deduplica e casi di sovrapposizione; collaudo su iPhone.
+
+**Stato:** requisito/mancanza confermata e registrata, **non implementato**.
+
+## Nota aggiuntiva alla modifica 2 — Fonte quote e soglia desiderata
+
+L'utente conferma che non vuole perdere pronostici soltanto perché il feed non offre Sisal. Va bene usare quote REALI da **qualunque bookmaker effettivamente restituito dalla fonte quote**, purché bookmaker, mercato, periodo e quota siano dichiarati e verificati. La probabilità del primo pronostico va mostrata anche con quota **sotto 1,30** o N/D; cercare poi la **migliore probabilità sportiva fra le alternative** con quota reale **almeno 1,30** se questa soglia viene selezionata. Il codice corrente usa il minimo fisso **1,20**: predisporre una soglia scelta/configurabile 1,20/1,30 anziché cambiare nascostamente le regole dell'utente. La seconda alternativa non può avere probabilità più alta del primo se il primo è davvero il massimo su tutti i mercati; interpretare «migliore» come il più probabile **fra quelli che rispettano la quota richiesta**. Mai forzare una quota maggiore cambiando artificialmente la stima.
+
 ## Altri bug del collaudo
 
-Registrare altri bug dal **n. 5** quando l'utente li descriverà.
+Registrare altri bug dal **n. 6** quando l'utente li descriverà.
 
 ## Regole di rilascio
 
