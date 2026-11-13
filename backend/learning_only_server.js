@@ -6,7 +6,7 @@ require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
 const {Pool} = require('pg');
-const {createOfficialEngineAdapter} = require('./auto_coupon/official_engine_client');
+const {createOfficialEngineAdapter,officialEngineConfiguration,PROTOCOL} = require('./auto_coupon/official_engine_client');
 const {LearningRepository} = require('./learning/learning_repository');
 const {OnDemandCouponService} = require('./auto_coupon/on_demand_coupon_service');
 const {createOnDemandScheduler} = require('./auto_coupon/on_demand_scheduler');
@@ -112,6 +112,44 @@ app.get('/health/database', async (_req, res) => {
     learningEnabled: false,
   });
 });
+
+  // B47 read-only authenticated private network probe; no coupon generation.
+  let lastEngineResult = null;
+  let lastEngineAt = 0;
+  let pendingEngineProbe = null;
+  app.get('/health/official-engine', async (_req, res) => {
+    const now = Date.now();
+    if (!pendingEngineProbe && (lastEngineResult === null || now-lastEngineAt >= 60000)) {
+      pendingEngineProbe = (async () => {
+        const config = officialEngineConfiguration(env);
+        const unavailable = {engineConfigured:false,engineReachable:false,engineVerified:false};
+        if (!config || env.AUTO_COUPON_OFFICIAL_ENGINE_PRIVATE_RENDER_ENABLED !== 'true') {
+          return unavailable;
+        }
+        try {
+          const target = new URL(config.url);
+          target.pathname = '/coupon/health';
+          const response = await fetchImpl(target, {
+            method:'GET',redirect:'error',
+            headers:{Authorization:'Bearer '+config.token,Accept:'application/json'},
+            signal:AbortSignal.timeout(5000),
+          });
+          const data = response.status === 200 ? await response.json() : null;
+          const verified = response.status === 200 && data?.protocol === PROTOCOL &&
+            data?.officialEngine === true && data?.revision === config.revision &&
+            data?.ready === true;
+          return {engineConfigured:true,engineReachable:response.status===200,
+            engineVerified:verified};
+        } catch (_) {
+          return {engineConfigured:true,engineReachable:false,engineVerified:false};
+        }
+      })().then(result => {
+        lastEngineResult=result;lastEngineAt=Date.now();return result;
+      }).finally(() => {pendingEngineProbe=null;});
+    }
+    const result = pendingEngineProbe ? await pendingEngineProbe : lastEngineResult;
+    return res.status(result.engineVerified ? 200 : 503).json(result);
+  });
 
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
