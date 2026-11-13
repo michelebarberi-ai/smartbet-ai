@@ -23,6 +23,15 @@ class SmartBetCouponSelection {
   final SmartBetSportsMarketPick? sportsPick;
   final String? sportsBookmaker;
 
+  /// Immutable sports-first forecast, distinct from the quoted coupon market.
+  /// The main forecast is retained even when the coupon uses an alternative.
+  final String? primaryForecastMarket;
+  final int? primaryForecastProbability;
+  final double? primarySisalOdd;
+
+  bool get usesCouponAlternative =>
+      primaryForecastMarket != null && primaryForecastMarket != outcome;
+
   /// Solo per la schedina live. Non sostituisce la previsione originaria
   /// del modello, che resta in sportsPick ed e' quella salvata nello storico.
   final int? calibratedProbabilityPercent;
@@ -40,6 +49,9 @@ class SmartBetCouponSelection {
     required this.analysis,
     this.sportsPick,
     this.sportsBookmaker,
+    this.primaryForecastMarket,
+    this.primaryForecastProbability,
+    this.primarySisalOdd,
     this.calibratedProbabilityPercent,
     this.learningSamples = 0,
   });
@@ -452,6 +464,10 @@ class SmartBetCouponService {
 
           // P20.5: quota insufficiente non autorizza un evento debole.
           // Escludiamo prima della scelta i mercati sotto soglia.
+          final recommendation = SmartBetSportsCouponAdapter.recommend(
+            analysis: result, odds: marketOdds,
+            minimumMarketProbability: minimumMarketProbability ?? 0,
+          );
           final playable = SmartBetSportsCouponAdapter.allPlayable(
             analysis: result,
             odds: marketOdds,
@@ -486,6 +502,9 @@ class SmartBetCouponService {
               analysis: result,
               sportsPick: sportsPick,
               sportsBookmaker: marketOdds?.oddFor(sportsPick.market)?.bookmakerName,
+              primaryForecastMarket: recommendation?.primary.market,
+              primaryForecastProbability: recommendation?.primary.probability,
+              primarySisalOdd: recommendation?.primaryOdd,
               calibratedProbabilityPercent: learning.applied
                   ? learning.percent
                   : null,

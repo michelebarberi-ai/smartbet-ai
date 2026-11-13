@@ -16,6 +16,29 @@ class SmartBetSportsMarketPick {
   });
 }
 
+/// Forecast made BEFORE checking any price. The model's best sporting
+/// outcome never changes because of a quote.
+class SmartBetSportsForecast {
+  final String market;
+  final int probability;
+  const SmartBetSportsForecast(this.market, this.probability);
+}
+
+/// A sporting forecast and its separate, optionally playable coupon pick.
+class SmartBetSportsRecommendation {
+  final SmartBetSportsForecast primary;
+  final double? primaryOdd;
+  final SmartBetSportsMarketPick? couponPick;
+  const SmartBetSportsRecommendation({
+    required this.primary,
+    this.primaryOdd,
+    this.couponPick,
+  });
+
+  bool get usesAlternative =>
+      couponPick != null && couponPick!.market != primary.market;
+}
+
 class SmartBetSportsMarketSelector {
   const SmartBetSportsMarketSelector._();
 
@@ -54,6 +77,45 @@ class SmartBetSportsMarketSelector {
     });
 
     return List.unmodifiable(ranked);
+  }
+
+  /// Sports -> rank -> Sisal quote check. The primary is NEVER replaced
+  /// by a quoted alternative: that option is exposed separately as couponPick.
+  static SmartBetSportsRecommendation? recommend({
+    required Map<String, int> sportsProbabilities,
+    required Map<String, double> quotedOdds,
+    Iterable<String> blockedMarkets = const <String>[],
+    int minimumProbability = 65,
+  }) {
+    if (minimumProbability < 0 || minimumProbability > 100) {
+      throw RangeError.range(minimumProbability, 0, 100, 'minimumProbability');
+    }
+    final blocked = blockedMarkets.map(_normalizeMarket).toSet();
+    final ranked = rankedMarkets(sportsProbabilities)
+        .where((entry) => !blocked.contains(_normalizeMarket(entry.key)))
+        .toList(growable: false);
+    if (ranked.isEmpty) return null;
+
+    final top = ranked.first;
+    final topOdd = quotedOdds[top.key];
+    SmartBetSportsMarketPick? playable;
+
+    // Highest sporting probability remains first, whether or not Sisal
+    // quotes it. Only after that consider an alternative at >=threshold.
+    for (final entry in ranked) {
+      if (entry.value < minimumProbability) break;
+      final odd = quotedOdds[entry.key];
+      if (odd == null || !odd.isFinite || odd < minimumOdd) continue;
+      playable = SmartBetSportsMarketPick(
+        market: entry.key, probability: entry.value, odd: odd,
+      );
+      break;
+    }
+    return SmartBetSportsRecommendation(
+      primary: SmartBetSportsForecast(top.key, top.value),
+      primaryOdd: topOdd != null && topOdd.isFinite && topOdd > 1 ? topOdd : null,
+      couponPick: playable,
+    );
   }
 
   /// Tutti i mercati effettivamente quotati e non bloccati dall'audit.

@@ -6,6 +6,32 @@ import 'smartbet_sports_market_selector.dart';
 class SmartBetSportsCouponAdapter {
   const SmartBetSportsCouponAdapter._();
 
+  /// Forecast first, independently of Sisal quotes, with a separate
+  /// quoted alternative. The forecast uses ONLY the sports model values.
+  static SmartBetSportsRecommendation? recommend({
+    required AnalysisResult analysis,
+    required FixtureMarketOdds? odds,
+    int minimumMarketProbability = 65,
+  }) => SmartBetSportsMarketSelector.recommend(
+    sportsProbabilities: {
+      '1': analysis.homeProbability,
+      'X': analysis.drawProbability,
+      '2': analysis.awayProbability,
+      'OVER 1.5': analysis.over15Probability,
+      'UNDER 1.5': analysis.under15Probability,
+      'OVER 2.5': analysis.over25Probability,
+      'UNDER 2.5': analysis.under25Probability,
+      'GOAL': analysis.goalProbability,
+      'NO GOAL': analysis.noGoalProbability,
+    },
+    blockedMarkets: analysis.sportsAuditBlockedMarkets,
+    quotedOdds: odds == null ? const <String, double>{} : {
+      for (final entry in odds.bestByOutcome.entries)
+        entry.key: entry.value.odd,
+    },
+    minimumProbability: minimumMarketProbability,
+  );
+
   static SmartBetSportsMarketPick? bestPlayable({
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
