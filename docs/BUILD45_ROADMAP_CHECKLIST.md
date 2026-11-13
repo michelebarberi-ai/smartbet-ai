@@ -26,7 +26,7 @@ Legenda:
 ### Audit quote e probabilità — correzione mirata Build 45 (13/11/2026)
 - [x] Identificata incongruenza nel generatore comune delle tre schedine: `GoalVdLineThreeCouponSystem._valid` usava quota fissa **1.25** nonostante `GoalVdLineQuotePolicy.minimumOdd` fosse **1.20**. Corretto nel commit `c64bb62` adottando l'unica policy condivisa. Il 65% minimo non cambia.
 - [x] Aggiunti due test regressione (commit `388451c`): CORE/alternative con quota 1.20 ammissibile; quote 1.19 e mercati 7–13% non possono generare false tre varianti.
-- [ ] Eseguire sul Mac il test mirato `test/services/goalvdline_three_coupon_system_test.dart` e quello del contratto ufficiale, prima di segnare la correzione come verificata.
+- [x] **Mac, 13/11/2026, commit `dd09a3b`**: `flutter test --no-pub test/services/goalvdline_three_coupon_system_test.dart test/services/goalvdline_official_coupon_contract_test.dart` — **25/25 test superati, `EXIT TEST: 0`**. Correzione soglia quota minima condivisa 1.20 verificata nei test; resta da verificare la disponibilità reale delle quote Sisal e il collaudo iPhone.
 - [ ] La presenza di Sisal nel feed reale del giorno è ancora da confermare: assenza quote deve risultare N/D, mai quote sintetiche. In Combinazioni AI l'opzione esplicita 'Qualsiasi' può togliere il filtro minimo solo su richiesta utente, e non va cambiata silenziosamente.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
