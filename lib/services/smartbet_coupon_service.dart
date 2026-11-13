@@ -348,7 +348,15 @@ class SmartBetCouponService {
     int minimumRequired = minimumSelections,
     int maximumValueSelections = maximumSelections,
     bool collectVerifiedAlternatives = false,
+    // For automatic/headless output. Null preserves the manual behavior.
+    int? minimumMarketProbability,
   }) async {
+    if (minimumMarketProbability != null &&
+        (minimumMarketProbability < 0 || minimumMarketProbability > 100)) {
+      throw RangeError.range(
+        minimumMarketProbability, 0, 100, 'minimumMarketProbability',
+      );
+    }
     final safeMinimum = minimumRequired.clamp(1, minimumSelections);
     if (maximumValueSelections < 2 || maximumValueSelections > 15) {
       throw ArgumentError.value(
@@ -440,79 +448,55 @@ class SmartBetCouponService {
             marketOdds = null;
           }
 
-          final sportsPick = SmartBetSportsCouponAdapter.bestPlayable(
+          // P20.5: quota insufficiente non autorizza un evento debole.
+          // Escludiamo prima della scelta i mercati sotto soglia.
+          final playable = SmartBetSportsCouponAdapter.allPlayable(
             analysis: result,
             odds: marketOdds,
+            minimumMarketProbability: minimumMarketProbability ?? 0,
           );
+          if (playable.isEmpty) continue;
 
-          if (sportsPick == null) {
-            continue;
-          }
-
-          final bookmaker = marketOdds
-              ?.oddFor(sportsPick.market)
-              ?.bookmakerName;
-
-          // Non alteriamo il mercato deciso dall'Auditor sportivo.
-          // Le correzioni sono applicabili solo a una scelta con quota reale.
           final evaluateLearning =
               learningEvaluator ?? SmartBetSharedLocalLearningService.evaluate;
-          final learning = evaluateLearning(
-            session: learningSession,
-            market: sportsPick.market,
-            originalPercent: sportsPick.probability,
-            fixtureId: match.fixtureId,
-            hasRealOdd: sportsPick.odd.isFinite && sportsPick.odd >= minimumOdd,
-          );
+          final includeAlternatives =
+              collectVerifiedAlternatives &&
+              result.smartScore >= _controlledValueProfile.minimumSmartScore &&
+              !_isHighRisk(result.risk);
+          SmartBetCouponSelection? chosen;
 
-          analyzed.add(
-            SmartBetCouponSelection(
+          for (final sportsPick in playable) {
+            final learning = evaluateLearning(
+              session: learningSession,
+              market: sportsPick.market,
+              originalPercent: sportsPick.probability,
+              fixtureId: match.fixtureId,
+              hasRealOdd: sportsPick.odd.isFinite && sportsPick.odd >= minimumOdd,
+            );
+            final effective =
+                learning.applied ? learning.percent : sportsPick.probability;
+            // Il learning puo' ridurre la probabilita' dopo il ranking.
+            if (minimumMarketProbability != null &&
+                effective < minimumMarketProbability) continue;
+
+            final selected = SmartBetCouponSelection(
               match: match,
               analysis: result,
               sportsPick: sportsPick,
-              sportsBookmaker: bookmaker,
+              sportsBookmaker: marketOdds?.oddFor(sportsPick.market)?.bookmakerName,
               calibratedProbabilityPercent: learning.applied
                   ? learning.percent
                   : null,
               learningSamples: learning.applied ? learning.samples : 0,
-            ),
-          );
-
-          if (collectVerifiedAlternatives &&
-              result.smartScore >= _controlledValueProfile.minimumSmartScore &&
-              !_isHighRisk(result.risk)) {
-            // Nessuna nuova analisi o modello parallelo: tutti i mercati
-            // della stessa partita, incluso il principale se il profilo
-            // Value non lo ha scelto, con quota reale e audit verificati.
-            for (final alternative in SmartBetSportsCouponAdapter.allPlayable(
-              analysis: result,
-              odds: marketOdds,
-            )) {
-              final alternativeLearning = evaluateLearning(
-                session: learningSession,
-                market: alternative.market,
-                originalPercent: alternative.probability,
-                fixtureId: match.fixtureId,
-                hasRealOdd: true,
-              );
-              verifiedMarketAlternatives.add(
-                SmartBetCouponSelection(
-                  match: match,
-                  analysis: result,
-                  sportsPick: alternative,
-                  sportsBookmaker: marketOdds
-                      ?.oddFor(alternative.market)
-                      ?.bookmakerName,
-                  calibratedProbabilityPercent: alternativeLearning.applied
-                      ? alternativeLearning.percent
-                      : null,
-                  learningSamples: alternativeLearning.applied
-                      ? alternativeLearning.samples
-                      : 0,
-                ),
-              );
+            );
+            chosen ??= selected;
+            if (includeAlternatives) {
+              verifiedMarketAlternatives.add(selected);
+            } else {
+              break;
             }
           }
+          if (chosen != null) analyzed.add(chosen);
         }
 
         if (end < matches.length) {

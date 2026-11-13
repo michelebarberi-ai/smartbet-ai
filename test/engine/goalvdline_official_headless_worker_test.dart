@@ -62,6 +62,7 @@ void main() {
       final result = await SmartBetAutoCouponService().build(
         requestedEvents: preferences.events,
         windowDays: preferences.windowDays,
+        minimumMarketProbability: preferences.minimumMarketProbability,
       );
       final completedAt = DateTime.now().toUtc();
       final coupon =

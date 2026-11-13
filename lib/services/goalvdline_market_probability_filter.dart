@@ -3,6 +3,9 @@
 class GoalVdLineMarketProbabilityFilter {
   const GoalVdLineMarketProbabilityFilter._();
 
+  /// Raccomandazione predefinita, distinta dallo SmartScore.
+  static const int recommendedMinimumPercent = 65;
+
   static bool accepts({required int probability, required int minimumPercent}) {
     if (minimumPercent < 0 || minimumPercent > 100) {
       throw RangeError.range(minimumPercent, 0, 100, 'minimumPercent');

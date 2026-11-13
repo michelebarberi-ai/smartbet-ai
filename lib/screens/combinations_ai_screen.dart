@@ -147,8 +147,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String get _selectedMarketLabel => _selectedMarkets.join(' + ');
   int _topCount = 5;
   int _minimumSmartScore = 0;
-  // Filtro distinto dallo SmartScore: 0 = nessuna soglia aggiuntiva.
-  int _minimumMarketProbability = 0;
+  // P20.5: consigliato 65%; l'opt-out "Qualsiasi" resta esplicito.
+  int _minimumMarketProbability =
+      GoalVdLineMarketProbabilityFilter.recommendedMinimumPercent;
 
   // P5A — Sistema GoalVdLine
   _CombinationOutputMode _outputMode = _CombinationOutputMode.single;
@@ -3678,7 +3679,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          chip('Qualsiasi', 0),
+          chip('Qualsiasi (senza filtro)', 0),
           const SizedBox(width: 7),
           chip('≥50%', 50),
           const SizedBox(width: 7),

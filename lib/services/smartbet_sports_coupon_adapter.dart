@@ -9,8 +9,12 @@ class SmartBetSportsCouponAdapter {
   static SmartBetSportsMarketPick? bestPlayable({
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
+    int minimumMarketProbability = 0,
   }) {
-    final picks = allPlayable(analysis: analysis, odds: odds);
+    final picks = allPlayable(
+      analysis: analysis, odds: odds,
+      minimumMarketProbability: minimumMarketProbability,
+    );
     return picks.isEmpty ? null : picks.first;
   }
 
@@ -19,6 +23,7 @@ class SmartBetSportsCouponAdapter {
   static List<SmartBetSportsMarketPick> allPlayable({
     required AnalysisResult analysis,
     required FixtureMarketOdds? odds,
+    int minimumMarketProbability = 0,
   }) {
     if (odds == null) return const <SmartBetSportsMarketPick>[];
 
@@ -56,6 +61,7 @@ class SmartBetSportsCouponAdapter {
     return SmartBetSportsMarketSelector.allPlayable(
       sportsProbabilities: probabilities,
       blockedMarkets: analysis.sportsAuditBlockedMarkets,
+      minimumProbability: minimumMarketProbability,
       quotedOdds: {
         for (final entry in odds.bestByOutcome.entries)
           entry.key: entry.value.odd,

@@ -60,12 +60,17 @@ class SmartBetSportsMarketSelector {
     required Map<String, int> sportsProbabilities,
     required Map<String, double> quotedOdds,
     Iterable<String> blockedMarkets = const <String>[],
+    int minimumProbability = 0,
   }) {
+    if (minimumProbability < 0 || minimumProbability > 100) {
+      throw RangeError.range(minimumProbability, 0, 100, 'minimumProbability');
+    }
     final blocked = blockedMarkets.map(_normalizeMarket).toSet();
     final picks = <SmartBetSportsMarketPick>[];
 
     for (final entry in rankedMarkets(sportsProbabilities)) {
-      if (blocked.contains(_normalizeMarket(entry.key))) continue;
+      if (entry.value < minimumProbability ||
+          blocked.contains(_normalizeMarket(entry.key))) continue;
       final odd = quotedOdds[entry.key];
       if (odd == null || !odd.isFinite || odd < minimumOdd) continue;
       picks.add(
@@ -84,11 +89,13 @@ class SmartBetSportsMarketSelector {
     required Map<String, int> sportsProbabilities,
     required Map<String, double> quotedOdds,
     Iterable<String> blockedMarkets = const <String>[],
+    int minimumProbability = 0,
   }) {
     final picks = allPlayable(
       sportsProbabilities: sportsProbabilities,
       quotedOdds: quotedOdds,
       blockedMarkets: blockedMarkets,
+      minimumProbability: minimumProbability,
     );
     return picks.isEmpty ? null : picks.first;
   }

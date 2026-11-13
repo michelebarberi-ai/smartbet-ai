@@ -154,6 +154,7 @@ class SmartBetAutoCouponService {
     void Function(SmartBetAutoCouponProgress progress)? onProgress,
     int? requestedEvents, // headless only; manual app settings stay 2..6
     int windowDays = 1, // Rome calendar days, headless only
+    int? minimumMarketProbability, // from official headless preferences
   }) async {
     if (windowDays < 1 || windowDays > 3 ||
         (requestedEvents == null && windowDays != 1)) {
@@ -162,6 +163,13 @@ class SmartBetAutoCouponService {
     if (requestedEvents != null &&
         (requestedEvents < 3 || requestedEvents > 15)) {
       throw ArgumentError.value(requestedEvents, 'requestedEvents');
+    }
+    if (minimumMarketProbability != null &&
+        (requestedEvents == null ||
+         minimumMarketProbability < 50 ||
+         minimumMarketProbability > 90 ||
+         minimumMarketProbability % 5 != 0)) {
+      throw ArgumentError.value(minimumMarketProbability, 'minimumMarketProbability');
     }
     await SettingsStore.instance.initialize();
 
@@ -418,6 +426,8 @@ class SmartBetAutoCouponService {
           requestedEvents ?? SmartBetCouponService.maximumSelections,
       // Solo percorso headless P20; la Schedina AI manuale rimane invariata.
       collectVerifiedAlternatives: requestedEvents != null,
+      minimumMarketProbability: requestedEvents == null
+          ? null : (minimumMarketProbability ?? 65),
     );
 
     // ==========================================================
