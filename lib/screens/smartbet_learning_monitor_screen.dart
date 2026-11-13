@@ -14,6 +14,7 @@ import '../services/smartbet_shadow_learning_store.dart';
 import '../services/smartbet_shadow_outcome_service.dart';
 import '../services/smartbet_learning_gate_service.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
+import '../services/smartbet_league_market_shadow_service.dart';
 
 class SmartBetLearningMonitorScreen extends StatefulWidget {
   const SmartBetLearningMonitorScreen({super.key});
@@ -484,6 +485,8 @@ class _SmartBetLearningMonitorScreenState
                 const SizedBox(height: 12),
                 SmartBetLeagueMarketReliabilityPanel(
                   report: const SmartBetLeagueMarketReliabilityService()
+                      .evaluate(records: _records, asOf: DateTime.now().toUtc()),
+                  shadowReport: const SmartBetLeagueMarketShadowService()
                       .evaluate(records: _records, asOf: DateTime.now().toUtc()),
                 ),
 
