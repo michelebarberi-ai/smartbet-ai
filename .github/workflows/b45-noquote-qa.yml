@@ -49,6 +49,7 @@ jobs:
             test/services/smartbet_or_markets_test.dart \
             test/services/goalvdline_multi_bookmaker_odds_test.dart \
             test/services/goalvdline_on_demand_coupon_client_test.dart \
+            test/widgets/goalvdline_on_demand_coupon_panel_test.dart \
             test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
