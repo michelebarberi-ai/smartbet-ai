@@ -101,7 +101,7 @@ function createFlutterExecutor({projectRoot = path.resolve(__dirname, '../..'),
   };
 }
 
-function createHeadlessEngineHost({token, revision, execute = createFlutterExecutor(),
+function createHeadlessEngineHost({token, additionalToken = null, revision, execute = createFlutterExecutor(),
   now = () => new Date(), jobStore = null} = {}) {
   if (typeof token !== 'string' || token.length < 32 ||
       !REVISION.test(revision || '')) throw new Error('Headless engine disabled');
@@ -125,7 +125,11 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
     try { await loaded; } catch (_) {
       return respond(res, 503, {error:'job_store_unavailable'});
     }
-    if (!validToken(/^Bearer ([A-Za-z0-9_-]{32,})$/.exec(req.headers.authorization || '')?.[1], token)) {
+    const presented = /^Bearer ([A-Za-z0-9_-]{32,})$/.exec(req.headers.authorization || '')?.[1];
+    const primaryAuthorized = validToken(presented, token);
+    const b47Authorized = typeof additionalToken === 'string' && additionalToken.length >= 32 &&
+      validToken(presented, additionalToken);
+    if (!primaryAuthorized && !b47Authorized) {
       return respond(res, 401, {error:'unauthorized'});
     }
     const current = now();
@@ -137,6 +141,10 @@ function createHeadlessEngineHost({token, revision, execute = createFlutterExecu
         }
         jobs.delete(id);
       }
+    }
+    // B47: authenticated connectivity probe; never creates a job or accesses providers.
+    if (req.method === 'GET' && req.url === '/coupon/health') {
+      return respond(res, 200, {protocol:PROTOCOL,officialEngine:true,revision,ready:true});
     }
     if (req.method === 'POST' && req.url === '/coupon/generate') {
       let raw = '';
@@ -246,6 +254,7 @@ if (require.main === module) {
       const stateDir = env.AUTO_COUPON_HEADLESS_STATE_DIR;
       const jobStore = stateDir ? createDurableHeadlessJobStore(stateDir) : null;
       const host = createHeadlessEngineHost({token:env.AUTO_COUPON_HEADLESS_TOKEN,
+        additionalToken:env.AUTO_COUPON_HEADLESS_B47_TOKEN,
         revision:env.AUTO_COUPON_HEADLESS_REVISION,jobStore});
       const port = Number(env.AUTO_COUPON_HEADLESS_PORT || '8799');
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
