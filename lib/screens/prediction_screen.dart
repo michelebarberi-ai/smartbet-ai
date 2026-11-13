@@ -1216,6 +1216,51 @@ class _PredictionScreenState extends State<PredictionScreen> {
     }
   }
 
+  Widget _sportsForecastCard(_DailyForecast item, int position) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$position. ${item.match.homeTeam} - ${item.match.awayTeam}',
+              style: const TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold,
+              )),
+          const SizedBox(height: 5),
+          Text('${item.match.country} • ${item.match.league}',
+              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          const SizedBox(height: 10),
+          const Text('PRONOSTICO PRINCIPALE AI · ANALISI SPORTIVA',
+              style: TextStyle(
+                color: Colors.orangeAccent, fontSize: 10,
+                fontWeight: FontWeight.bold,
+              )),
+          const SizedBox(height: 4),
+          Text('${_dailyMarketDisplayName(item.market)} · ${item.probability}%',
+              style: const TextStyle(
+                color: Color(0xFF69F0AE), fontSize: 20,
+                fontWeight: FontWeight.bold,
+              )),
+          const SizedBox(height: 5),
+          Text('Smart Score: ${item.analysis.smartScore} · '
+               'Nessuna selezione con quota reale >1,20 verificata. '
+               'Questo pronostico non costituisce una giocata.',
+              style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          if (item.dualAnalysis != null) ...[
+            const SizedBox(height: 10),
+            DualEngineSummary(analysis: item.dualAnalysis!),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _resultCard(_DailyPick item, int position) {
     final usesQuotedAlternative = item.primaryForecastMarket != null &&
         item.primaryForecastMarket != item.market;
@@ -1788,6 +1833,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
   Widget build(BuildContext context) {
     final visibleResults = _results.where((item) => _competitionKeys.isEmpty ||
         _competitionKeys.contains(CompetitionFilterSheet.keyFor(item.match))).toList();
+    final visibleSportsForecasts = _sportsForecasts.where((item) =>
+        _competitionKeys.isEmpty ||
+        _competitionKeys.contains(CompetitionFilterSheet.keyFor(item.match))).toList();
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       appBar: AppBar(
@@ -1851,9 +1899,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'GoalVdLine cerca fino a 5 selezioni solide nel periodo selezionato '
-                    'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
-                    'e quota reale verificata superiore a 1,20.',
+                    'GoalVdLine mostra fino a 5 pronostici sportivi. Le quote reali '
+                    'superiori a 1,20 e l’Auditor determinano separatamente '
+                    'quali selezioni possono entrare in una schedina.',
                     style: TextStyle(color: Colors.white, height: 1.35),
                   ),
                 ],
@@ -1863,10 +1911,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
             _periodSelector(),
 
-            if (!_loading && _results.isEmpty && _error == null)
+            if (!_loading && _results.isEmpty && _sportsForecasts.isEmpty && _error == null)
               _manualStartCard(),
             if (_loading) ...[const SizedBox(height: 16), _progressCard()],
-            if (_error != null && _results.isEmpty) ...[
+            if (_error != null && _results.isEmpty && _sportsForecasts.isEmpty) ...[
               const SizedBox(height: 18),
               Container(
                 padding: const EdgeInsets.all(18),
@@ -1952,6 +2000,40 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   ),
                 ),
               ],
+            ],
+            if (_sportsForecasts.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              Text(
+                'PRONOSTICI AI SENZA QUOTA GIOCABILE • ${_sportsForecasts.length}',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Le probabilità sportive non vengono nascoste se un bookmaker '
+                'non offre una selezione verificata. '
+                'Solo le selezioni quotate sono giocabili.',
+                style: TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              CompetitionFilterButton(
+                leagues: _sportsForecasts
+                    .map((item) => (item.match.country, item.match.league)),
+                selectedKeys: _competitionKeys,
+                onChanged: (keys) => setState(() => _competitionKeys = keys),
+              ),
+              GoalVdLineCompetitionGroups<_DailyForecast>(
+                namespace: 'daily-sport-only',
+                items: visibleSportsForecasts,
+                countryOf: (item) => item.match.country,
+                leagueOf: (item) => item.match.league,
+                dateOf: (item) => item.match.date,
+                itemBuilder: (_, item) =>
+                    _sportsForecastCard(item, _sportsForecasts.indexOf(item) + 1),
+              ),
             ],
             const SizedBox(height: 6),
             const Text(
