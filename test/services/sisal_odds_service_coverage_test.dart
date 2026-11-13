@@ -56,6 +56,35 @@ void main() {
     service.dispose();
   });
 
+  test('B45: missing Sisal cache retries after expiry, not forever', () async {
+    var now = DateTime.utc(2026, 11, 13, 9);
+    var calls = 0;
+    final client = MockClient((_) async {
+      calls++;
+      return http.Response(jsonEncode({
+        'errors': <String, Object>{},
+        'response': [
+          fixtureBookmaker(calls == 1 ? 'Bet365' : 'Sisal', calls),
+        ],
+      }), 200);
+    });
+    final service = SisalOddsService(
+      oddsService: OddsService(client: client, now: () => now),
+    );
+
+    expect(await service.getFixtureMarketOdds(fixtureId: 98100004), isNull);
+    expect(calls, 1);
+    now = now.add(const Duration(minutes: 5));
+    expect(await service.getFixtureMarketOdds(fixtureId: 98100004), isNull);
+    expect(calls, 1);
+    now = now.add(const Duration(minutes: 6));
+    final recovered =
+        await service.getFixtureMarketOdds(fixtureId: 98100004);
+    expect(recovered?.oddFor('1')?.bookmakerName, 'Sisal');
+    expect(calls, 2);
+    service.dispose();
+  });
+
   test('B45: no bookmakers yields no available coupon quotes', () async {
     final client = MockClient((_) async => http.Response(jsonEncode({
       'errors': <String, Object>{},
