@@ -56,6 +56,7 @@ class SmartBetMultiMarketSelectionService {
     'HANDICAP EUROPEO',
     'MULTIGOL',
     'COMBO AVANZATE',
+    'MERCATI OPPURE',
     'DRAW NO BET',
     'HANDICAP ASIATICO',
   ];
@@ -102,6 +103,8 @@ class SmartBetMultiMarketSelectionService {
           'MULTIGOL 2-5',
           'MULTIGOL 3-5',
         ];
+      case 'MERCATI OPPURE':
+        return SmartBetMarketProbabilityService.orMarkets;
       case 'COMBO AVANZATE':
         return const [
           '1X + O1.5',
