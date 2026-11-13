@@ -1,4 +1,5 @@
 import 'smartbet_analysis_history_store.dart';
+import 'smartbet_analysis_market_settlement.dart';
 
 /// P21W.4: retrospective, point-in-time SHADOW replay.
 /// No predictions, coupon picks, stored history or live weights are modified.
@@ -188,6 +189,18 @@ class SmartBetLeagueMarketShadowService {
     final kickoff = r.matchDate.toUtc();
     final known = r.outcomeKnownBy?.toUtc();
     final p = r.probability;
+    if (r.actualHomeGoals == null || r.actualAwayGoals == null) return false;
+    final settlement = SmartBetAnalysisMarketSettlement.evaluate(
+      market: r.market,
+      homeGoals: r.actualHomeGoals!,
+      awayGoals: r.actualAwayGoals!,
+    );
+    // Never train on unverified, unsupported or conflicting labels.
+    if (settlement == SmartBetAnalysisSettlement.unsupported ||
+        (r.status == SmartBetAnalysisStatus.correct && settlement != SmartBetAnalysisSettlement.correct) ||
+        (r.status == SmartBetAnalysisStatus.wrong && settlement != SmartBetAnalysisSettlement.wrong)) {
+      return false;
+    }
     return r.prospectiveEligible &&
         r.fixtureId > 0 &&
         _label(r.country).isNotEmpty &&
