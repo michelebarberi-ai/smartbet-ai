@@ -7,7 +7,7 @@ import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
-import '../services/sisal_odds_service.dart';
+import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
@@ -436,7 +436,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       );
 
       // Per la scelta SmartBet restano validi i filtri reali.
-      if (probability <= 0 || bestOdd == null || bestOdd.odd < _minimumOdd) {
+      if (probability <= 0 || bestOdd == null || bestOdd.odd <= _minimumOdd) {
         continue;
       }
 
@@ -2317,8 +2317,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _checkingOdds = true;
       });
 
-      final oddsService = SisalOddsService();
-      final sisalQuotedFixtures = <int>{};
+      final oddsService = OddsService();
+      final bookmakerQuotedFixtures = <int>{};
       final validCandidates = <_CombinationCandidate>[];
       final reserveCount = math.max(2, (_topCount * 0.50).ceil());
 
@@ -2375,7 +2375,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             );
             if (marketOdds == null) continue;
             if (marketOdds.bestByOutcome.isNotEmpty) {
-              sisalQuotedFixtures.add(item.match.fixtureId);
+              bookmakerQuotedFixtures.add(item.match.fixtureId);
             }
 
             final multiPick = SmartBetMultiMarketSelectionService.bestQuoted(
@@ -2415,7 +2415,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             );
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
-              sisalQuotedFixtures.add(item.match.fixtureId);
+              bookmakerQuotedFixtures.add(item.match.fixtureId);
             }
             final executableFamilyCandidate = _bestFamilyQuotedCandidate(
               candidate: item,
@@ -2432,7 +2432,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
             validCandidates.add(executableFamilyCandidate);
           } else if (item.odd != null &&
-              item.odd! >= _minimumOdd &&
+              item.odd! > _minimumOdd &&
               item.bookmaker != null) {
             validCandidates.add(item);
           } else {
@@ -2441,13 +2441,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             );
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
-              sisalQuotedFixtures.add(item.match.fixtureId);
+              bookmakerQuotedFixtures.add(item.match.fixtureId);
             }
             final bestOdd = marketOdds?.oddFor(item.market);
 
-            // Quota Sisal assente o inferiore a 1.20: esclusa dalla schedina,
+            // Quota reale assente o inferiore a 1.20: esclusa dalla schedina,
             // non dal pronostico sportivo.
-            if (bestOdd == null || bestOdd.odd < _minimumOdd) {
+            if (bestOdd == null || bestOdd.odd <= _minimumOdd) {
               continue;
             }
 
@@ -2493,7 +2493,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             hasRealOdd:
                 pick.odd != null &&
                 pick.odd!.isFinite &&
-                pick.odd! >= _minimumOdd,
+                pick.odd! > _minimumOdd,
           );
           if (!correction.applied) {
             adjusted.add(pick);
@@ -2540,17 +2540,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           _loading = false;
           _checkingOdds = false;
           _errorMessage = _selectedMarket != 'COMBO CHANCE' &&
-                  sisalQuotedFixtures.isEmpty
-              ? 'Il feed non restituisce quote Sisal per queste partite. '
+                  bookmakerQuotedFixtures.isEmpty
+              ? 'Il feed non restituisce quote bookmaker per queste partite. '
                   'Le previsioni sportive sono distinte dalle schedine: '
                   'nessuna quota viene inventata.'
               : _minimumMarketProbability == 0
                   ? 'Nessuna selezione giocabile supera insieme i controlli '
-                      'Auditor e la quota Sisal minima di 1,20.'
+                      'Auditor e la quota reale superiore a 1,20.'
                   : 'Nessuna selezione giocabile supera insieme la '
                       'probabilità di mercato minima del '
                       '$_minimumMarketProbability%, i controlli Auditor '
-                      'e la quota Sisal minima di 1,20.';
+                      'e la quota reale superiore a 1,20.';
         });
         return;
       }
@@ -3818,7 +3818,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
             final quoteText = option.odd == null
                 ? 'Quota n/d'
-                : option.odd! < _minimumOdd
+                : option.odd! <= _minimumOdd
                 ? 'Quota ${option.odd!.toStringAsFixed(2)} • sotto minimo'
                 : 'Quota ${option.odd!.toStringAsFixed(2)}';
 
@@ -3883,7 +3883,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                           quoteText,
                           style: TextStyle(
                             color:
-                                option.odd != null && option.odd! >= _minimumOdd
+                                option.odd != null && option.odd! > _minimumOdd
                                 ? Colors.white54
                                 : Colors.orangeAccent,
                             fontSize: 9,
@@ -3937,7 +3937,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         .toList()
       ..sort((a, b) => b.probability.compareTo(a.probability));
     final mainSport = modelOptions.isEmpty ? null : modelOptions.first;
-    final isSisalAlternative =
+    final isQuotedAlternative =
         mainSport != null && mainSport.market != item.market;
 
     return Container(
@@ -4007,7 +4007,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ),
 
           const SizedBox(height: 15),
-          if (isSisalAlternative) ...[
+          if (isQuotedAlternative) ...[
             Text(
               'PRONOSTICO PRINCIPALE AI: '
               '${_familyDisplayName(mainSport.market)} '
@@ -4031,9 +4031,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   ),
                   child: Column(
                     children: [
-                      if (isSisalAlternative)
+                      if (isQuotedAlternative)
                         const Text(
-                          'ALTERNATIVA SISAL',
+                          'ALTERNATIVA QUOTATA',
                           style: TextStyle(color: Colors.amberAccent, fontSize: 10),
                         ),
                       Text(
@@ -4313,7 +4313,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
                 : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
-                : 'Filtro automatico: solo selezioni con quota reale almeno 1.20.',
+                : 'Filtro automatico: solo selezioni con quota reale > 1.20.',
             style: TextStyle(
               color: Colors.orangeAccent,
               fontSize: 11,
@@ -4676,7 +4676,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 7),
             Text(
               _checkingOdds
-                  ? 'Controllo quote reali ≥ 1.20...'
+                  ? 'Controllo quote reali > 1.20...'
                   : _total > 0
                   ? 'Analizzate $_processed / '
                         '$_total partite'
@@ -4722,7 +4722,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 7),
             const Text(
               'Stime sportive calcolate prima delle quote. '
-              'Non sono selezioni di schedina: la quota Sisal è '
+              'Non sono selezioni di schedina: la quota reale è '
               'assente o la selezione non ha superato i controlli.',
               style: TextStyle(color: Colors.white60, fontSize: 11),
             ),
