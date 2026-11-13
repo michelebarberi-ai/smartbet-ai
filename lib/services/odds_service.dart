@@ -148,6 +148,11 @@ class OddsService {
   OddsService({http.Client? client}) : _client = client ?? http.Client();
 
   static final Map<String, FixtureMarketOdds?> _marketCache = {};
+  static final Map<String, DateTime> _marketCacheTime = {};
+  // Missing Sisal quotes must never remain missing until the app restarts.
+  // Positive quotes also expire instead of becoming stale indefinitely.
+  static const Duration _missingQuoteTtl = Duration(minutes: 10);
+  static const Duration _availableQuoteTtl = Duration(minutes: 30);
 
   // PATCH 02B FIX — cache distinta per fixture + bookmaker
 
@@ -185,7 +190,16 @@ class OddsService {
     final cacheKey = '$fixtureId|${normalizedBookmaker ?? '*'}';
 
     if (_marketCache.containsKey(cacheKey)) {
-      return _marketCache[cacheKey];
+      final cachedAt = _marketCacheTime[cacheKey];
+      final ttl = _marketCache[cacheKey] == null
+          ? _missingQuoteTtl
+          : _availableQuoteTtl;
+      final age = cachedAt == null ? null : DateTime.now().difference(cachedAt);
+      if (age != null && !age.isNegative && age < ttl) {
+        return _marketCache[cacheKey];
+      }
+      _marketCache.remove(cacheKey);
+      _marketCacheTime.remove(cacheKey);
     }
 
     final uri = Uri.parse(
@@ -732,6 +746,7 @@ class OddsService {
           'BOOKMAKER NON DISPONIBILE PER FIXTURE $fixtureId: $requestedBookmaker',
         );
         _marketCache[cacheKey] = null;
+        _marketCacheTime[cacheKey] = DateTime.now();
         return null;
       }
 
@@ -816,6 +831,7 @@ class OddsService {
       debugPrint('========================================');
 
       _marketCache[cacheKey] = result;
+      _marketCacheTime[cacheKey] = DateTime.now();
       return result;
     } catch (e) {
       debugPrint('SMARTBET ODDS EXCEPTION: $e');
@@ -1003,6 +1019,7 @@ class OddsService {
 
   static void clearCache() {
     _marketCache.clear();
+    _marketCacheTime.clear();
   }
 
   void dispose() {
