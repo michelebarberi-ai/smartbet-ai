@@ -199,3 +199,38 @@ jobs:
           done
           echo "FAIL: private Neon worker was not independently certified."
           exit 1
+
+
+  on-demand-api-ready:
+    # The mobile route is gated by a live private Neon worker; no writes here.
+    needs: private-neon-worker-ready
+    if: github.ref == 'refs/heads/deploy/b47-learning-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Check mobile on-demand admission status without submitting jobs
+        shell: bash
+        env:
+          STATUS_URL: https://goalvdline-learning-api.onrender.com/learning/v1/status
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/b47-mobile-status.json"
+          for attempt in 1 2 3; do
+            status="$(curl --silent --show-error --connect-timeout 15 \
+              --max-time 120 --max-redirs 0 --output "$response_file" \
+              --write-out '%{http_code}' "$STATUS_URL")" || status="000"
+            if [[ "$status" == "200" ]] && node -e '
+              const fs = require("node:fs");
+              const x = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              if (x.enabled !== true || x.mobileIngestEnabled !== true ||
+                  x.onDemandCouponRequestsEnabled !== true) process.exit(1);
+            ' "$response_file"; then
+              echo "PASS: guarded B47 mobile admission is live."
+              echo "This check did not generate a coupon, register a device or write to Neon."
+              exit 0
+            fi
+            echo "On-demand admission not ready (attempt $attempt, HTTP $status)"
+            if [[ "$attempt" != "3" ]]; then sleep 20; fi
+          done
+          echo "FAIL: B47 mobile admission gates are not ready."
+          exit 1
