@@ -50,6 +50,110 @@ class LearningRepository {
     return result.rowCount;
   }
 
+  // B47: authenticated, idempotent on-demand requests. Never use the daily
+  // preference subscription as an implicit job request.
+  async enqueueOnDemandCoupon({subjectHash, requestId, dayKey, preferences}) {
+    const jobId = randomUUID();
+    await this.pool.query(
+      `INSERT INTO sb_on_demand_coupon_jobs_v1
+       (job_id,subject_hash,request_id,local_day,preferences)
+       VALUES ($1::uuid,$2,$3::uuid,$4::date,$5::jsonb)
+       ON CONFLICT (subject_hash,request_id) DO NOTHING`,
+      [jobId,subjectHash,requestId,dayKey,JSON.stringify(preferences)]
+    );
+    const result = await this.pool.query(
+      `SELECT job_id AS "jobId", status, local_day::text AS "dayKey", preferences
+       FROM sb_on_demand_coupon_jobs_v1
+       WHERE subject_hash=$1 AND request_id=$2::uuid`,
+      [subjectHash,requestId]
+    );
+    const saved = result.rows[0];
+    if (!saved || JSON.stringify(saved.preferences) !== JSON.stringify(preferences) ||
+        saved.dayKey !== dayKey) {
+      return {conflict:true};
+    }
+    return {jobId:saved.jobId,status:saved.status,dayKey:saved.dayKey};
+  }
+
+  async readOnDemandCoupon({subjectHash,jobId}) {
+    const result = await this.pool.query(
+      `SELECT job_id AS "jobId", local_day::text AS "dayKey", status,
+         coupon_json AS coupon, completed_at AS "completedAt"
+       FROM sb_on_demand_coupon_jobs_v1
+       WHERE subject_hash=$1 AND job_id=$2::uuid`,
+      [subjectHash,jobId]
+    );
+    return result.rows[0] || null;
+  }
+
+  // Atomic PostgreSQL lease, fenced by token and attempt. Reclaim a job
+  // after a Render restart without allowing an old process to mark READY.
+  async claimOnDemandCoupon() {
+    await this.pool.query(
+      `UPDATE sb_on_demand_coupon_jobs_v1 SET status='failed',
+         lease_token=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
+       WHERE status='running' AND attempts>=3
+         AND lease_expires_at<=clock_timestamp()`
+    );
+    const leaseToken = randomUUID();
+    const result = await this.pool.query(
+      `WITH candidate AS (
+         SELECT job_id FROM sb_on_demand_coupon_jobs_v1
+         WHERE attempts<3 AND local_day=(clock_timestamp() AT TIME ZONE 'Europe/Rome')::date
+           AND ((status='queued' AND
+                   (next_retry_at IS NULL OR next_retry_at<=clock_timestamp()))
+                OR (status='running' AND lease_expires_at<=clock_timestamp()))
+         ORDER BY created_at
+         FOR UPDATE SKIP LOCKED LIMIT 1
+       )
+       UPDATE sb_on_demand_coupon_jobs_v1 AS jobs SET
+         status='running', attempts=jobs.attempts+1,
+         lease_token=$1::uuid,
+         lease_expires_at=clock_timestamp()+INTERVAL '3 minutes',
+         next_retry_at=NULL, updated_at=clock_timestamp()
+       FROM candidate WHERE jobs.job_id=candidate.job_id
+       RETURNING jobs.job_id AS "jobId", jobs.subject_hash AS "subjectHash",
+         jobs.local_day::text AS "dayKey", jobs.preferences, jobs.attempts,
+         jobs.lease_token AS "leaseToken"`,
+      [leaseToken]
+    );
+    return result.rows[0] || null;
+  }
+
+  async renewOnDemandCouponLease({jobId,attempts,leaseToken}) {
+    const result = await this.pool.query(
+      `UPDATE sb_on_demand_coupon_jobs_v1 SET
+          lease_expires_at=clock_timestamp()+INTERVAL '3 minutes',
+          updated_at=clock_timestamp()
+       WHERE job_id=$1::uuid AND attempts=$2 AND lease_token=$3::uuid
+         AND status='running' AND lease_expires_at>clock_timestamp()`,
+      [jobId,attempts,leaseToken]
+    );
+    return result.rowCount===1;
+  }
+
+  async finishOnDemandCoupon({jobId,attempts,leaseToken,outcome,coupon=null}) {
+    const ready = outcome==='ready';
+    const noCoupon = outcome==='no_coupon';
+    const result = await this.pool.query(
+      `UPDATE sb_on_demand_coupon_jobs_v1 SET
+        status=CASE WHEN $4::boolean THEN 'ready'
+                    WHEN $5::boolean THEN 'no_coupon'
+                    WHEN attempts<3 THEN 'queued' ELSE 'failed' END,
+        coupon_json=CASE WHEN $4::boolean THEN $6::jsonb ELSE NULL END,
+        completed_at=CASE WHEN $4::boolean OR $5::boolean OR attempts>=3
+                    THEN clock_timestamp() ELSE NULL END,
+        next_retry_at=CASE WHEN NOT ($4::boolean OR $5::boolean) AND attempts<3
+                    THEN clock_timestamp()+INTERVAL '3 minutes' ELSE NULL END,
+        lease_token=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
+       WHERE job_id=$1::uuid AND attempts=$2 AND lease_token=$3::uuid
+         AND status='running' AND lease_expires_at>clock_timestamp()`,
+      [jobId,attempts,leaseToken,ready,noCoupon,
+        ready ? JSON.stringify(coupon) : null]
+    );
+    return result.rowCount===1;
+  }
+
   // Only user-selected preferences. This does not register a runnable job.
   async upsertAutoCouponPreferences({subjectHash, preferences}) {
     await this.pool.query(
