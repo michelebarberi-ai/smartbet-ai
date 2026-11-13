@@ -1,0 +1,32 @@
+# GoalVdLine AI — Build 45 | Release notes interne
+
+Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
+
+## Funzioni client previste
+
+- Schedina AI e analisi su richiesta con mercati filtrati per probabilità/qualità.
+- Portafoglio di varianti coordinate sulle stesse partite, nei limiti delle selezioni effettivamente disponibili.
+- Previsione sportiva da mantenere distinta dalla selezione quotata; niente ripiego su pronostici deboli 7–13% solo per raggiungere la quota minima.
+- Riepilogo in Home delle partite future del giorno candidabili all'analisi (non numero di pronostici affidabili già prodotti).
+- Notifica locale iOS opzionale dopo generazione positiva richiesta dall'utente, con salvataggio e apertura dell'ultimo riepilogo sul dispositivo. Permesso richiesto nelle Impostazioni.
+
+## Limiti espliciti
+
+- Niente generazione automatica quotidiana su server o APNs per AutoSchedina: codice conservato, feature rimandata per evitare nuovi costi fissi.
+- Il numero nella Home è calcolato all'apertura o al refresh, non inviato automaticamente alle 08:00 con app chiusa.
+- Una notifica locale non garantisce che un'analisi prosegua dopo chiusura forzata dell'app.
+- La schermata aperta dalla notifica mostra un riepilogo testuale dell'ultima schedina locale, non l'editor originale. Quote e disponibilità possono cambiare.
+- Nessuna quota Sisal va inventata quando mancano dati reali; le previsioni non diventano vincite garantite.
+
+## Evidenze e release gate ancora aperti
+
+- Flutter: 685 test passati e 3 skipped su revisione 0449c23, exit 0.
+- Tap notifica: 5 test mirati passati e compilazione iOS senza firma riuscita su revisione 5c969a7, exit 0.
+- Da verificare **prima dell'effettivo rilascio**: regressioni quote Sisal e probabilità deboli, consenso e tap su iPhone reale, firma e upload pipeline, eventuali incompatibilità con runner GitHub.
+- PR #1 di staging ancora draft: non fare merge automatico verso staging Render/Neon.
+
+## Procedura di rilascio
+
+- Sorgente di preparazione: feature/b45-p20-4-multiday.
+- Workflow GitHub predisposto per il futuro branch release/b45-testflight con numero build 45; **non creare né fare push di quel branch prima della chiusura dei gate**.
+- Nessun upload TestFlight, nuovo servizio Render o modifica Neon in questa fase.
