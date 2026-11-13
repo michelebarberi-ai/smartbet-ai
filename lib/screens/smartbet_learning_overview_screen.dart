@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_device_learning_preferences.dart';
 import '../services/smartbet_learning_overview_service.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
+import '../widgets/smartbet_league_market_reliability_panel.dart';
 import 'smartbet_learning_monitor_screen.dart';
 
 /// Sola lettura degli archivi esistenti: niente resolver, richieste API
@@ -20,6 +22,7 @@ class SmartBetLearningOverviewScreen extends StatefulWidget {
 class _SmartBetLearningOverviewScreenState
     extends State<SmartBetLearningOverviewScreen> {
   SmartBetLearningOverview? _summary;
+  SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
   bool? _enabled;
   bool _loading = true;
   String? _error;
@@ -46,10 +49,15 @@ class _SmartBetLearningOverviewScreenState
         marketRecords: markets.records,
         scorerRecords: scorers.records,
       );
+      // P21W: calculate only from locally persisted history, without
+      // network calls, resolving results or altering any prediction.
+      final leagueReport = const SmartBetLeagueMarketReliabilityService()
+          .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       if (!mounted) return;
       setState(() {
         _enabled = enabled;
         _summary = snapshot;
+        _leagueMarketReport = leagueReport;
         _loading = false;
       });
     } catch (e) {
@@ -176,6 +184,10 @@ class _SmartBetLearningOverviewScreenState
                     ),
                   ]),
                 ],
+                if (_leagueMarketReport != null)
+                  SmartBetLeagueMarketReliabilityPanel(
+                    report: _leagueMarketReport!,
+                  ),
                 _panel('Esportazione diagnostica', [
                   const SmartBetDiagnosticExportButton(),
                 ]),
