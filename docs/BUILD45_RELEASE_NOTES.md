@@ -31,3 +31,10 @@ Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
 - Sorgente di preparazione: feature/b45-p20-4-multiday.
 - Workflow GitHub predisposto per il futuro branch release/b45-testflight con numero build 45; **non creare né fare push di quel branch prima della chiusura dei gate**.
 - Nessun upload TestFlight, nuovo servizio Render o modifica Neon in questa fase.
+
+## Autorizzazione alla pubblicazione
+
+- **13 novembre 2026:** pubblicazione dell'unica Build 45 su TestFlight autorizzata dall'utente in chat.
+- Versione e numero build: **1.2.4 (45)**; sorgente release branch `release/b45-testflight`.
+- La pipeline GitHub Actions `SmartBet iOS TestFlight` è autorizzata a firmare e caricare la build su App Store Connect; lo stato effettivo va verificato nei job.
+- La PR di staging resta in bozza e AutoSchedina remota, worker Render e sincronizzazioni aggiuntive non devono essere attivati.
