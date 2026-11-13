@@ -138,3 +138,10 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - Nessuna esecuzione GitHub Actions associata alla revisione `84a2c64` mostrata dalla ricerca; i risultati Mac forniti dall'utente sono la sola evidenza dei test per tale revisione.
 - [ ] Verificare separatamente la disponibilità e la scadenza di Neon staging prima di collegare un worker (scadenza precedentemente annotata 17/11/2026). Conservare Primary completamente isolata.
 - [ ] Individuare e verificare il container Linux P20.4 isolato, confrontare commit/schema/provider, quindi collaudo reale `coordinator → official engine → Neon READY → lettura iPhone`, inclusi casi `no_coupon`, retry, lease e sicurezza. Non dichiarare E2E concluso con i soli test mock.
+
+### Decisione costi infrastrutturali (13/11/2026)
+- **Vincolo utente: evitare nuovi costi fissi mensili**. Non creare/attivare il Background Worker Render a pagamento ($7/mese come mostrato nell'interfaccia del 13/11/2026) e non abilitare i suoi feature flag.
+- La configurazione del worker esiste soltanto come opzione di sviluppo, non è stata distribuita. Render Flutter staging è alla revisione `2ee681c`; la feature branch recente non è ancora promossa. Neon `smartbet-b45-staging` è separato da production.
+- [ ] Esaminare alternativa **senza nuovo costo fisso**: generazione locale on-demand in app oppure GitHub Actions schedulato con il vero motore ufficiale Flutter, scrittura autenticata a staging Neon e quote/API sotto controllo; verificare limiti e affidabilità del cron, protezione segreti, consumo CI ed eventuali costi variabili.
+- [ ] Il runner GitHub non accede direttamente all'host privato Render `smartbet-b45-flutter-staging:8799`; non sostituire semplicemente l'URL senza riprogettare il trasporto. L'automazione giornaliera + APNs non è ancora garantita da nessuna alternativa proposta.
+- [ ] Audit fatture e piani attivi Render, Neon, API sportive/quote e Apple Developer prima di ulteriori attivazioni a pagamento. Non interpretare il piano Free o il credito CI come promessa di costo totale nullo.
