@@ -200,6 +200,30 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final Set<int> _expandedComboFixtures = {};
 
   static const int _batchSize = 3;
+  /// Only the first five read-only forecasts are compared to Diego:
+  /// a missing bookmaker quote must not hide the second AI or cause
+  /// unbounded external analysis requests.
+  Future<void> _enrichUnquotedPreviewWithDiego() async {
+    final cap = math.min(5, _sportsOnlyPreview.length);
+    for (var i = 0; i < cap; i++) {
+      if (!mounted) return;
+      final pick = _sportsOnlyPreview[i];
+      try {
+        final dual = await _dualEngineService.attachDiego(
+          match: pick.match,
+          smartBet: pick.analysis,
+          smartBetMarket: pick.market,
+          smartBetProbability: pick.probability,
+          smartBetOdd: null,
+        );
+        if (!mounted) return;
+        _sportsOnlyPreview[i] = pick.withDualAnalysis(dual);
+      } catch (error) {
+        debugPrint('COMBINATIONS UNQUOTED DIEGO: $error');
+      }
+    }
+  }
+
   bool _acceptsMarketProbability(int probability) =>
       GoalVdLineMarketProbabilityFilter.accepts(
         probability: probability,
@@ -2293,7 +2317,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       // non-playable diagnostic view, kept separate from coupon _results.
       final sportsOnly = <_CombinationCandidate>[];
       for (final item in candidatesForOdds) {
-        if (_multiMarketMode) continue; // Do not invent a concrete market.
+        if (_multiMarketMode) {
+          final ranked = SmartBetMultiMarketSelectionService.rankedSportsMarkets(
+            analysis: item.analysis, families: _selectedMarkets,
+          );
+          if (ranked.isEmpty) continue;
+          sportsOnly.add(_CombinationCandidate(
+            match: item.match,
+            analysis: item.analysis,
+            market: ranked.first.market,
+            probability: ranked.first.probability,
+          ));
+          continue;
+        }
         if (_isFamilyMarket(_selectedMarket)) {
           final options = item.familyOptions
               .where((option) => option.probability > 0 && option.probability <= 100)
@@ -2536,6 +2572,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         (item) => !_acceptsMarketProbability(item.probability),
       );
       if (validCandidates.isEmpty) {
+        await _enrichUnquotedPreviewWithDiego();
         if (!mounted) return;
         setState(() {
           _results.clear();
@@ -4748,6 +4785,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                       '${!_acceptsMarketProbability(item.probability) ? ' · sotto soglia' : ''}',
                     style: const TextStyle(color: Colors.orangeAccent,
                         fontSize: 11)),
+                  if (item.dualAnalysis != null) ...[
+                    const SizedBox(height: 10),
+                    DualEngineSummary(analysis: item.dualAnalysis!),
+                  ],
                 ],
               ),
             )),
