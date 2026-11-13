@@ -88,7 +88,7 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - [x] Aggiunto un **servizio in sola lettura** (`smartbet_league_market_reliability_service.dart`) che raggruppa solo pronostici prospettici realmente risolti per paese, campionato, mercato e motore. Non legge quote e non cambia pronostici o schedine.
 - [x] Deduplica fixture/mercato/motore, esclude conflitti e dati non noti al momento del report (anti look-ahead).
 - [x] Riporta successi osservati, campioni, giornate distinte, probabilità media originaria, gap di calibrazione e Brier Score; aggiunge intervallo Wilson al 95% e stati insufficient / exploratory / signal / strongShadowCandidate (solo suggerimento sperimentale).
-- [ ] **TEST DA ESEGUIRE sul Mac**: nuovi test in `test/services/smartbet_league_market_reliability_service_test.dart` e suite completa sulla nuova revisione. Nessun esito verificato per P21W finché il Mac non risponde.
+- [x] **Mac verificato**: P21W test motore/widget e suite Flutter completati su commit `f37f1d5` (670 superati, 3 saltati, exit 0); analisi exit 0 con `--no-fatal-infos` e 711 segnalazioni. Sono ancora da verificare sul dispositivo i dati reali.
 - [ ] UI dashboard locale e conteggi effettivi iPhone: ancora aperti. Il report non contiene dati del dispositivo finché non viene interrogato il suo archivio tramite un flusso di consenso.
 - [ ] Solo dopo verifica prospettica SHADOW e gate espliciti valutare come usare queste statistiche nel ranking automatico; **nessun cambiamento automatico al motore adesso**.
 
@@ -102,7 +102,7 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 ### P21W — risultati verificati e UI (13/11/2026)
 - [x] **Mac, commit 923df91:** 7/7 test del motore P21W superati, `flutter analyze --no-pub --no-fatal-infos` exit 0, 711 segnalazioni non bloccanti (nessun error/warning nell'output filtrato).
 - [x] **Nuovi commit di sviluppo:** pannello read-only campionato × mercato integrato sia in `Intelligenza e apprendimento` sia nel `Learning Monitor`, che è raggiungibile direttamente dalla Home > STATISTICHE E IA. Due widget test dedicati (stato senza dati e campione insufficiente).
-- [ ] **Prima di marcarlo collaudato:** eseguire i nuovi widget test e `flutter analyze` sul Mac sulla revisione UI; i sette test verdi sono precedenti ai commit UI.
+- [x] **Verifica UI Mac**: test widget P21W e P21W.4 inclusi nella suite Flutter verde; analisi statica exit 0 sulla revisione UI.
 - [ ] Verificare sul dispositivo reale campioni, intervalli, cronologia e assenza di riscritture di preferenze; nessuna raccolta o sincronizzazione di dati aggiuntivi è stata abilitata.
 - [ ] Full suite Flutter e Node alla revisione finale della Build 45, senza pubblicazione anticipata.
 
@@ -113,5 +113,10 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - [x] Ogni pronostico viene confrontato solo con risultati già conosciuti **prima** del suo `firstSeenAt`, mai con risultati futuri; dati partizione per motore/paese/campionato/mercato, deduplica, esclusione conflitti, esiti non verificabili e mercati non liquidabili.
 - [x] Pannello P21W integrato in `Intelligenza e apprendimento` e `Learning Monitor` con Brier originale/SHADOW, campione di validazione e messaggi di dati insufficienti. Non modifica forecast, quote, ordinamenti, schedine, storage o server.
 - [x] Aggiunti test mirati `smartbet_league_market_shadow_service_test.dart` e un widget test P21W.4; `warrantsFurtherResearch` segnala soltanto ricerca esplorativa, **non autorizza promozione/ACTIVE**.
-- [ ] **DA ESEGUIRE SU MAC**: test P21W.4, widget, suite Flutter completa, analisi statica. Nessun esito dei nuovi test dichiarato finché non risponde il Mac.
+- [x] **Mac, commit `f37f1d5` (13/11/2026)**: suite Flutter completa 670 test superati e 3 saltati, exit 0; `flutter analyze --no-pub --no-fatal-infos` exit 0, 711 segnalazioni; nessuna riga error/warning nell'output filtrato mostrato. Questi risultati NON equivalgono a un collaudo con storico reale iPhone o allo staging Render/Neon.
 - [ ] Validare su archivio reale iPhone; poi solo eventuale ricerca su campioni futuri indipendenti e gate espliciti. Nessun deployment Render/Neon e nessuna Build TestFlight autorizzati da questa modifica.
+
+### Stato verifiche al 13/11/2026
+- Test backend auto_coupon: 134/134 superati sulla precedente revisione `0d4973f`; ripetere sul commit finale prima del rilascio.
+- PR #1 resta **draft** verso `staging/b45-render-linux`; non eseguire merge o deploy senza collaudo integrato.
+- Prossima priorità release-critical: P20.6 con test su assenza quote Sisal, forecast originale conservato, nessun coupon inventato; poi Render/Neon staging e iPhone.
