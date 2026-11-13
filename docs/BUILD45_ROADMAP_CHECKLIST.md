@@ -124,3 +124,11 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 ### P20.6 — Regressioni forecast-first aggiunte (13/11/2026)
 - [x] Aggiunti test in `test/services/smartbet_sports_market_selector_test.dart`: Sisal assente, quota principale sotto 1.20, alternativa almeno al 65%, protezione contro esiti 7–13% e invariabilità del ranking al cambiare delle sole quote.
 - [ ] Eseguire nuovi test sul Mac (commit `6757a87`); il codice del selettore non è stato modificato. Questi test non certificano la disponibilità commerciale/reale delle quote Sisal né la UI end-to-end.
+
+### P20.3/P20.4 — Separazione `no_coupon` da errori di trasporto (13/11/2026)
+
+- [x] Il runner ufficiale esistente restituisce HTTP 503 `{"error":"no_coupon"}` quando il job termina senza schedina valida. L'adapter riconosce **solo questa risposta minimale** dopo ticket/job autenticato sullo stesso host configurato.
+- [x] Il coordinatore Neon distingue il risultato `no_coupon` da `provider_unavailable` e da `insufficient_events`, registrando un retry senza `coupon_json` e senza un finto READY. Payload ibridi `no_coupon` + schedina vengono rifiutati.
+- [x] Test aggiunti in `auto_coupon_official_headless_runner.test.js` e `auto_coupon_generation_coordinator.test.js` per `no_coupon`, failure tecnica, sicurezza del payload e assenza di READY falso.
+- [ ] **Da verificare sul Mac**: test backend `auto_coupon_*.test.js` sulla revisione con questi cambi; non confondere i test con un vero collaudo Render/Neon.
+- [ ] **Bloccante**: collaudo P20.4 sul container Linux isolato con Neon *staging*, READY persistito e letto da iPhone, deduplica/lease/retry, APNs dove consentito. Non usare Neon Primary né fare merge della PR draft verso staging Render senza verifica e gate.
