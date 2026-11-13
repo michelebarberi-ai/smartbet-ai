@@ -17,6 +17,8 @@ function publicEvents(events) {
     marketProbability: event.marketProbability,
     kickoffAt: event.kickoffAt,
     ...(Object.hasOwn(event, 'odds') ? {odds: event.odds} : {}),
+    ...(typeof event.bookmaker === 'string' && event.bookmaker.trim() &&
+       event.bookmaker.length <= 80 ? {bookmaker:event.bookmaker.trim()} : {}),
   }));
 }
 function publicCoupon(coupon) {
