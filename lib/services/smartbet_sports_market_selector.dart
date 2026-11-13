@@ -105,7 +105,7 @@ class SmartBetSportsMarketSelector {
     for (final entry in ranked) {
       if (entry.value < minimumProbability) break;
       final odd = quotedOdds[entry.key];
-      if (odd == null || !odd.isFinite || odd < minimumOdd) continue;
+      if (odd == null || !odd.isFinite || odd <= minimumOdd) continue;
       playable = SmartBetSportsMarketPick(
         market: entry.key, probability: entry.value, odd: odd,
       );
@@ -136,7 +136,7 @@ class SmartBetSportsMarketSelector {
       if (entry.value < minimumProbability ||
           blocked.contains(_normalizeMarket(entry.key))) continue;
       final odd = quotedOdds[entry.key];
-      if (odd == null || !odd.isFinite || odd < minimumOdd) continue;
+      if (odd == null || !odd.isFinite || odd <= minimumOdd) continue;
       picks.add(
         SmartBetSportsMarketPick(
           market: entry.key,
