@@ -7,6 +7,7 @@ Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
 - Schedina AI e analisi su richiesta con mercati filtrati per probabilità/qualità.
 - Portafoglio di varianti coordinate sulle stesse partite, nei limiti delle selezioni effettivamente disponibili.
 - Previsione sportiva da mantenere distinta dalla selezione quotata; niente ripiego su pronostici deboli 7–13% solo per raggiungere la quota minima.
+- Generatore tre varianti allineato alla quota Sisal minima **1.20** (prima una soglia interna residua 1.25 scartava selezioni 1.20–1.24); test regressione aggiunti, verifica su Mac ancora da eseguire.
 - Riepilogo in Home delle partite future del giorno candidabili all'analisi (non numero di pronostici affidabili già prodotti).
 - Notifica locale iOS opzionale dopo generazione positiva richiesta dall'utente, con salvataggio e apertura dell'ultimo riepilogo sul dispositivo. Permesso richiesto nelle Impostazioni.
 
