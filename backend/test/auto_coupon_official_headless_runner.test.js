@@ -107,6 +107,50 @@ test('existing official adapter polls async jobs on the pinned host',async()=>{
   } finally {await h.stop();}
 });
 
+
+test('official no_coupon is distinguished from an engine failure end to end', async () => {
+  const h = await host(async () => ({
+    protocol:PROTOCOL,officialEngine:true,revision:REVISION,status:'no_eligible_coupon',
+  }));
+  try {
+    const adapter = createOfficialEngineAdapter({
+      clock:()=>NOW,
+      env:{
+        AUTO_COUPON_OFFICIAL_ENGINE_ENABLED:'true',
+        AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://engine.example.org/coupon/generate',
+        AUTO_COUPON_OFFICIAL_ENGINE_TOKEN:TOKEN,
+        AUTO_COUPON_OFFICIAL_ENGINE_REVISION:REVISION,
+      },
+      fetchImpl:(url,opts)=>fetch(h.origin+new URL(url).pathname,opts),
+      sleep:()=>Promise.resolve(),maxPolls:100,
+    });
+    const actual = await adapter({dayKey:request.dayKey,now:NOW,preferences});
+    assert.deepEqual(actual,{status:'no_coupon'});
+    assert.equal(Object.hasOwn(actual,'coupon'),false);
+  } finally {await h.stop();}
+});
+
+test('transport or runner failure cannot be mistaken for no_coupon', async () => {
+  for (const error of ['failed','provider_unavailable','invalid_stored_result']) {
+    const adapter = createOfficialEngineAdapter({
+      clock:()=>NOW,
+      env:{
+        AUTO_COUPON_OFFICIAL_ENGINE_ENABLED:'true',
+        AUTO_COUPON_OFFICIAL_ENGINE_URL:'https://engine.example.org/coupon/generate',
+        AUTO_COUPON_OFFICIAL_ENGINE_TOKEN:TOKEN,
+        AUTO_COUPON_OFFICIAL_ENGINE_REVISION:REVISION,
+      },
+      fetchImpl:async (url) => /\/jobs\//.test(url)
+        ? {status:503,headers:{get:()=>null},text:async()=>JSON.stringify({error})}
+        : {status:202,headers:{get:()=>null},
+          text:async()=>JSON.stringify({protocol:PROTOCOL,jobId:'a'.repeat(32)})},
+      sleep:()=>Promise.resolve(),maxPolls:3,
+    });
+    await assert.rejects(adapter({dayKey:request.dayKey,now:NOW,preferences}),
+      /Official engine unavailable/);
+  }
+});
+
 test('poll rejects malicious ticket and never follows off-host URL',async()=>{
   const adapter=createOfficialEngineAdapter({clock:()=>NOW,env:{
     AUTO_COUPON_OFFICIAL_ENGINE_ENABLED:'true',
