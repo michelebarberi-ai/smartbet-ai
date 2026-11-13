@@ -98,3 +98,10 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - Analisi: exit 0 con `--no-fatal-infos`, 706 segnalazioni non bloccanti riportate. L'output condiviso non mostra errori/warning.
 - ZIP sorgenti creato e verificato in `~/Downloads`, commit 34b0f92, circa 3,9 MB. È uno snapshot precedente alla P21W.
 - Questa evidenza non prova disponibilità live delle quote Sisal né la riuscita end-to-end su Render/Neon.
+
+### P21W — risultati verificati e UI (13/11/2026)
+- [x] **Mac, commit 923df91:** 7/7 test del motore P21W superati, `flutter analyze --no-pub --no-fatal-infos` exit 0, 711 segnalazioni non bloccanti (nessun error/warning nell'output filtrato).
+- [x] **Nuovi commit di sviluppo:** pannello read-only campionato × mercato integrato sia in `Intelligenza e apprendimento` sia nel `Learning Monitor`, che è raggiungibile direttamente dalla Home > STATISTICHE E IA. Due widget test dedicati (stato senza dati e campione insufficiente).
+- [ ] **Prima di marcarlo collaudato:** eseguire i nuovi widget test e `flutter analyze` sul Mac sulla revisione UI; i sette test verdi sono precedenti ai commit UI.
+- [ ] Verificare sul dispositivo reale campioni, intervalli, cronologia e assenza di riscritture di preferenze; nessuna raccolta o sincronizzazione di dati aggiuntivi è stata abilitata.
+- [ ] Full suite Flutter e Node alla revisione finale della Build 45, senza pubblicazione anticipata.
