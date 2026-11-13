@@ -13,7 +13,14 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let launched = super.application(
+      application, didFinishLaunchingWithOptions: launchOptions
+    )
+    // iOS suppresses presentation of local notifications in the foreground
+    // unless the app registers a UNUserNotificationCenter delegate.
+    // Delegate methods below preserve existing remote APNs forwarding.
+    UNUserNotificationCenter.current().delegate = self
+    return launched
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
