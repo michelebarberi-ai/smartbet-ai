@@ -13,6 +13,7 @@ import '../services/sisal_odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
+import '../services/goalvdline_ready_coupon_local_store.dart';
 import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_reliability_service.dart';
@@ -222,6 +223,48 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // visualizzata, così summary/card/share possono essere riutilizzati.
   final List<_PortfolioShadow> _portfolioResults = [];
   int _selectedPortfolioIndex = 0;
+
+  String _readyCouponSnapshotText() {
+    final coupons = _portfolioResults.isEmpty
+        ? <_PortfolioShadow>[
+            _PortfolioShadow(name: 'ANALISI SU RICHIESTA',
+              picks: List<_CouponPick>.of(_results)),
+          ]
+        : _portfolioResults;
+    final text = StringBuffer('GOALVDLINE — SCHEDINE CREATE SU RICHIESTA');
+    for (final coupon in coupons) {
+      if (coupon.picks.isEmpty) continue;
+      text.writeln();
+      text.writeln();
+      text.writeln('${coupon.name} — ${coupon.picks.length} partite');
+      for (var i = 0; i < coupon.picks.length; i++) {
+        final pick = coupon.picks[i];
+        final odd = pick.odd;
+        final oddLabel = odd == null || !odd.isFinite
+            ? 'quota non disponibile'
+            : 'quota ${odd.toStringAsFixed(2)}';
+        text.writeln('${i + 1}. ${pick.match.homeTeam} - '
+            '${pick.match.awayTeam} | ${pick.market} | '
+            '${pick.probability}% | $oddLabel');
+      }
+    }
+    return text.toString();
+  }
+
+  Future<void> _notifyReadyAfterSaving({required int coupons}) async {
+    // Notification taps open the ACTUAL completed coupon saved locally.
+    // If local persistence failed, don't send a misleading notification.
+    final saved = await const GoalVdLineReadyCouponLocalStore()
+        .save(_readyCouponSnapshotText());
+    if (!saved) {
+      debugPrint('B45 on-demand coupon: local snapshot unavailable');
+      return;
+    }
+    await const GoalVdLineCouponReadyNotifier().notifyReady(
+      coupons: coupons,
+      fixturesInPrimary: _results.length,
+    );
+  }
 
   final Map<int, MatchModel> _manualSelectedMatches = <int, MatchModel>{};
 
@@ -1042,9 +1085,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Analisi completata: ${_results.length} partite.')),
         );
-        unawaited(const GoalVdLineCouponReadyNotifier().notifyReady(
-          coupons: 1, fixturesInPrimary: _results.length,
-        ));
+        unawaited(_notifyReadyAfterSaving(coupons: 1));
       }
     } catch (e) {
       if (!mounted) return;
@@ -1996,9 +2037,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             'Partite nella principale: ${_results.length}.',
           )),
         );
-        unawaited(const GoalVdLineCouponReadyNotifier().notifyReady(
+        unawaited(_notifyReadyAfterSaving(
           coupons: _portfolioResults.length,
-          fixturesInPrimary: _results.length,
         ));
       }
     } catch (e) {
