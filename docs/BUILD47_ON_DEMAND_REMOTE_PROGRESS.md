@@ -34,6 +34,14 @@ senza aprire altri servizi o aumentare i costi senza verifica.
   HTTPS, niente redirect, bearer mobile dal Keychain fornito dal chiamante,
   request UUID salvato PRIMA dell'invio e job UUID ricordato localmente.
   Il client evita di lanciare un secondo job quando riapri l'app.
+- UI beta separata in `lib/widgets/goalvdline_on_demand_coupon_panel.dart`,
+  collegata a `create_ai_coupon_screen.dart`. Visibile solo se Render
+  certifica flag on-demand attivo; non modifica il percorso locale.
+- Test widget per flag OFF/ON e presenza delle azioni esplicite.
+  Le quote del JSON remoto non riportano ancora la fonte bookmaker e
+  l'headless AutoSchedina non garantisce mercati OR, confronto Diego,
+  filtri per campionato e corrispondenza con la generazione manuale.
+  **Questi sono blocchi di parità funzionale**, non funzionalità già approvate.
 - Test automatici backend: validazione richiesta, idempotenza, isolamento
   dispositivi, lease, quote, nessun risultato fittizio, flag disabilitati,
   worker autenticato, scheduler no-overlap. Test Flutter client: trasporto
@@ -67,11 +75,16 @@ indipendente. Non incorporare segreti nel repository o nel bundle iOS.
 2. Migrare schema su Neon **staging**, testare claim multiprocesso, riavvii,
    revoca token, cancellazione dati, rate limiting e ripresa. Nessuna migrazione
    live eseguita da ChatGPT.
-3. Collegare il client alla schermata «Crea Schedina» con indicatore
-   `in coda / in elaborazione / pronta / non disponibile / errore`.
-   Mostrare le tre schedine con stesse fixture e compatibilità con
-   SmartBet/Diego, mercati OR e quote di bookmaker reali. **Attualmente il
-   client Flutter è presente ma l'interfaccia non lo usa ancora.**
+3. **Collegamento UI implementato nel branch:** il riquadro
+   «ELABORAZIONE SERVER · BETA» appare SOLO in modalità automatica/OGGI
+   e SOLO se il server risponde con il feature flag abilitato.
+   Offre invio esplicito, recupero dell'ultima richiesta su riapertura
+   o riattivazione dell'app e visualizzazione delle tre varianti.
+   Il pulsante locale esistente resta funzionante e distinto.
+   **ANCORA DA VERIFICARE** su iPhone/Render con dati reali, inclusi
+   SmartBet/Diego, mercati OR, bookmaker e quota esatta: non dichiarare
+   equivalenza con il sistema locale e non attivare l'interfaccia prima
+   del collaudo staging.
 4. Verificare equivalenza dell'output del motore server con l'analisi
    su richiesta del dispositivo: l'adapter headless attuale deriva
    dall'AutoSchedina ufficiale e non garantisce tutte le opzioni manuali,
