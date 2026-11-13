@@ -4739,7 +4739,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   Text('${item.match.homeTeam} - ${item.match.awayTeam}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text('${item.market} · stima ${item.probability}% · Sisal N/D'
+                  Text('${item.market} · stima ${item.probability}% · quota non certificata'
                       '${!_acceptsMarketProbability(item.probability) ? ' · sotto soglia' : ''}',
                     style: const TextStyle(color: Colors.orangeAccent,
                         fontSize: 11)),
