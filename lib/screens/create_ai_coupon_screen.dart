@@ -266,10 +266,23 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       debugPrint('B45 on-demand coupon: local snapshot unavailable');
       return;
     }
-    await const GoalVdLineCouponReadyNotifier().notifyReady(
+    final notifier = const GoalVdLineCouponReadyNotifier();
+    if (!(await notifier.isEnabled())) return;
+    final scheduled = await notifier.notifyReady(
       coupons: coupons,
       fixturesInPrimary: fixtures,
     );
+    if (!scheduled && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Analisi completata, ma iOS non ha programmato la notifica. '
+            'Verifica il permesso e premi INVIA NOTIFICA DI PROVA '
+            'nelle Impostazioni.',
+          ),
+        ),
+      );
+    }
   }
 
   final Map<int, MatchModel> _manualSelectedMatches = <int, MatchModel>{};
