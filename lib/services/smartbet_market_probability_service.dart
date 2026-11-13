@@ -9,7 +9,28 @@ import '../models/analysis_result.dart';
 class SmartBetMarketProbabilityService {
   const SmartBetMarketProbabilityService._();
 
+  /// Mercati OR: e' sufficiente che si verifichi almeno una condizione.
+  /// NON sono combo AND (contrassegnate con '+').
+  /// Una stima modello OR non implica una quota offerta dal bookmaker.
+  static const List<String> orMarkets = <String>[
+    'GOAL O OVER 1.5',
+    'GOAL O OVER 2.5',
+    '1X O OVER 1.5',
+    '1X O OVER 2.5',
+    'X O OVER 1.5',
+    'X O OVER 2.5',
+    '1 O OVER 1.5',
+    '1 O OVER 2.5',
+    'X O UNDER 2.5',
+    'X O UNDER 3.5',
+    '2 O UNDER 2.5',
+    '2 O UNDER 3.5',
+    '1X O UNDER 2.5',
+    '1X O UNDER 3.5',
+  ];
+
   static const List<String> extendedMarkets = <String>[
+    ...orMarkets,
     'OVER 3.5',
     'UNDER 3.5',
     'OVER 4.5',
@@ -74,6 +95,34 @@ class SmartBetMarketProbabilityService {
       final total = home + away;
 
       switch (key) {
+        case 'GOAL O OVER 1.5':
+          return (home >= 1 && away >= 1) || total >= 2;
+        case 'GOAL O OVER 2.5':
+          return (home >= 1 && away >= 1) || total >= 3;
+        case '1X O OVER 1.5':
+          return home >= away || total >= 2;
+        case '1X O OVER 2.5':
+          return home >= away || total >= 3;
+        case 'X O OVER 1.5':
+          return home == away || total >= 2;
+        case 'X O OVER 2.5':
+          return home == away || total >= 3;
+        case '1 O OVER 1.5':
+          return home > away || total >= 2;
+        case '1 O OVER 2.5':
+          return home > away || total >= 3;
+        case 'X O UNDER 2.5':
+          return home == away || total <= 2;
+        case 'X O UNDER 3.5':
+          return home == away || total <= 3;
+        case '2 O UNDER 2.5':
+          return away > home || total <= 2;
+        case '2 O UNDER 3.5':
+          return away > home || total <= 3;
+        case '1X O UNDER 2.5':
+          return home >= away || total <= 2;
+        case '1X O UNDER 3.5':
+          return home >= away || total <= 3;
         case 'OVER 3.5':
           return total >= 4;
         case 'UNDER 3.5':
