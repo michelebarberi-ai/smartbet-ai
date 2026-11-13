@@ -19,6 +19,7 @@ void main() {
     SmartBetAnalysisStatus status = SmartBetAnalysisStatus.correct,
     bool prospective = true,
     double? odd,
+    int? awayGoals,
   }) {
     final match = kickoff ?? DateTime.utc(2026, 1, 1).add(Duration(days: fixture));
     final created = firstSeen ?? match.subtract(const Duration(hours: 6));
@@ -41,9 +42,9 @@ void main() {
       prospectiveEligible: prospective,
       status: status,
       actualHomeGoals: 2,
-      actualAwayGoals: (market == 'NO GOAL')
+      actualAwayGoals: awayGoals ?? ((market == 'NO GOAL')
           ? (status == SmartBetAnalysisStatus.correct ? 0 : 1)
-          : (status == SmartBetAnalysisStatus.correct ? 1 : 0),
+          : (status == SmartBetAnalysisStatus.correct ? 1 : 0)),
       firstSeenAt: created,
       lastSeenAt: resolved,
       resolvedAt: resolved,
@@ -91,12 +92,12 @@ void main() {
 
   test('P21W.4: conflicting recorded result and final score is rejected', () {
     final invalid = record(fixture: 1, market: 'GOAL',
-        status: SmartBetAnalysisStatus.wrong);
+        status: SmartBetAnalysisStatus.wrong, awayGoals: 1);
     final valid = record(fixture: 2);
     final report = service.evaluate(records: [invalid, valid], asOf: cutoff);
-    // Wrong GOAL has a 2-0 result in the helper and is valid.
-    expect(report.rejectedRecords, 0);
-    expect(report.segments.single.eligibleFixtures, 2);
+    // 'GOAL wrong' contradicts the recorded 2-1 final result.
+    expect(report.rejectedRecords, 1);
+    expect(report.segments.single.eligibleFixtures, 1);
   });
 
   test('P21W.4: fewer than 50 prior outcomes cannot calibrate', () {
