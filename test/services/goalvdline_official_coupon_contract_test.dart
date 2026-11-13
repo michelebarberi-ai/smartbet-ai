@@ -114,7 +114,7 @@ GoalVdLineAutoCouponPreferences prefs({
 );
 
 void main() {
-  test('P20.6: non esporta quota di bookmaker diverso da Sisal', () {
+  test('B47: esporta quota da un altro bookmaker reale con fonte', () {
     final selection = SmartBetCouponSelection(
       match: fixture(300), analysis: analysis(),
       sportsPick: const SmartBetSportsMarketPick(
@@ -122,10 +122,40 @@ void main() {
       ),
       sportsBookmaker: 'Altro Bookmaker',
     );
-    expect(GoalVdLineOfficialCouponContract.serialize(
+    final result = GoalVdLineOfficialCouponContract.serialize(
       coupon: coupon([selection, pick(301, '1', 70), pick(302, '1', 70)]),
       preferences: prefs(), now: now,
-    ), isNull);
+    );
+    expect(result, isNotNull);
+    final events = result!['events'] as List;
+    expect((events.first as Map)['bookmaker'], 'Altro Bookmaker');
+    expect((events.first as Map)['odds'], 1.60);
+  });
+
+  test('B47: quota 1.20 e bookmaker non attribuito non esportabili', () {
+    final unknown = SmartBetCouponSelection(
+      match: fixture(800), analysis: analysis(),
+      sportsPick: const SmartBetSportsMarketPick(
+        market: '1', probability: 80, odd: 1.50,
+      ),
+      sportsBookmaker: null,
+    );
+    expect(GoalVdLineOfficialCouponContract.serialize(
+      coupon: coupon([unknown,pick(801,'1',75),pick(802,'1',75)]),
+      preferences: prefs(),now:now,
+    ),isNull);
+    expect(GoalVdLineOfficialCouponContract.serialize(
+      coupon: coupon([
+        pick(803,'1',85,odd:1.20),pick(804,'1',75),pick(805,'1',75),
+      ]),preferences:prefs(),now:now,
+    ),isNull);
+    expect(GoalVdLineOfficialCouponContract.serialize(
+      coupon: coupon([
+        pick(803,'1',85,odd:1.21),pick(804,'1',75),pick(805,'1',75),
+      ]),preferences:prefs(),now:now,
+    ),isNotNull);
+    expect(GoalVdLineOfficialCouponContract.marketFamily('GOAL O OVER 2.5'),'OR');
+    expect(GoalVdLineOfficialCouponContract.marketFamily('X O UNDER 3.5'),'OR');
   });
 
   test('P20: tre schedine con stessi 3 eventi, mercati reali diversi', () {
