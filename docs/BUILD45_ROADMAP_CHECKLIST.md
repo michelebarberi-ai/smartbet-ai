@@ -4,6 +4,12 @@ Aggiornamento: 12 novembre 2026. Riferimento: feature/b45-p20-4-multiday, PR #1 
 
 **Vincolo di rilascio:** una sola Build 45 su TestFlight quando tutte le voci release-critical sono verificate. Non modificare silenziosamente i limiti delle funzioni manuali e non attivare worker, notifiche, sincronizzazioni o apprendimento centralizzato senza consenso/gate previsti. Non unire questa PR nella staging usata da Render prima del collaudo specifico.
 
+## Segnalazioni TestFlight Build 46 — 13/11/2026
+
+- [ ] **Modifica 1 / priorità alta:** le schedine **su richiesta** devono continuare a essere elaborate sul server anche se l'iPhone va in background, viene bloccato o l'app si chiude. Riutilizzare **prima** Render/Flutter già pagati e Neon solo dopo verifica, con richiesta autenticata, job persistente, stato e recupero su iPhone, notifica solo a READY. Nessun servizio aggiuntivo o flag AutoSchedina giornaliera abilitato automaticamente.
+- [ ] Altri bug segnalati durante il collaudo: dettagli ancora da ricevere; numerare dal punto 2 in avanti.
+- Registro dedicato: [`docs/BUILD46_TESTFLIGHT_BUGS.md`](BUILD46_TESTFLIGHT_BUGS.md). La modifica 1 è **registrata, non ancora implementata**. Nessun deploy Render, Neon o TestFlight autorizzato dal solo registro.
+
 Legenda:
 - [x] Presente nel codice e testato nel perimetro indicato
 - [ ] Da completare, correggere oppure collaudare; la sola presenza di codice non costituisce esito positivo
