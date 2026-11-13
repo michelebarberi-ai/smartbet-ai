@@ -19,6 +19,10 @@ function publicEvents(events) {
     ...(Object.hasOwn(event, 'odds') ? {odds: event.odds} : {}),
     ...(typeof event.bookmaker === 'string' && event.bookmaker.trim() &&
        event.bookmaker.length <= 80 ? {bookmaker:event.bookmaker.trim()} : {}),
+    ...(typeof event.homeTeam === 'string' && event.homeTeam.trim() &&
+       event.homeTeam.length <= 120 ? {homeTeam:event.homeTeam.trim()} : {}),
+    ...(typeof event.awayTeam === 'string' && event.awayTeam.trim() &&
+       event.awayTeam.length <= 120 ? {awayTeam:event.awayTeam.trim()} : {}),
   }));
 }
 function publicCoupon(coupon) {
