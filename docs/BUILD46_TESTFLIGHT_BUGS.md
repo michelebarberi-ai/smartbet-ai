@@ -25,14 +25,14 @@ Data prima segnalazione: 13/11/2026. Fonte: collaudo utente su iPhone. Stato: **
 
 **Comportamento richiesto:**
 - **Prima** il mercato più probabile secondo il modello, indipendentemente dalla quota: mostrarne probabilità e quota realmente rilevata anche se <1,20, oppure «quota N/D» se non quotato.
-- **Sotto** il migliore mercato alternativo con quota reale **>=1,20**, probabilità sufficiente e controlli Auditor superati, se disponibile. Il principale non deve essere rimpiazzato o ricalcolato in funzione delle quote.
+- **Sotto** il migliore mercato alternativo con quota reale **>1,20**, probabilità sufficiente e controlli Auditor superati, se disponibile. Il principale non deve essere rimpiazzato o ricalcolato in funzione delle quote.
 - Preferire Sisal se disponibile; se il feed non offre quote Sisal sufficienti, recuperare le quote REALI del provider/bookmaker precedente senza attribuirle falsamente a Sisal. Mostrare il bookmaker corretto per ogni prezzo. Nessun prezzo inventato.
 - Se nessun bookmaker offre una selezione ammissibile, mostrare comunque il pronostico principale e indicare che nessuna alternativa verificata è disponibile. Non garantire artificialmente una schedina completa.
 
 **Criteri di accettazione / regressione:**
 - [ ] Primo mercato = probabilità sportiva più alta, senza filtri sulla quota (anche 1,10 o N/D).
-- [ ] Se primo mercato è sotto 1,20, ricercare mercato DIVERSO con quota >=1,20, probabilità >= soglia selezionata e Auditor; non usare mercati 7–13% per alzare la quota.
-- [ ] Se primo mercato è già >=1,20 e supera i controlli, può coincidere con la selezione giocabile, evitando un duplicato inutile.
+- [ ] Se primo mercato è sotto 1,20, ricercare mercato DIVERSO con quota >1,20, probabilità >= soglia selezionata e Auditor; non usare mercati 7–13% per alzare la quota.
+- [ ] Se primo mercato è già >1,20 e supera i controlli, può coincidere con la selezione giocabile, evitando un duplicato inutile.
 - [ ] Quote Sisal vere, fallback ad altri bookmaker con fonte esplicita; mai attribuire quote di terzi a Sisal o mescolare quote simulate con reali.
 - [ ] Interfaccia coerente in Crea Schedina e Combinazioni AI, inclusi i casi in cui non si riesce a generare un portfolio completo.
 - [ ] Test dei casi: Sisal completo; Sisal assente e altro bookmaker presente; principale 1,10 con alternativa 1,25; nessuna quota; alternativa sotto soglia; nessuna selezione inventata.
@@ -48,7 +48,7 @@ Data prima segnalazione: 13/11/2026. Fonte: collaudo utente su iPhone. Stato: **
 
 **Correzione richiesta:**
 - [ ] Effettuare ranking / shortlist **sportivo** prima del filtro prezzi anche nella pagina Risultati GoalVdLine, mantenendo il Top 5 dei pronostici principali stimati con controllo qualità e spiegazione trasparente.
-- [ ] Presentare sotto ogni principale la migliore alternativa con quota reale >=1,20, probabilità minima e Auditor, **se disponibile** (vedere modifica n. 2). Una schedina quotata va costruita solo con selezioni realmente ammissibili; niente quote finte.
+- [ ] Presentare sotto ogni principale la migliore alternativa con quota reale >1,20, probabilità minima e Auditor, **se disponibile** (vedere modifica n. 2). Una schedina quotata va costruita solo con selezioni realmente ammissibili; niente quote finte.
 - [ ] Se Sisal non c'è, verificare il fallback a fonte quote reale alternativa con nome bookmaker; niente etichetta Sisal su prezzo di terzi.
 - [ ] Distinguere a livello UI «nessun evento futuro analizzabile», «qualità dati insufficiente», «quote non disponibili», «nessuna alternativa giocabile», invece di mostrare un generico vuoto.
 - [ ] Test con quote Sisal assenti ma analisi AI valida, e integrazione con la modalità TOP 5 / 2-3 giorni / personalizzato; collaudo iPhone prima del prossimo TestFlight.
@@ -79,9 +79,9 @@ La modalità X Premium appare funzionante negli screenshot; usa `SmartBetXPremiu
 **Conferma utente dal collaudo iPhone, 13 novembre 2026:** la schermata «SmartBet + DiegoAI» per una partita singola conserva l'impostazione inizialmente richiesta per tutte le funzioni. Nelle schermate condivise:
 - SmartBet e Diego AI mantengono **pronostici indipendenti**, anche se discordanti (esempio visibile: SmartBet **1X** contro Diego AI **UNDER 4.5**), senza riscrivere le rispettive probabilità;
 - le probabilità sportive dei vari mercati restano consultabili (Over/Under, Goal/No Goal, Combo Chance) e Smart Score e spiegazione vengono mostrati;
-- quando mancano le quote reali 1X2 o non c'è una giocata >=1,20, l'analisi **non scompare**, ma viene dichiarata l'assenza di una quota/giocata verificata. Non si inventano quote.
+- quando mancano le quote reali 1X2 o non c'è una giocata >1,20, l'analisi **non scompare**, ma viene dichiarata l'assenza di una quota/giocata verificata. Non si inventano quote.
 
-**Decisione prodotto:** usare **questa schermata come riferimento di comportamento e presentazione** nel riallineare Crea Schedina, Combinazioni AI e Risultati GoalVdLine. Deve comparire anzitutto il pronostico più probabile secondo il modello, distinto dall'alternativa con quota reale >=1,20 e dai filtri per costruire una schedina (modifica 2); il confronto SmartBet/Diego e i dati statistici non devono sparire per mancanza di prezzi (modifiche 3–4). Conservare l'indipendenza dei modelli e non aumentare artificialmente le percentuali. La singola schermata resta da usare come **regressione di riferimento**, evitando di modificarla inutilmente.
+**Decisione prodotto:** usare **questa schermata come riferimento di comportamento e presentazione** nel riallineare Crea Schedina, Combinazioni AI e Risultati GoalVdLine. Deve comparire anzitutto il pronostico più probabile secondo il modello, distinto dall'alternativa con quota reale >1,20 e dai filtri per costruire una schedina (modifica 2); il confronto SmartBet/Diego e i dati statistici non devono sparire per mancanza di prezzi (modifiche 3–4). Conservare l'indipendenza dei modelli e non aumentare artificialmente le percentuali. La singola schermata resta da usare come **regressione di riferimento**, evitando di modificarla inutilmente.
 
 **Stato:** riferimento registrato, **nessuna modifica al codice o nuova build** autorizzata da questa conferma.
 
@@ -103,9 +103,13 @@ La modalità X Premium appare funzionante negli screenshot; usa `SmartBetXPremiu
 
 **Stato:** requisito/mancanza confermata e registrata, **non implementato**.
 
-## Nota aggiuntiva alla modifica 2 — Fonte quote e soglia desiderata
+## Nota definitiva alla modifica 2 — Fonte quote e soglia minima
 
-L'utente conferma che non vuole perdere pronostici soltanto perché il feed non offre Sisal. Va bene usare quote REALI da **qualunque bookmaker effettivamente restituito dalla fonte quote**, purché bookmaker, mercato, periodo e quota siano dichiarati e verificati. La probabilità del primo pronostico va mostrata anche con quota **sotto 1,30** o N/D; cercare poi la **migliore probabilità sportiva fra le alternative** con quota reale **almeno 1,30** se questa soglia viene selezionata. Il codice corrente usa il minimo fisso **1,20**: predisporre una soglia scelta/configurabile 1,20/1,30 anziché cambiare nascostamente le regole dell'utente. La seconda alternativa non può avere probabilità più alta del primo se il primo è davvero il massimo su tutti i mercati; interpretare «migliore» come il più probabile **fra quelli che rispettano la quota richiesta**. Mai forzare una quota maggiore cambiando artificialmente la stima.
+**Ultima correzione esplicita dell'utente (13/11/2026):** basta che la quota reale dell'alternativa sia **strettamente superiore a 1,20**. **NON** richiedere 1,30 e **NON** aggiungere un selettore 1,20/1,30. Per i prezzi espressi con due decimali: **1,20 non supera la soglia; 1,21 la supera**.
+
+Mostrare **sempre** il primo pronostico per probabilità sportiva, anche con quota inferiore o uguale a 1,20 oppure N/D. Sotto, quando disponibile, il pronostico più probabile **fra quelli con quota reale >1,20**, controllo di probabilità minima e Auditor superati. Recuperare quote da qualsiasi bookmaker verificato nel feed, indicando **sempre la fonte reale**, senza attribuire falsamente a Sisal quote di altri e senza inventare prezzi. Una alternativa non può essere «più affidabile» del primo assoluto: è la migliore **tra quelle che rispettano la soglia di quota**.
+
+**Impatto tecnico da implementare e testare:** il codice attuale (`GoalVdLineQuotePolicy.isPlayable`) usa `>= 1.20` e ha test storici che ammettono 1,20 esatto. Per la prossima build correttiva, cambiare il confronto a `> 1.20` in modo uniforme per Schedina, Combinazioni, Top 5, motore tre schedine e relativi test. **Non modificare retroattivamente i risultati dei vecchi test né la Build 46 già installata.**
 
 ## Altri bug del collaudo
 
