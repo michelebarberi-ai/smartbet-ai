@@ -79,7 +79,7 @@ class OnDemandCouponService {
     if (job.dayKey!==localClock(this.now()).dayKey) {
       return {status:410,body:{success:false,error:'Richiesta scaduta.'}};
     }
-    return {status:job.status==='ready'?200:202,body:{
+    return {status:['ready','no_coupon','failed'].includes(job.status)?200:202,body:{
       success:true,jobId:job.jobId,dayKey:job.dayKey,status:job.status,
       ...(job.status==='ready'?{coupon:job.coupon}:{}),
     }};
