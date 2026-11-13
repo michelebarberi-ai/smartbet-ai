@@ -9,7 +9,6 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
-import '../services/sisal_odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
@@ -131,7 +130,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // Analisi AI read-only: mai aggiunta automaticamente a una schedina.
   final List<({MatchModel match, String market, int probability})>
       _sportsOnlyPreview = [];
-  final SisalOddsService _oddsService = SisalOddsService();
+  final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
   final DualEngineAnalysisService _dualEngineService =
@@ -523,7 +522,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // sportivamente, è utilizzabile nella schedina.
       final bestOdd = odds?.oddFor(market);
 
-      if (bestOdd == null || bestOdd.odd < _minimumOdd) {
+      if (bestOdd == null || bestOdd.odd <= _minimumOdd) {
         continue;
       }
 
@@ -646,7 +645,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     for (final market in _marketOrder) {
       final quote = odds.oddFor(market);
-      if (quote != null && quote.odd >= _minimumOdd) {
+      if (quote != null && quote.odd > _minimumOdd) {
         return true;
       }
     }
@@ -655,7 +654,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       if (!market.startsWith('HCP EURO CASA ')) continue;
 
       final quote = odds.oddFor(market);
-      if (quote != null && quote.odd >= _minimumOdd) {
+      if (quote != null && quote.odd > _minimumOdd) {
         return true;
       }
     }
@@ -1923,12 +1922,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _loading = false;
           _phase = '';
           _error = quoteCache.isEmpty
-              ? 'Il feed non ha fornito quote Sisal utilizzabili per le '
+              ? 'Il feed non ha fornito quote reali utilizzabili per le '
                   'partite analizzate. Non è possibile costruire una '
                   'schedina con quota verificata.'
               : 'Non ci sono abbastanza selezioni che rispettino insieme '
                   'soglia di probabilità, controlli di qualità e quote '
-                  'Sisal minime di 1,20.';
+                  'reali superiori a 1,20.';
         });
 
         return;
@@ -2065,7 +2064,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _notice =
               '${parts.join(' • ')}. '
               'Sistema $_riskProfileName di ${_portfolioResults.length} schedine creato. '
-              'Quota minima Sisal: 1,20.';
+              'Quota reale richiesta: superiore a 1,20.';
         } else {
           _notice =
               'Sistema GoalVdLine $_riskProfileName creato: '
@@ -2884,7 +2883,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             continue;
           }
           final quote = odds?.oddFor(candidate.market);
-          if (quote == null || !quote.odd.isFinite || quote.odd < _minimumOdd) {
+          if (quote == null || !quote.odd.isFinite || quote.odd <= _minimumOdd) {
             continue;
           }
           final audit = SmartBetLocalAuditor.evaluate(
@@ -4451,7 +4450,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             const SizedBox(height: 6),
             const Text(
               'Queste sono previsioni sportive senza una selezione '
-              'giocabile verificata su Sisal. Non mostrano quote '
+              'giocabile con quota verificata. Non mostrano quote '
               'inventate e non costituiscono un sistema di gioco.',
               style: TextStyle(color: Colors.white60, fontSize: 11),
             ),
@@ -4472,7 +4471,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   const SizedBox(height: 4),
                   Text('${forecast.market} · '
                       'stima ${forecast.probability}% · '
-                      'selezione Sisal non disponibile'
+                      'selezione quotata non disponibile'
                       '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
                     style: const TextStyle(color: Colors.orangeAccent,
                       fontSize: 11)),
@@ -4820,7 +4819,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 const SizedBox(width: 7),
                 Text(
                   item.odd == null
-                      ? 'Quota Sisal N/D'
+                      ? 'Quota bookmaker N/D'
                       : '@ ${item.odd!.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
