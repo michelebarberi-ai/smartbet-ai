@@ -58,8 +58,10 @@ class LearningRepository {
     await this.pool.query(
       `INSERT INTO sb_on_demand_coupon_jobs_v1
        (job_id,subject_hash,request_id,local_day,preferences)
-       VALUES ($1::uuid,$2,$3::uuid,$4::date,$5::jsonb)
-       ON CONFLICT (subject_hash,request_id) DO NOTHING`,
+       SELECT $1::uuid,$2,$3::uuid,$4::date,$5::jsonb
+       WHERE (SELECT COUNT(*) FROM sb_on_demand_coupon_jobs_v1
+              WHERE subject_hash=$2 AND local_day=$4::date)<5
+       ON CONFLICT DO NOTHING`,
       [jobId,subjectHash,requestId,dayKey,JSON.stringify(preferences)]
     );
     const result = await this.pool.query(
