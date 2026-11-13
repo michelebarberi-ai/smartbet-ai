@@ -15,7 +15,8 @@ const requestId='22222222-2222-4222-8222-222222222222';
 const input={requestId,events:3,minimumMarketProbability:65,market:'MULTI',
   systemMode:'SINGLE',windowDays:1};
 const events=[1,2,3].map(i=>({fixtureId:i,market:'OVER 1.5',
-  marketProbability:85,kickoffAt:'2026-11-13T18:00:00Z',odds:1.32}));
+  marketProbability:85,kickoffAt:'2026-11-13T18:00:00Z',odds:1.32,
+  bookmaker:'Bookmaker Test'}));
 const coupon={events};
 
 function fakeRepo() {
@@ -147,6 +148,8 @@ test('B47: worker publishes only validated official forecasts >1.20',async()=>{
 test('B47: no invented odds, 1.20 exact not playable',async()=>{
   assert.equal(oddsStrictlyAboveMinimum({events:[{odds:1.20}]}),false);
   assert.equal(oddsStrictlyAboveMinimum(coupon),true);
+  assert.equal(oddsStrictlyAboveMinimum({events:[{...events[0],bookmaker:'N/D'}]}),false);
+  assert.equal(oddsStrictlyAboveMinimum({events:[{fixtureId:1,odds:1.40}]}),false);
   const repo=fakeRepo(),s=service(repo,async()=>({
     events:events.map((e,i)=>({...e,odds:i===1?1.20:1.32})),
   }));
