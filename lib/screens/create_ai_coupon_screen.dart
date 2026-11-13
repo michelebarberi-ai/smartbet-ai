@@ -126,10 +126,17 @@ class _PortfolioShadow {
   const _PortfolioShadow({required this.name, required this.picks});
 }
 
+typedef _SportsPreview = ({
+  MatchModel match,
+  AnalysisResult analysis,
+  String market,
+  int probability,
+  DualEngineAnalysis? dualAnalysis,
+});
+
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // Analisi AI read-only: mai aggiunta automaticamente a una schedina.
-  final List<({MatchModel match, String market, int probability})>
-      _sportsOnlyPreview = [];
+  final List<_SportsPreview> _sportsOnlyPreview = [];
   final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -550,6 +557,35 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     return null;
+  }
+
+  /// Restore Diego comparison even when the bookmaker feed prevents a
+  /// playable portfolio. Cap external analysis to five unique fixtures.
+  Future<void> _enrichSportsOnlyWithDiego() async {
+    final cap = math.min(5, _sportsOnlyPreview.length);
+    for (var i = 0; i < cap; i++) {
+      if (!mounted) return;
+      final forecast = _sportsOnlyPreview[i];
+      try {
+        final dual = await _dualEngineService.attachDiego(
+          match: forecast.match,
+          smartBet: forecast.analysis,
+          smartBetMarket: forecast.market,
+          smartBetProbability: forecast.probability,
+          smartBetOdd: null,
+        );
+        if (!mounted) return;
+        _sportsOnlyPreview[i] = (
+          match: forecast.match,
+          analysis: forecast.analysis,
+          market: forecast.market,
+          probability: forecast.probability,
+          dualAnalysis: dual,
+        );
+      } catch (error) {
+        debugPrint('COUPON UNQUOTED DIEGO ERROR: $error');
+      }
+    }
   }
 
   _CouponPick? _manualPickForMatch({
@@ -1375,7 +1411,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       // Preserve the model's sporting forecast even if no bookmaker quotes
       // it. These records are READ-ONLY and never enter _results/portfolio.
-      final preview = <({MatchModel match, String market, int probability})>[];
+      final preview = <_SportsPreview>[];
       for (final item in audited) {
         final markets = _sportsMarketCandidates(item.analysis);
         if (markets.isEmpty) continue;
@@ -1385,7 +1421,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         );
         if (percent <= 0 || percent > 100) continue;
         preview.add((
-          match: item.match, market: top.market, probability: percent,
+          match: item.match, analysis: item.analysis,
+          market: top.market, probability: percent, dualAnalysis: null,
         ));
       }
       if (!mounted) return;
@@ -1914,6 +1951,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _logPortfolioShadow(portfolio);
 
       if (portfolio.isEmpty) {
+        await _enrichSportsOnlyWithDiego();
         if (!mounted) return;
 
         setState(() {
@@ -4476,6 +4514,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                       '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
                     style: const TextStyle(color: Colors.orangeAccent,
                       fontSize: 11)),
+                  if (forecast.dualAnalysis != null) ...[
+                    const SizedBox(height: 10),
+                    DualEngineSummary(analysis: forecast.dualAnalysis!),
+                  ],
                 ],
               ),
             )),
