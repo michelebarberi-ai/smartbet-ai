@@ -510,6 +510,44 @@ class _HomeScreenState extends State<HomeScreen> {
                     lastUpdate: dashboard.lastUpdate,
                   ),
 
+                  // Reuses DashboardStore's existing daily fixture fetch:
+                  // no extra API call or background server just for this card.
+                  if (DateTime.now().hour < 12)
+                    Card(
+                      key: const Key('b45-morning-fixture-summary'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.wb_sunny_outlined,
+                                color: Colors.amberAccent),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Partite disponibili stamattina',
+                                      style: TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(dashboard.loading
+                                    ? 'Aggiornamento calendario...'
+                                    : dashboard.todayMatches == null
+                                    ? 'Dati non disponibili: riprova aggiornando la Home.'
+                                    : '${dashboard.todayMatches} partite future con dati di calendario per l’analisi.'),
+                                  const SizedBox(height: 4),
+                                  const Text('Sono potenziali candidate: il numero '
+                                    'di pronostici affidabili si conosce solo dopo '
+                                    'i controlli AI e le soglie impostate.',
+                                    style: TextStyle(fontSize: 11,
+                                      color: Colors.white60)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                   const SizedBox(height: 18),
 
                   ExpansionTile(
