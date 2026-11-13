@@ -88,7 +88,7 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
                 child: Text('Campione futuro indipendente insufficiente: confronto non disponibile.'),
               ),
             ...shadowReport!.segments.where((s) => s.evaluatedFixtures > 0).take(8).map((s) {
-              final engine = s.engine == SmartBetAnalysisEngine.diego
+              final engine = s.engine.name == 'diego'
                   ? 'Diego AI' : 'SmartBet AI';
               final original = s.originalBrier!.toStringAsFixed(4);
               final shadow = s.shadowBrier!.toStringAsFixed(4);
