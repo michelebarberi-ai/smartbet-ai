@@ -310,6 +310,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     'OSPITE SEGNA',
     'GOAL + O2.5',
     'NO GOAL + U2.5',
+    ...SmartBetMarketProbabilityService.orMarkets,
   ];
 
   @override
