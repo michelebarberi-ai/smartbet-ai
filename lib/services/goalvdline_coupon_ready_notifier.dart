@@ -35,6 +35,19 @@ class GoalVdLineCouponReadyNotifier {
     }
   }
 
+  /// Diagnostica on-demand esplicita: mai simulare una schedina pronta.
+  /// L'utente deve premere il pulsante di prova nelle impostazioni.
+  Future<bool> sendTestNotification() async {
+    if (!(await isEnabled())) return false;
+    try {
+      return await channel.invokeMethod<bool>('sendTestNotification') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Notifica SOLO un risultato già completato (mai una schedina vuota).
   /// L'errore di notifica non deve compromettere i pronostici.
   Future<bool> notifyReady({
