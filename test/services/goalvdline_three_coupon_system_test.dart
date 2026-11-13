@@ -82,33 +82,33 @@ void main() {
     );
   });
 
-  test('B45: quota Sisal 1.20 inclusa per CORE e alternative', () {
+  test('B47: quota maggiore di 1.21 per CORE e alternative', () {
     final coupons = GoalVdLineThreeCouponSystem.create(
       original: [
-        pick(1, '1X', 77, odd: 1.20),
-        pick(2, 'OVER 1.5', 90, odd: 1.20),
-        pick(3, '1', 92, odd: 1.20),
+        pick(1, '1X', 77, odd: 1.21),
+        pick(2, 'OVER 1.5', 90, odd: 1.21),
+        pick(3, '1', 92, odd: 1.21),
       ],
       alternatives: {
         1: [
-          pick(1, 'GOAL', 70, odd: 1.20),
-          pick(1, 'OVER 2.5', 68, odd: 1.20),
+          pick(1, 'GOAL', 70, odd: 1.21),
+          pick(1, 'OVER 2.5', 68, odd: 1.21),
         ],
       },
     );
     expect(coupons, isNotNull);
     expect(coupons!.length, 3);
     expect(coupons.every((coupon) =>
-        coupon.every((selection) => selection.odd >= 1.20)), isTrue);
+        coupon.every((selection) => selection.odd > 1.20)), isTrue);
     expect(coupons.every((coupon) =>
         coupon.every((selection) => selection.probability >= 65)), isTrue);
   });
 
   test('B45: quote sotto 1.20 e probabilita 7-13 non salvano un sistema', () {
     final original = [
-      pick(1, '1X', 77, odd: 1.20),
-      pick(2, 'OVER 1.5', 90, odd: 1.20),
-      pick(3, '1', 92, odd: 1.20),
+      pick(1, '1X', 77, odd: 1.21),
+      pick(2, 'OVER 1.5', 90, odd: 1.21),
+      pick(3, '1', 92, odd: 1.21),
     ];
     final invalidAlternatives = {
       1: [
@@ -122,8 +122,8 @@ void main() {
     ), isNull);
     expect(GoalVdLineThreeCouponSystem.create(
       original: [pick(1, '1X', 77, odd: 1.19), original[1], original[2]],
-      alternatives: {1: [pick(1, 'GOAL', 70, odd: 1.20),
-        pick(1, 'OVER 2.5', 68, odd: 1.20)]},
+      alternatives: {1: [pick(1, 'GOAL', 70, odd: 1.21),
+        pick(1, 'OVER 2.5', 68, odd: 1.21)]},
     ), isNull);
   });
 
