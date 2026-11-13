@@ -23,6 +23,11 @@ Legenda:
 - [x] Release notes interne in `docs/BUILD45_RELEASE_NOTES.md`, con limiti funzionali dichiarati.
 - [ ] Prima dell'unica Build 45 TestFlight: verifica quote Sisal e soglie di probabilità nelle schermate, poi **creazione deliberata del branch release**. Il collaudo su iPhone della notifica/snapshot si svolge **con quella stessa Build 45 firmata su TestFlight**, senza generare una build intermedia. Non fare merge PR #1 sullo staging Render.
 - [ ] Pipeline GitHub TestFlight e certificati/segreti **non ancora collaudati** su questa revisione; una build senza firma non è un upload Apple.
+### Audit quote e probabilità — correzione mirata Build 45 (13/11/2026)
+- [x] Identificata incongruenza nel generatore comune delle tre schedine: `GoalVdLineThreeCouponSystem._valid` usava quota fissa **1.25** nonostante `GoalVdLineQuotePolicy.minimumOdd` fosse **1.20**. Corretto nel commit `c64bb62` adottando l'unica policy condivisa. Il 65% minimo non cambia.
+- [x] Aggiunti due test regressione (commit `388451c`): CORE/alternative con quota 1.20 ammissibile; quote 1.19 e mercati 7–13% non possono generare false tre varianti.
+- [ ] Eseguire sul Mac il test mirato `test/services/goalvdline_three_coupon_system_test.dart` e quello del contratto ufficiale, prima di segnare la correzione come verificata.
+- [ ] La presenza di Sisal nel feed reale del giorno è ancora da confermare: assenza quote deve risultare N/D, mai quote sintetiche. In Combinazioni AI l'opzione esplicita 'Qualsiasi' può togliere il filtro minimo solo su richiesta utente, e non va cambiata silenziosamente.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
 **Decisione dell'utente: velocizzare senza nuovi costi fissi.** Conservare tutto il codice; rinviato NON significa collaudato.
