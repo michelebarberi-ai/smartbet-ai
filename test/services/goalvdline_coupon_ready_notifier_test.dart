@@ -48,6 +48,31 @@ void main() {
     expect(calls.length, 2);
   });
 
+  test('QA: test notification needs consent but not a completed coupon',
+      () async {
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+    expect(await notifier.sendTestNotification(), false);
+    expect(calls, isEmpty);
+    expect(await notifier.setEnabled(true), true);
+    expect(await notifier.sendTestNotification(), true);
+    expect(calls, ['requestPermission', 'sendTestNotification']);
+  });
+
+  test('QA: native test failure is reported but does not disable preference',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'requestPermission') return true;
+      throw PlatformException(code: 'notifications_disabled');
+    });
+    expect(await notifier.setEnabled(true), true);
+    expect(await notifier.sendTestNotification(), false);
+    expect(await notifier.isEnabled(), true);
+  });
+
   test('B45: refused permission never enables or sends notifications', () async {
     var calls = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {
