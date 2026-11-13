@@ -27,6 +27,9 @@ Legenda:
 - [x] Identificata incongruenza nel generatore comune delle tre schedine: `GoalVdLineThreeCouponSystem._valid` usava quota fissa **1.25** nonostante `GoalVdLineQuotePolicy.minimumOdd` fosse **1.20**. Corretto nel commit `c64bb62` adottando l'unica policy condivisa. Il 65% minimo non cambia.
 - [x] Aggiunti due test regressione (commit `388451c`): CORE/alternative con quota 1.20 ammissibile; quote 1.19 e mercati 7–13% non possono generare false tre varianti.
 - [x] **Mac, 13/11/2026, commit `dd09a3b`**: `flutter test --no-pub test/services/goalvdline_three_coupon_system_test.dart test/services/goalvdline_official_coupon_contract_test.dart` — **25/25 test superati, `EXIT TEST: 0`**. Correzione soglia quota minima condivisa 1.20 verificata nei test; resta da verificare la disponibilità reale delle quote Sisal e il collaudo iPhone.
+- [x] **Mac, 13/11/2026, commit `a4954ea`**: compilazione finale `flutter build ios --no-codesign`: **`EXIT IOS: 0`**, Xcode 80,3 s, `Runner.app` 24,3 MB; include correzione quote 1.20 e i 25 test mirati eseguiti separatamente. Non è una build firmata né caricata su TestFlight.
+- [ ] **Distribuzione Build 45**: il branch di rilascio `release/b45-testflight` va creato solo con autorizzazione di pubblicazione; il push su tale branch avvia il workflow che firma e carica su App Store Connect. Dopo il caricamento, testare sul dispositivo la notifica locale e la consultazione dell'ultima schedina; mantenere l'AutoSchedina server OFF.
+
 - [ ] La presenza di Sisal nel feed reale del giorno è ancora da confermare: assenza quote deve risultare N/D, mai quote sintetiche. In Combinazioni AI l'opzione esplicita 'Qualsiasi' può togliere il filtro minimo solo su richiesta utente, e non va cambiata silenziosamente.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
