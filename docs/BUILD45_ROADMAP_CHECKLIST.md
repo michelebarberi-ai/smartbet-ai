@@ -12,7 +12,9 @@ Aggiornamento: 12 novembre 2026. Riferimento: feature/b45-p20-4-multiday, PR #1 
 - [ ] **Modifica 4 / priorità alta:** confronto Diego AI / SmartBet da eseguire anche sui pronostici sportivi non quotati, con deduplicazione e controllo costi. Attualmente Diego viene richiamato solo dopo la selezione con quota, quindi appare assente quando i risultati sono vuoti.
 - [x] **Riferimento UX positivo (analisi singola SmartBet + DiegoAI):** conservare nelle altre funzioni il confronto indipendente fra i due cervelli, le probabilità dei mercati, Combo Chance, Smart Score e spiegazioni anche quando la quota non è disponibile. Le quote selezionabili >=1,20 restano separate dal pronostico sportivo. La schermata singola è il riferimento da non regredire; non è un nuovo bug da numerare.
 - [~] **X Premium:** visualizza simulazioni senza quota e senza Diego; negli screenshot le X ~25–31% sono sotto soglia e alcune hanno qualità dati N/D. Nessuna modifica automatica della logica, da monitorare.
-- [ ] Altri bug del collaudo: numerare dal punto 5 in avanti.
+- [ ] **Modifica 5 / priorità alta:** introdurre veri mercati «OPPURE» (OR), che non sono gli attuali mercati «+» (AND): GOAL O OVER; 1X O OVER; X O OVER; 1 O OVER; X O UNDER; 2 O UNDER; 1X O UNDER, con linea/periodo definiti, probabilità congiunta corretta e quote reali soltanto se pubblicate dal bookmaker. Allineare Crea Schedina e Combinazioni, includendo tutte le famiglie effettivamente supportate.
+- [ ] **Dettaglio Modifica 2:** nessun pronostico sportivo deve sparire per quota Sisal assente o <1,30. Mostrare sempre il principale e l'alternativa più probabile tra quelle realmente quotate almeno 1,30 se questa soglia è richiesta, con fonte bookmaker esplicita; attuale soglia fissa 1,20 da rendere selezionabile 1,20/1,30, non cambiare in modo implicito.
+- [ ] Altri bug del collaudo: numerare dal punto 6 in avanti.
 - Registro dedicato: [`docs/BUILD46_TESTFLIGHT_BUGS.md`](BUILD46_TESTFLIGHT_BUGS.md). La modifica 1 è **registrata, non ancora implementata**. Nessun deploy Render, Neon o TestFlight autorizzato dal solo registro.
 
 Legenda:
