@@ -42,6 +42,10 @@ function oddsStrictlyAboveMinimum(coupon) {
   // sufficient to mark a remote coupon as playable.
   return events.every(item=>typeof item?.odds==='number' &&
     Number.isFinite(item.odds) && item.odds>1.20 &&
+    typeof item.homeTeam==='string' && item.homeTeam.trim().length>0 &&
+    item.homeTeam.length<=120 &&
+    typeof item.awayTeam==='string' && item.awayTeam.trim().length>0 &&
+    item.awayTeam.length<=120 &&
     typeof item.bookmaker==='string' &&
     item.bookmaker.trim().length>0 && item.bookmaker.length<=80 &&
     !['n/d','unknown','sconosciuto','n.a.'].includes(
