@@ -112,13 +112,14 @@ class AutoCouponGenerationCoordinator {
     // An official, legitimately empty generation is a sporting-data outcome,
     // not a provider/transport fault and never a reason to invent selections.
     if (proposed && !Array.isArray(proposed) &&
-        Object.keys(proposed).length === 1 &&
         proposed.status === 'no_coupon') {
+      const reason = Object.keys(proposed).length === 1 ?
+        'no_coupon' : 'insufficient_events';
       const completed = await this.repository.finishAutoCouponRun({
-        ...lease, outcome: 'retry', reason: 'no_coupon',
+        ...lease, outcome: 'retry', reason,
         now: checkedAt, retryMinutes: 60,
       });
-      return completed ? {status: 'retry', reason: 'no_coupon'} :
+      return completed ? {status: 'retry', reason} :
         {status: 'superseded'};
     }
 
