@@ -109,7 +109,7 @@ class DualEngineComparison {
       case DualEngineAgreement.noSelection:
         return 'DiegoAI indica $diegoLabel come '
             'lettura statistica, ma non trova '
-            'una quota utilizzabile di almeno 1,25 '
+            'una quota utilizzabile di almeno 1,20 '
             'nei mercati disponibili.';
 
       case DualEngineAgreement.unavailable:

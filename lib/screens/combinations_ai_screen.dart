@@ -4267,7 +4267,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
                 : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
-                : 'Filtro automatico: solo selezioni con quota reale almeno 1.25.',
+                : 'Filtro automatico: solo selezioni con quota reale almeno 1.20.',
             style: TextStyle(
               color: Colors.orangeAccent,
               fontSize: 11,
@@ -4630,7 +4630,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 7),
             Text(
               _checkingOdds
-                  ? 'Controllo quote reali ≥ 1.25...'
+                  ? 'Controllo quote reali ≥ 1.20...'
                   : _total > 0
                   ? 'Analizzate $_processed / '
                         '$_total partite'

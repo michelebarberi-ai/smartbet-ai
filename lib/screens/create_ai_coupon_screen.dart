@@ -1715,7 +1715,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               if (!_hasRealQuotedMarket(odds)) continue;
 
               // La funzione prova i mercati in ordine
-              // sportivo, scartando quelli senza quota >= 1,25.
+              // sportivo, scartando quelli senza quota >= 1,20.
               final pick = _bestPickForMatch(preliminary: advanced, odds: odds);
 
               if (pick == null) continue;
@@ -1947,7 +1947,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _error = _aiService.aiServiceUnavailable
               ? _aiService.aiServiceUnavailableMessage
               : 'GoalVdLine non ha trovato selezioni con quota disponibile '
-                    'di almeno 1.25 che abbiano superato i controlli di qualità.';
+                    'di almeno 1.20 che abbiano superato i controlli di qualità.';
         } else if (incompletePortfolios > 0) {
           _notice =
               '$incompletePortfolios schedine del portfolio contengono meno '

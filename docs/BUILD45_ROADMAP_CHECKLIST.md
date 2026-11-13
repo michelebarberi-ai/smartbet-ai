@@ -64,3 +64,21 @@ Legenda:
 - `feature/b45-p20-4-multiday` ospita P20.4 e relativi test. Nessuna attestazione di deployment produzione.
 - Le voci [~] richiedono verifica UI/end-to-end prima di essere marcate [x]; le voci [ ] NON implicano necessariamente codice assente, ma accettazione non dimostrata.
 - Ogni correzione va accompagnata da test di regressione; aggiornare questa checklist dopo i test, mantenendo un unico obiettivo Build 45.
+
+## P20.6 — Decisione architetturale del 13/11/2026 (IN CORSO)
+
+**Regola non negoziabile, valida per tutta l'app**: la previsione sportiva principale nasce da modello, dati, simulazioni, Auditor e calibrazione consentita. Si conserva immutata dopo l'analisi. Le quote NON entrano nella scelta del pronostico, nell'ordine delle previsioni o nel punteggio di affidabilita'.
+
+**Quote**: soltanto SISAL, minimo **1.20** incluso, consultate dopo ranking. Un bookmaker diverso o una quota Sisal assente non sono sostituiti. L'eventuale mercato alternativo quotato >=1.20 rimane distinto dal forecast originale e deve rispettare il filtro sportivo configurato (default 65%, evitare esiti deboli 7–13%). Se non esiste alternativa sportivamente valida, nessun mercato viene inventato.
+
+**Stato**: codice base introdotto su feature, NON ancora validato dalla suite Mac o da staging. `GoalVdLineQuotePolicy` e `SisalOddsService` sono i confini di prezzo; `SmartBetSportsMarketSelector.recommend` restituisce forecast principale e couponPick separato; Schedina AI, Combinazioni AI, Coupon e Risultati GoalVdLine espongono la distinzione quando un'alternativa viene prodotta. Test mirati aggiunti/aggiornati. La vecchia P20.5 basata sulla selezione quotata non è il contratto prodotto approvato.
+
+**Ancora da verificare/chiudere prima del rilascio:**
+- [ ] Flutter/Node suite completa, test provider Sisal reale: verifica copertura per mercati, leghe e fixture (non assumere che Sisal sia nel feed); se assente, mostrare N/D senza quote di terzi.
+- [ ] Copertura UI delle previsioni con Sisal **assente** o sotto 1.20 anche quando NESSUN mercato è giocabile: mostrare il pronostico sportivo senza creare schedine false.
+- [ ] AutoSchedina remota: preservare nel payload i metadati del forecast principale per mostrare distintamente le alternative sul dispositivo; mantenere serializzazione privacy-safe, firma e validazione lato Node.
+- [ ] Audit di ogni schermata e servizio secondario che mostra quote (ranking/Live/risultati esatti/analisi), distinguendo forecast sportivo, probabilita stimata e disponibilita Sisal.
+- [ ] Valutare le condizioni di fornitura quote Sisal, i limiti API e l'eventuale servizio dedicato.
+- [ ] Verificare che classifiche e ordini non cambino quando cambia solo la quota Sisal (test metamorfici).
+
+Non portare il PR draft in staging/Render prima che i test siano verdi e il vincolo forecast-first sia rispettato anche senza quote.
