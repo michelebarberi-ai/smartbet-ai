@@ -74,6 +74,17 @@ Data prima segnalazione: 13/11/2026. Fonte: collaudo utente su iPhone. Stato: **
 
 La modalità X Premium appare funzionante negli screenshot; usa `SmartBetXPremiumService` e non richiede quote o Diego. Le X mostrate (~25–31%) sono **simulazioni** sotto le soglie operative, e alcune partite hanno qualità dati N/D. Non confondere la visualizzazione con un pronostico affidabile. Monitorare, senza alterare automaticamente le soglie o promuovere queste X alla schedina.
 
+## Riferimento funzionale APPROVATO: analisi della singola partita (non è un nuovo bug)
+
+**Conferma utente dal collaudo iPhone, 13 novembre 2026:** la schermata «SmartBet + DiegoAI» per una partita singola conserva l'impostazione inizialmente richiesta per tutte le funzioni. Nelle schermate condivise:
+- SmartBet e Diego AI mantengono **pronostici indipendenti**, anche se discordanti (esempio visibile: SmartBet **1X** contro Diego AI **UNDER 4.5**), senza riscrivere le rispettive probabilità;
+- le probabilità sportive dei vari mercati restano consultabili (Over/Under, Goal/No Goal, Combo Chance) e Smart Score e spiegazione vengono mostrati;
+- quando mancano le quote reali 1X2 o non c'è una giocata >=1,20, l'analisi **non scompare**, ma viene dichiarata l'assenza di una quota/giocata verificata. Non si inventano quote.
+
+**Decisione prodotto:** usare **questa schermata come riferimento di comportamento e presentazione** nel riallineare Crea Schedina, Combinazioni AI e Risultati GoalVdLine. Deve comparire anzitutto il pronostico più probabile secondo il modello, distinto dall'alternativa con quota reale >=1,20 e dai filtri per costruire una schedina (modifica 2); il confronto SmartBet/Diego e i dati statistici non devono sparire per mancanza di prezzi (modifiche 3–4). Conservare l'indipendenza dei modelli e non aumentare artificialmente le percentuali. La singola schermata resta da usare come **regressione di riferimento**, evitando di modificarla inutilmente.
+
+**Stato:** riferimento registrato, **nessuna modifica al codice o nuova build** autorizzata da questa conferma.
+
 ## Altri bug del collaudo
 
 Registrare altri bug dal **n. 5** quando l'utente li descriverà.
