@@ -7,6 +7,7 @@ const {registerAutoCouponWorkerRoute} = require('../auto_coupon/worker_route');
 const {registrationReady} = require('../auto_coupon/device_registration');
 const {apnsReady} = require('../auto_coupon/apns_provider');
 const {registerAutoCouponPushDispatchRoute} = require('../auto_coupon/push_dispatch');
+const {registerOnDemandCouponRoutes} = require('../auto_coupon/on_demand_coupon_routes');
 
 function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null}) {
   const requested = env.LEARNING_SERVER_ENABLED === 'true';
@@ -37,6 +38,15 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
       autoCouponWorkerReady: workerReady,
       autoCouponDeviceRegistrationEnabled: pushRegistrationEnabled,
       autoCouponPushDispatchReady: pushDispatchReady,
+      onDemandCouponRequestsEnabled: mobileEnabled &&
+        env.ON_DEMAND_COUPON_REQUESTS_ENABLED==='true' &&
+        typeof generateOfficialCoupon==='function',
+      onDemandCouponWorkerEnabled: mobileEnabled &&
+        env.ON_DEMAND_COUPON_REQUESTS_ENABLED==='true' &&
+        env.ON_DEMAND_COUPON_WORKER_ENABLED==='true' &&
+        typeof env.ON_DEMAND_COUPON_WORKER_TOKEN==='string' &&
+        env.ON_DEMAND_COUPON_WORKER_TOKEN.length>=32 &&
+        typeof generateOfficialCoupon==='function',
       mode: 'admin_staging', liveCalibration: false,
       requiresDatabase: true});
   });
@@ -217,6 +227,14 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     workerToken: env.AUTO_COUPON_WORKER_TOKEN,
     getRepository: () => getService().repository,
     generateOfficialCoupon, now,
+  });
+
+  // B47: on-demand jobs are opt-in and separate from the daily scheduler.
+  // The mobile POST queues only; a trusted worker must finish official output.
+  registerOnDemandCouponRoutes(app, {
+    env,mobileEnabled,authorizeMobile,
+    getLearningService:getService,
+    generateOfficialCoupon,now,
   });
 
   // Invoked explicitly by the trusted job *after* official generation.
