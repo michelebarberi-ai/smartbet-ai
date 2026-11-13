@@ -14,7 +14,7 @@ class GoalVdLineReadyCouponLocalStore {
     if (value.isEmpty || value.length > maxLength) return false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.setString(key, value);
+      return await prefs.setString(key, value);
     } catch (_) {
       return false;
     }
