@@ -190,6 +190,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   String? _errorMessage;
 
   final List<_CombinationCandidate> _results = [];
+  // Display-only sports forecasts; never used in coupon/share/system output.
+  final List<_CombinationCandidate> _sportsOnlyPreview = [];
 
   // P5B — combinazioni coordinate realmente disponibili nella UI.
   final List<_CombinationSystemShadow> _systemResults = [];
@@ -1990,6 +1992,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _errors = 0;
       _errorMessage = null;
       _results.clear();
+      _sportsOnlyPreview.clear();
       _systemResults.clear();
       _selectedSystemIndex = 0;
     });
@@ -2283,11 +2286,39 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         return;
       }
 
+      // Forecast visibility must not depend on a price feed. This is a
+      // non-playable diagnostic view, kept separate from coupon _results.
+      final sportsOnly = <_CombinationCandidate>[];
+      for (final item in candidatesForOdds) {
+        if (_multiMarketMode) continue; // Do not invent a concrete market.
+        if (_isFamilyMarket(_selectedMarket)) {
+          final options = item.familyOptions
+              .where((option) => option.probability > 0 && option.probability <= 100)
+              .toList()
+            ..sort((a, b) => b.probability.compareTo(a.probability));
+          if (options.isEmpty) continue;
+          final best = options.first;
+          sportsOnly.add(_CombinationCandidate(
+            match: item.match, analysis: item.analysis,
+            market: best.market, probability: best.probability,
+          ));
+        } else if (item.probability > 0 && item.probability <= 100) {
+          sportsOnly.add(_CombinationCandidate(
+            match: item.match, analysis: item.analysis,
+            market: item.market, probability: item.probability,
+          ));
+        }
+      }
+      sportsOnly.sort(_combinationSportsCompare);
       setState(() {
+        _sportsOnlyPreview
+          ..clear()
+          ..addAll(sportsOnly.take(_topCount));
         _checkingOdds = true;
       });
 
       final oddsService = SisalOddsService();
+      final sisalQuotedFixtures = <int>{};
       final validCandidates = <_CombinationCandidate>[];
       final reserveCount = math.max(2, (_topCount * 0.50).ceil());
 
@@ -2343,6 +2374,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
             );
             if (marketOdds == null) continue;
+            if (marketOdds.bestByOutcome.isNotEmpty) {
+              sisalQuotedFixtures.add(item.match.fixtureId);
+            }
 
             final multiPick = SmartBetMultiMarketSelectionService.bestQuoted(
               analysis: item.analysis,
@@ -2380,6 +2414,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
             );
 
+            if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
+              sisalQuotedFixtures.add(item.match.fixtureId);
+            }
             final executableFamilyCandidate = _bestFamilyQuotedCandidate(
               candidate: item,
               marketOdds: marketOdds,
@@ -2403,6 +2440,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
             );
 
+            if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
+              sisalQuotedFixtures.add(item.match.fixtureId);
+            }
             final bestOdd = marketOdds?.oddFor(item.market);
 
             // Quota Sisal assente o inferiore a 1.20: esclusa dalla schedina,
@@ -2499,11 +2539,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           _systemResults.clear();
           _loading = false;
           _checkingOdds = false;
-          _errorMessage = _minimumMarketProbability == 0
-              ? 'Nessuna selezione valida dopo i controlli finali.'
-              : 'Nessuna selezione raggiunge la probabilità di mercato '
-                    'minima del $_minimumMarketProbability% dopo '
-                    'i controlli finali.';
+          _errorMessage = _selectedMarket != 'COMBO CHANCE' &&
+                  sisalQuotedFixtures.isEmpty
+              ? 'Il feed non restituisce quote Sisal per queste partite. '
+                  'Le previsioni sportive sono distinte dalle schedine: '
+                  'nessuna quota viene inventata.'
+              : _minimumMarketProbability == 0
+                  ? 'Nessuna selezione giocabile supera insieme i controlli '
+                      'Auditor e la quota Sisal minima di 1,20.'
+                  : 'Nessuna selezione giocabile supera insieme la '
+                      'probabilità di mercato minima del '
+                      '$_minimumMarketProbability%, i controlli Auditor '
+                      'e la quota Sisal minima di 1,20.';
         });
         return;
       }
@@ -4659,6 +4706,46 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ],
               ),
             ),
+          ],
+
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              !_loading &&
+              _results.isEmpty &&
+              _sportsOnlyPreview.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'ANTEPRIMA PRONOSTICI AI — NON GIOCABILE',
+              style: TextStyle(color: Colors.orangeAccent,
+                  fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 7),
+            const Text(
+              'Stime sportive calcolate prima delle quote. '
+              'Non sono selezioni di schedina: la quota Sisal è '
+              'assente o la selezione non ha superato i controlli.',
+              style: TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            ..._sportsOnlyPreview.map((item) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2937),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${item.match.homeTeam} - ${item.match.awayTeam}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${item.market} · stima ${item.probability}% · Sisal N/D'
+                      '${!_acceptsMarketProbability(item.probability) ? ' · sotto soglia' : ''}',
+                    style: const TextStyle(color: Colors.orangeAccent,
+                        fontSize: 11)),
+                ],
+              ),
+            )),
           ],
 
           if (_xPremiumEnabled && _xPremiumResults.isNotEmpty)
