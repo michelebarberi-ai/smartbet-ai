@@ -16,7 +16,7 @@ test('B47 scheduler has no timer until explicit start and no overlap',async()=>{
   const s=createOnDemandScheduler({
     runOne:async()=>{started++;await hold;return {status:'ready'};},
     intervalMs:60000,
-    setIntervalFn:fn=>{created++;clockTick=fn;return{unref(){};};},
+    setIntervalFn:fn=>{created++;clockTick=fn;return{unref(){}};},
     clearIntervalFn:()=>{cleared++;},
   });
   assert.equal(created,0);
