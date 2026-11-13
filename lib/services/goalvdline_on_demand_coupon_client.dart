@@ -87,6 +87,7 @@ class GoalVdLineOnDemandCouponClient {
     String market = 'MULTI',
     String systemMode = 'THREE_SAME_FIXTURES',
     int windowDays = 1,
+    bool forceNew = false,
     String serverUrl = GoalVdLineCentralLearningMobileSync.defaultServerUrl,
   }) async {
     if (!GoalVdLineMobileTokenVault.validToken(token)) {
@@ -113,10 +114,16 @@ class GoalVdLineOnDemandCouponClient {
       'windowDays': windowDays,
     };
     final last = await lastRequest();
-    final requestId = last != null &&
-            last['preferences'] is Map &&
-            jsonEncode(last['preferences']) == jsonEncode(preferences) &&
-            last['jobId'] == null
+    final samePreferences = !forceNew && last != null &&
+        last['preferences'] is Map &&
+        jsonEncode(last['preferences']) == jsonEncode(preferences);
+    // Reopening the app never silently launches a duplicate paid calculation.
+    if (samePreferences && last['jobId'] is String &&
+        _uuid.hasMatch(last['jobId'] as String)) {
+      return fetch(token: token, jobId: last['jobId'] as String,
+          serverUrl: serverUrl);
+    }
+    final requestId = samePreferences && last['jobId'] == null
         ? last['requestId'] as String
         : _newRequestId(_random);
     final store = await _preferencesLoader();
