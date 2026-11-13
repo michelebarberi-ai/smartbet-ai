@@ -22,6 +22,57 @@ import UserNotifications
     }
     let channel = FlutterMethodChannel(name: "goalvdline/push_registration",
       binaryMessenger: registrar.messenger())
+    // Local on-demand notifications are independent from the remote APNs
+    // AutoSchedina feature, which remains disabled until a future release.
+    if let localRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "GoalVdLineLocalCouponNotifications") {
+      let localChannel = FlutterMethodChannel(
+        name: "goalvdline/local_coupon_notifications",
+        binaryMessenger: localRegistrar.messenger()
+      )
+      localChannel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "requestPermission":
+          UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) {
+            granted, _ in
+            DispatchQueue.main.async { result(granted) }
+          }
+        case "notifyReady":
+          guard let args = call.arguments as? [String: Any],
+                let coupons = args["coupons"] as? Int,
+                let fixtures = args["fixtures"] as? Int,
+                coupons > 0, coupons <= 10,
+                fixtures > 0, fixtures <= 15 else {
+            result(false)
+            return
+          }
+          let center = UNUserNotificationCenter.current()
+          center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized ||
+                  settings.authorizationStatus == .provisional else {
+              DispatchQueue.main.async { result(false) }
+              return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = "GoalVdLine • Schedina pronta"
+            content.body = coupons == 1
+              ? "La tua schedina AI è pronta: \\(fixtures) partite."
+              : "\\(coupons) schedine AI pronte. \\(fixtures) partite nella principale."
+            content.sound = .default
+            content.userInfo = ["kind": "on_demand_coupon_ready"]
+            let request = UNNotificationRequest(
+              identifier: "goalvdline-on-demand-\\(UUID().uuidString)",
+              content: content,
+              trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            )
+            center.add(request) { error in
+              DispatchQueue.main.async { result(error == nil) }
+            }
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
     pushRegistrationChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
