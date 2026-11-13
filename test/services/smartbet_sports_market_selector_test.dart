@@ -113,8 +113,9 @@ void main() {
       )!;
       expect(recommendation.primary.market, 'GOAL');
       expect(recommendation.primary.probability, 82);
-      expect(SmartBetSportsMarketSelector.rankedMarkets(probabilities),
-        orderedEquals(originalRank));
+      final newRank = SmartBetSportsMarketSelector.rankedMarkets(probabilities);
+      expect(newRank.map((e) => e.key), orderedEquals(originalRank.map((e) => e.key)));
+      expect(newRank.map((e) => e.value), orderedEquals(originalRank.map((e) => e.value)));
     }
   });
 
