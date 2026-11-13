@@ -60,4 +60,62 @@ void main() {
       '1',
     ]);
   });
+
+  test('P20.6: forecast survives missing Sisal prices without invented coupon', () {
+    final recommendation = SmartBetSportsMarketSelector.recommend(
+      sportsProbabilities: const {'GOAL': 82, 'OVER 2.5': 75, '2': 11},
+      quotedOdds: const {},
+      minimumProbability: 65,
+    )!;
+    expect(recommendation.primary.market, 'GOAL');
+    expect(recommendation.primary.probability, 82);
+    expect(recommendation.primaryOdd, isNull);
+    expect(recommendation.couponPick, isNull);
+    expect(recommendation.usesAlternative, false);
+  });
+
+  test('P20.6: an unplayable top odd never changes primary forecast', () {
+    final recommendation = SmartBetSportsMarketSelector.recommend(
+      sportsProbabilities: const {'GOAL': 82, 'OVER 2.5': 75, '2': 11},
+      quotedOdds: const {'GOAL': 1.19, 'OVER 2.5': 1.20, '2': 20},
+      minimumProbability: 65,
+    )!;
+    expect(recommendation.primary.market, 'GOAL');
+    expect(recommendation.primary.probability, 82);
+    expect(recommendation.couponPick?.market, 'OVER 2.5');
+    expect(recommendation.couponPick?.probability, 75);
+    expect(recommendation.couponPick?.odd, 1.20);
+    expect(recommendation.usesAlternative, true);
+  });
+
+  test('P20.6: weak 7-13% outcomes cannot rescue an absent high-confidence odd', () {
+    final recommendation = SmartBetSportsMarketSelector.recommend(
+      sportsProbabilities: const {'GOAL': 82, '2': 13, 'X': 7},
+      quotedOdds: const {'GOAL': 1.10, '2': 5, 'X': 12},
+      minimumProbability: 65,
+    )!;
+    expect(recommendation.primary.market, 'GOAL');
+    expect(recommendation.couponPick, isNull);
+  });
+
+  test('P20.6: changing only quoted odds does not reorder sporting forecasts', () {
+    const probabilities = <String, int>{'GOAL': 82, 'OVER 2.5': 75, '1': 70};
+    const quotes = <Map<String, double>>[
+      {},
+      {'GOAL': 1.19, 'OVER 2.5': 1.20, '1': 7.50},
+      {'GOAL': 2.40, 'OVER 2.5': 9.99, '1': 1.20},
+    ];
+    final originalRank = SmartBetSportsMarketSelector.rankedMarkets(probabilities);
+    for (final odds in quotes) {
+      final recommendation = SmartBetSportsMarketSelector.recommend(
+        sportsProbabilities: probabilities,
+        quotedOdds: odds,
+      )!;
+      expect(recommendation.primary.market, 'GOAL');
+      expect(recommendation.primary.probability, 82);
+      expect(SmartBetSportsMarketSelector.rankedMarkets(probabilities),
+        orderedEquals(originalRank));
+    }
+  });
+
 }
