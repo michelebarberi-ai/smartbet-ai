@@ -1910,11 +1910,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _phase = '';
           _error = quoteCache.isEmpty
               ? 'Il feed non ha fornito quote Sisal utilizzabili per le '
-                  'partite analizzate. Le previsioni AI sportive restano '
-                  'visibili sotto, ma non sono una schedina quotata.'
+                  'partite analizzate. Non è possibile costruire una '
+                  'schedina con quota verificata.'
               : 'Non ci sono abbastanza selezioni che rispettino insieme '
                   'soglia di probabilità, controlli di qualità e quote '
-                  'Sisal minime di 1,20. Le analisi AI restano sotto.';
+                  'Sisal minime di 1,20.';
         });
 
         return;
