@@ -214,3 +214,47 @@ test('B47: worker auth and mobile route do not leak engine credentials',async()=
   assert.equal(result.code,200);
   assert.equal(result.body.status,'ready');
 });
+
+
+test('B47 external worker readiness is required before creating a mobile job',async()=>{
+  const repo=fakeRepo(),app=fakeApp();
+  let wakes=0;
+  registerOnDemandCouponRoutes(app,{
+    env:{...env,ON_DEMAND_COUPON_EXTERNAL_WORKER_ENABLED:'true'},
+    mobileEnabled:true,authorizeMobile:fakeAuthorize,workerRunning:true,
+    getLearningService:()=>({repository:repo}),
+    generateOfficialCoupon:async()=>coupon,now:()=>serverTime,
+    verifyExternalWorker:async()=>false,
+    wakeExternalWorker:async()=>{wakes++;return true;},
+  });
+  const res=await call(app,'POST',BASE,input);
+  assert.equal(res.code,503);
+  assert.equal(repo.initialized,0);
+  assert.equal(wakes,0);
+});
+
+test('B47 external runner receives private wake after a durable queue write',async()=>{
+  const repo=fakeRepo(),app=fakeApp();
+  let verified=0,wakes=0;
+  registerOnDemandCouponRoutes(app,{
+    env:{...env,ON_DEMAND_COUPON_EXTERNAL_WORKER_ENABLED:'true'},
+    mobileEnabled:true,authorizeMobile:fakeAuthorize,workerRunning:true,
+    getLearningService:()=>({repository:repo}),
+    generateOfficialCoupon:async()=>coupon,now:()=>serverTime,
+    verifyExternalWorker:async()=>{verified++;return true;},
+    wakeExternalWorker:async()=>{
+      assert.equal(repo.jobs.size,1);
+      wakes++;
+      return true;
+    },
+  });
+  const res=await call(app,'POST',BASE,input);
+  assert.equal(res.code,202);
+  assert.equal(res.body.status,'queued');
+  assert.equal(res.body.workerNotified,true);
+  assert.equal(verified,1);
+  assert.equal(wakes,1);
+  const again=await call(app,'POST',BASE,input);
+  assert.equal(again.body.jobId,res.body.jobId);
+  assert.equal(repo.jobs.size,1);
+});
