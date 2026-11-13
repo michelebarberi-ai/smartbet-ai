@@ -55,12 +55,12 @@ import UserNotifications
             let content = UNMutableNotificationContent()
             content.title = "GoalVdLine • Schedina pronta"
             content.body = coupons == 1
-              ? "La tua schedina AI è pronta: \\(fixtures) partite."
-              : "\\(coupons) schedine AI pronte. \\(fixtures) partite nella principale."
+              ? "La tua schedina AI è pronta: \(fixtures) partite."
+              : "\(coupons) schedine AI pronte. \(fixtures) partite nella principale."
             content.sound = .default
             content.userInfo = ["kind": "on_demand_coupon_ready"]
             let request = UNNotificationRequest(
-              identifier: "goalvdline-on-demand-\\(UUID().uuidString)",
+              identifier: "goalvdline-on-demand-\(UUID().uuidString)",
               content: content,
               trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             )
