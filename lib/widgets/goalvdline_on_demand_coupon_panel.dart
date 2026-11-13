@@ -171,20 +171,28 @@ class _GoalVdLineOnDemandCouponPanelState
           if (item is Map)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: Text(
-                    '${item['fixtureId'] ?? '?'} · ${item['market'] ?? 'N/D'}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  )),
-                  const SizedBox(width: 10),
                   Text(
-                    '${item['marketProbability'] ?? 'N/D'}% · ${_formatOdds(item['odds'])}',
+                    '${item['homeTeam']} - ${item['awayTeam']}',
+                    style: const TextStyle(
+                      color: Colors.white, fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${item['market']} · ${item['marketProbability']}% '
+                    '· quota ${_formatOdds(item['odds'])}',
                     style: const TextStyle(
                       color: Color(0xFF69F0AE), fontSize: 12,
                     ),
                   ),
+                  Text('Bookmaker: ${item['bookmaker']}',
+                      style: const TextStyle(
+                        color: Colors.white60, fontSize: 11,
+                      )),
                 ],
               ),
             ),
