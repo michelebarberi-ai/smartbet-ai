@@ -31,6 +31,15 @@ class _SmartBetAppState extends State<SmartBetApp> {
     if (call.method == 'autoCouponOpened' && call.arguments is String) {
       _openCoupon(call.arguments as String);
     } else if (call.method == 'onDemandCouponOpened') {
+      // Clear the native cold-start latch even when Flutter is already alive.
+      // A later ordinary app launch must not re-open an old notification.
+      try {
+        await _channel.invokeMethod<bool>('consumePendingOnDemandCouponTap');
+      } on MissingPluginException {
+        // Non-iOS platforms.
+      } on PlatformException {
+        // Navigation still works using the current local snapshot.
+      }
       _openRequestedCoupon();
     }
   }
