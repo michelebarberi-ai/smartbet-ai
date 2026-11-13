@@ -144,8 +144,11 @@ class FixtureMarketOdds {
 
 class OddsService {
   final http.Client _client;
+  final DateTime Function() _now;
 
-  OddsService({http.Client? client}) : _client = client ?? http.Client();
+  OddsService({http.Client? client, DateTime Function()? now})
+      : _client = client ?? http.Client(),
+        _now = now ?? DateTime.now;
 
   static final Map<String, FixtureMarketOdds?> _marketCache = {};
   static final Map<String, DateTime> _marketCacheTime = {};
@@ -194,7 +197,7 @@ class OddsService {
       final ttl = _marketCache[cacheKey] == null
           ? _missingQuoteTtl
           : _availableQuoteTtl;
-      final age = cachedAt == null ? null : DateTime.now().difference(cachedAt);
+      final age = cachedAt == null ? null : _now().difference(cachedAt);
       if (age != null && !age.isNegative && age < ttl) {
         return _marketCache[cacheKey];
       }
@@ -746,7 +749,7 @@ class OddsService {
           'BOOKMAKER NON DISPONIBILE PER FIXTURE $fixtureId: $requestedBookmaker',
         );
         _marketCache[cacheKey] = null;
-        _marketCacheTime[cacheKey] = DateTime.now();
+        _marketCacheTime[cacheKey] = _now();
         return null;
       }
 
@@ -831,7 +834,7 @@ class OddsService {
       debugPrint('========================================');
 
       _marketCache[cacheKey] = result;
-      _marketCacheTime[cacheKey] = DateTime.now();
+      _marketCacheTime[cacheKey] = _now();
       return result;
     } catch (e) {
       debugPrint('SMARTBET ODDS EXCEPTION: $e');
