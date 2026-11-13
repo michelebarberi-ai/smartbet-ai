@@ -2,6 +2,7 @@ import '../models/analysis_result.dart';
 import 'odds_service.dart';
 import 'smartbet_european_handicap_candidate_service.dart';
 import 'smartbet_sports_market_selector.dart';
+import 'smartbet_market_probability_service.dart';
 
 class SmartBetSportsCouponAdapter {
   const SmartBetSportsCouponAdapter._();
@@ -82,6 +83,15 @@ class SmartBetSportsCouponAdapter {
           )) {
         probabilities[candidate.market] = candidate.probability;
       }
+    }
+
+    // An OR-market probability is playable only if the real feed quotes
+    // that exact union. Never construct a bookmaker price mathematically.
+    for (final market in SmartBetMarketProbabilityService.orMarkets) {
+      if (!odds.bestByOutcome.containsKey(market)) continue;
+      final probability =
+          SmartBetMarketProbabilityService.probabilityFor(analysis, market);
+      if (probability > 0) probabilities[market] = probability;
     }
 
     return SmartBetSportsMarketSelector.allPlayable(
