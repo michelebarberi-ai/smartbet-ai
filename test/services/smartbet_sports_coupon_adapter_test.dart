@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/models/analysis_result.dart';
 import 'package:smartbet_ai_new/services/odds_service.dart';
 import 'package:smartbet_ai_new/services/smartbet_sports_coupon_adapter.dart';
+import 'package:smartbet_ai_new/services/smartbet_market_probability_service.dart';
 
 void main() {
   AnalysisResult analysis() => const AnalysisResult(
@@ -61,6 +62,18 @@ void main() {
     );
 
     expect(pick?.market, 'OVER 2.5');
+  });
+
+  test('B47: OR quota reale o nessun mercato OPPURE giocabile', () {
+    final market = SmartBetMarketProbabilityService.orMarkets.first;
+    final unquoted = SmartBetSportsCouponAdapter.allPlayable(
+      analysis: analysis(), odds: odds({'GOAL': 1.19}),
+    );
+    expect(unquoted.any((e) => e.market == market), false);
+    final withQuote = SmartBetSportsCouponAdapter.allPlayable(
+      analysis: analysis(), odds: odds({market: 1.28}),
+    );
+    expect(withQuote.any((e) => e.market == market), true);
   });
 
   test('Senza una quota ammissibile non sceglie', () {
