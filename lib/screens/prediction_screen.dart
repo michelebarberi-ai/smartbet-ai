@@ -53,6 +53,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   Set<String> _competitionKeys = {};
   final List<_DailyPick> _results = [];
+  final List<_DailyForecast> _sportsForecasts = [];
 
   static const int _wantedResults =
       SmartBetPredictionQuantityPolicy.dailyTarget;
@@ -472,6 +473,50 @@ class _PredictionScreenState extends State<PredictionScreen> {
     return null;
   }
 
+  /// A missing bookmaker price never removes the sporting opinion.
+  /// We preserve the Top 5 as statistical forecasts, not a priced coupon.
+  /// At most the number of missing Top 5 slots is sent to Diego.
+  Future<List<_DailyForecast>> _unquotedForecasts({
+    required List<_PreCandidate> preliminary,
+    required List<_DailyPick> quoted,
+  }) async {
+    final excluded = quoted.map((e) => e.match.fixtureId).toSet();
+    final forecast = <_DailyForecast>[];
+    for (final candidate in preliminary) {
+      if (forecast.length + quoted.length >= _wantedResults) break;
+      if (excluded.contains(candidate.match.fixtureId)) continue;
+      final markets = _markets(candidate.analysis).entries
+          .where((item) => item.value > 0)
+          .toList()
+        ..sort((a, b) {
+          final rank = b.value.compareTo(a.value);
+          return rank != 0 ? rank : a.key.compareTo(b.key);
+        });
+      if (markets.isEmpty) continue;
+      final top = markets.first;
+      DualEngineAnalysis? dual;
+      try {
+        dual = await _dualEngineService.attachDiego(
+          match: candidate.match,
+          smartBet: candidate.analysis,
+          smartBetMarket: top.key,
+          smartBetProbability: top.value,
+          smartBetOdd: null,
+        );
+      } catch (error) {
+        debugPrint('DAILY UNQUOTED DIEGO ERROR: $error');
+      }
+      forecast.add(_DailyForecast(
+        match: candidate.match,
+        analysis: candidate.analysis,
+        market: top.key,
+        probability: top.value,
+        dualAnalysis: dual,
+      ));
+    }
+    return forecast;
+  }
+
   List<_DailyPick> _topSnapshot(List<_DailyPick> source) {
     final ranked = List<_DailyPick>.of(source);
 
@@ -642,6 +687,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       _customPeriod = selected;
 
       _results.clear();
+      _sportsForecasts.clear();
       _error = null;
       _hasStartedAnalysis = false;
       _phase = '';
@@ -667,6 +713,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       _processed = 0;
       _total = 0;
       _results.clear();
+      _sportsForecasts.clear();
     });
 
     try {
@@ -1031,21 +1078,31 @@ class _PredictionScreenState extends State<PredictionScreen> {
         }
       }
 
+      // Sport-first fallback is a read-only forecast, not a coupon pick.
+      // Diego is independent from bookmaker availability.
+      final sportsForecasts = await _unquotedForecasts(
+        preliminary: preliminary,
+        quoted: enrichedFinalResults,
+      );
+
       if (!mounted) {
         return;
       }
 
       setState(() {
+        _sportsForecasts
+          ..clear()
+          ..addAll(sportsForecasts);
         _results
           ..clear()
           ..addAll(enrichedFinalResults);
         _loading = false;
         _phase = '';
 
-        if (_results.isEmpty) {
-          _error =
-              'GoalVdLine non ha trovato selezioni nel periodo selezionato con qualità, '
-              'Auditor e quota reale sufficienti.';
+        if (_results.isEmpty && _sportsForecasts.isEmpty) {
+          _error = 'Nessun pronostico analizzabile disponibile nel periodo scelto.';
+        } else {
+          _error = null;
         }
       });
     } catch (_) {
@@ -1543,6 +1600,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   _period = period;
 
                   _results.clear();
+      _sportsForecasts.clear();
                   _error = null;
                   _hasStartedAnalysis = false;
                   _phase = '';
@@ -1927,6 +1985,22 @@ class _PreCandidate {
     required this.match,
     required this.analysis,
     required this.bestProbability,
+  });
+}
+
+class _DailyForecast {
+  final MatchModel match;
+  final AnalysisResult analysis;
+  final String market;
+  final int probability;
+  final DualEngineAnalysis? dualAnalysis;
+
+  const _DailyForecast({
+    required this.match,
+    required this.analysis,
+    required this.market,
+    required this.probability,
+    this.dualAnalysis,
   });
 }
 
