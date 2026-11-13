@@ -22,7 +22,7 @@ Versione preparata: **1.2.4+45**. La versione non è ancora su TestFlight.
 
 - Flutter: 685 test passati e 3 skipped su revisione 0449c23, exit 0.
 - Tap notifica: 5 test mirati passati e compilazione iOS senza firma riuscita su revisione 5c969a7, exit 0.
-- Da verificare **prima dell'effettivo rilascio**: regressioni quote Sisal e probabilità deboli, consenso e tap su iPhone reale, firma e upload pipeline, eventuali incompatibilità con runner GitHub.
+- Prima dell'unico upload TestFlight: regressioni quote Sisal e probabilità deboli, firma e pipeline GitHub. Dopo l'upload **della stessa Build 45 firmata**: collaudo reale iPhone di consenso, notifiche, tap e snapshot; nessuna seconda build di prova è prevista.
 - PR #1 di staging ancora draft: non fare merge automatico verso staging Render/Neon.
 
 ## Procedura di rilascio
