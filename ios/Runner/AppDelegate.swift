@@ -6,7 +6,6 @@ import UserNotifications
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var pendingTokenResult: FlutterResult?
   private var pushRegistrationChannel: FlutterMethodChannel?
-  private var requestedCouponChannel: FlutterMethodChannel?
   private var pendingAutoCouponDay: String?
 
   override func application(
@@ -90,52 +89,10 @@ import UserNotifications
       }
     }
 
-    // Separate from APNs auto-coupon push registration: local, on-demand only.
-    let local = FlutterMethodChannel(
-      name: "goalvdline/requested_coupon_notifications",
-      binaryMessenger: registrar.messenger()
-    )
-    requestedCouponChannel = local
-    local.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "notifyReady",
-        let args = call.arguments as? [String: Any],
-        let eventCount = args["eventCount"] as? Int,
-        eventCount >= 1 && eventCount <= 15
-      else {
-        result(false)
-        return
-      }
-      self?.notifyRequestedCouponReady(eventCount: eventCount, result: result)
-    }
   }
 
-  private func notifyRequestedCouponReady(
-    eventCount: Int, result: @escaping FlutterResult
-  ) {
-    let notifications = UNUserNotificationCenter.current()
-    notifications.requestAuthorization(options: [.alert, .sound]) { granted, error in
-      guard granted && error == nil else {
-        DispatchQueue.main.async { result(false) }
-        return
-      }
-      let content = UNMutableNotificationContent()
-      content.title = "GoalVdLine — Schedina pronta"
-      content.body = eventCount == 1
-        ? "1 partita analizzata. Torna all'app per vedere il risultato."
-        : "\\(eventCount) partite analizzate. Torna all'app per vedere i risultati."
-      content.sound = .default
-      content.userInfo = ["kind": "requested_coupon_ready"]
-      let request = UNNotificationRequest(
-        identifier: "goalvdline.requested_coupon_ready",
-        content: content,
-        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-      )
-      notifications.add(request) { schedulingError in
-        DispatchQueue.main.async { result(schedulingError == nil) }
-      }
-    }
-  }
-
+  // Display on-demand local completion notifications while the app is open.
+  // Remote AutoSchedina APNs handling stays unchanged.
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
@@ -143,7 +100,7 @@ import UserNotifications
       @escaping (UNNotificationPresentationOptions) -> Void
   ) {
     if notification.request.content.userInfo["kind"] as? String ==
-        "requested_coupon_ready" {
+        "on_demand_coupon_ready" {
       completionHandler([.banner, .sound, .list])
       return
     }
