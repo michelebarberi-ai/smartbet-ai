@@ -47,10 +47,29 @@ jobs:
             test/services/smartbet_sports_market_selector_test.dart \
             test/services/smartbet_multi_market_selection_service_test.dart \
             test/services/smartbet_or_markets_test.dart \
+            test/services/goalvdline_multi_bookmaker_odds_test.dart \
             test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
             test/services/goalvdline_official_coupon_contract_test.dart
+
+  qa-all-flutter-tests:
+    needs: qa-flutter
+    if: github.ref == 'refs/heads/feature/b47-corrections'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Full Flutter regression suite
+        shell: bash
+        run: |
+          flutter pub get
+          flutter test --no-pub --reporter compact
 
   qa-ios-compile:
     # Validate the Swift notification test handler without any signing or upload.
