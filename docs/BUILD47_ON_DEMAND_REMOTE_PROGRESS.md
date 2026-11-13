@@ -12,6 +12,11 @@ senza aprire altri servizi o aumentare i costi senza verifica.
 
 ## Implementato nel branch `feature/b47-corrections`
 
+- **Nuova protezione di attivazione:** l'API mobile e il flag pubblico
+  `onDemandCouponRequestsEnabled` restano OFF finché non esiste un
+  processo di polling on-demand **realmente avviato** nella stessa istanza
+  Node. La sola presenza delle variabili d'ambiente non basta: evitiamo
+  schedine bloccate per sempre in `queued`.
 - Backend: coda Neon separata `sb_on_demand_coupon_jobs_v1` in
   `backend/learning/learning_schema.sql` con job UUID, richiesta idempotente,
   tenant isolato tramite hash, stato, risultato validato, limite 5 richieste al

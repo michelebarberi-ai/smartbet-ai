@@ -11,11 +11,15 @@ const WORKER='/learning/v1/on-demand-coupon/worker/run';
 const JOB=/^\/learning\/v1\/mobile\/on-demand-coupon\/jobs\/([0-9a-f-]{36})$/i;
 
 function registerOnDemandCouponRoutes(app,{env,mobileEnabled,
-  authorizeMobile,getLearningService,generateOfficialCoupon,now=()=>new Date()}) {
-  const enabled=mobileEnabled &&
+  authorizeMobile,getLearningService,generateOfficialCoupon,
+  workerRunning=false,now=()=>new Date()}) {
+  // Never let an iPhone queue work unless an actual server-side processing
+  // loop has started. Configured HTTP worker triggers alone are not a queue.
+  const configured=mobileEnabled &&
     env.ON_DEMAND_COUPON_REQUESTS_ENABLED==='true' &&
     typeof generateOfficialCoupon==='function';
-  const workerEnabled=enabled && env.ON_DEMAND_COUPON_WORKER_ENABLED==='true' &&
+  const enabled=configured && workerRunning===true;
+  const workerEnabled=configured && env.ON_DEMAND_COUPON_WORKER_ENABLED==='true' &&
     typeof env.ON_DEMAND_COUPON_WORKER_TOKEN==='string' &&
     env.ON_DEMAND_COUPON_WORKER_TOKEN.length>=32;
   let service;

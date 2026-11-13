@@ -79,7 +79,7 @@ async function requestFixture({path, query}, {env = process.env, fetchImpl = fet
 }
 
 function createLearningOnlyApp({env = process.env, fetchImpl = fetch, poolFactory,
-  generateOfficialCoupon = null} = {}) {
+  generateOfficialCoupon = null, onDemandWorkerRunning = false} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {res.set('Cache-Control', 'no-store'); next();});
@@ -116,7 +116,7 @@ app.get('/health/database', async (_req, res) => {
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
   registerLearningRoutes(app, {
-    env, generateOfficialCoupon: officialEngine,
+    env, generateOfficialCoupon: officialEngine, onDemandWorkerRunning,
     requestApiFootball: (request) => requestFixture(request, {env, fetchImpl}),
   });
   return app;
@@ -168,7 +168,8 @@ if (require.main === module) {
     console.error('On-demand scheduler configuration invalid');
     process.exit(2);
   }
-  const server=createLearningOnlyApp().listen(port, '0.0.0.0', () => {
+  const server=createLearningOnlyApp({onDemandWorkerRunning: worker !== null})
+    .listen(port, '0.0.0.0', () => {
     console.log(`GoalVdLine central learning listening on port ${port}`);
   });
   if(worker)process.once('SIGTERM',()=>{

@@ -9,7 +9,7 @@ const {apnsReady} = require('../auto_coupon/apns_provider');
 const {registerAutoCouponPushDispatchRoute} = require('../auto_coupon/push_dispatch');
 const {registerOnDemandCouponRoutes} = require('../auto_coupon/on_demand_coupon_routes');
 
-function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null}) {
+function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null, onDemandWorkerRunning = false}) {
   const requested = env.LEARNING_SERVER_ENABLED === 'true';
   const configured = requested && !!env.DATABASE_URL &&
     typeof env.LEARNING_ADMIN_TOKEN === 'string' && env.LEARNING_ADMIN_TOKEN.length >= 32 &&
@@ -38,7 +38,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
       autoCouponWorkerReady: workerReady,
       autoCouponDeviceRegistrationEnabled: pushRegistrationEnabled,
       autoCouponPushDispatchReady: pushDispatchReady,
-      onDemandCouponRequestsEnabled: mobileEnabled &&
+      onDemandCouponRequestsEnabled: onDemandWorkerRunning === true && mobileEnabled &&
         env.ON_DEMAND_COUPON_REQUESTS_ENABLED==='true' &&
         typeof generateOfficialCoupon==='function',
       onDemandCouponWorkerEnabled: mobileEnabled &&
@@ -232,7 +232,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
   // B47: on-demand jobs are opt-in and separate from the daily scheduler.
   // The mobile POST queues only; a trusted worker must finish official output.
   registerOnDemandCouponRoutes(app, {
-    env,mobileEnabled,authorizeMobile,
+    env,mobileEnabled,authorizeMobile,workerRunning:onDemandWorkerRunning,
     getLearningService:getService,
     generateOfficialCoupon,now,
   });

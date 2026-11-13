@@ -173,10 +173,26 @@ test('B47: server flags fail closed for requests and worker',async()=>{
   assert.equal(repo.initialized,0);
 });
 
+test('B47: no request accepted without a running server worker',async()=>{
+  const repo=fakeRepo(),app=fakeApp();
+  const flags=registerOnDemandCouponRoutes(app,{
+    env,mobileEnabled:true,authorizeMobile:fakeAuthorize,
+    workerRunning:false,
+    getLearningService:()=>({repository:repo}),
+    generateOfficialCoupon:async()=>coupon,now:()=>serverTime,
+  });
+  assert.equal(flags.enabled,false);
+  assert.equal(flags.workerEnabled,true); // manual privileged endpoint separate
+  const response=await call(app,'POST',BASE,input);
+  assert.equal(response.code,503);
+  assert.equal(repo.initialized,0);
+});
+
 test('B47: worker auth and mobile route do not leak engine credentials',async()=>{
   const repo=fakeRepo(),app=fakeApp();
   registerOnDemandCouponRoutes(app,{
     env,mobileEnabled:true,authorizeMobile:fakeAuthorize,
+    workerRunning:true,
     getLearningService:()=>({repository:repo}),
     generateOfficialCoupon:async()=>coupon,now:()=>serverTime,
   });
