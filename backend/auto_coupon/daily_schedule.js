@@ -8,6 +8,15 @@ const DEFAULT_TIME_ZONE = 'Europe/Rome';
 const ALLOWED_MARKETS = new Set(['MULTI', 'OVER_UNDER', 'GOAL_NOGOAL', '1X2']);
 const THREE_MODE = 'THREE_SAME_FIXTURES';
 const SINGLE_MODE = 'SINGLE';
+const OR_MARKETS = new Set([
+  'GOAL O OVER 1.5', 'GOAL O OVER 2.5',
+  '1X O OVER 1.5', '1X O OVER 2.5',
+  'X O OVER 1.5', 'X O OVER 2.5',
+  '1 O OVER 1.5', '1 O OVER 2.5',
+  'X O UNDER 2.5', 'X O UNDER 3.5',
+  '2 O UNDER 2.5', '2 O UNDER 3.5',
+  '1X O UNDER 2.5', '1X O UNDER 3.5',
+]);
 
 function validatePreferences(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -91,6 +100,7 @@ function officialMarketFamily(value) {
   if (/^(?:GOAL|NO GOAL|NOGOAL|BTTS YES|BTTS NO)$/.test(market) ||
       market === 'GOAL_NOGOAL') return 'GOAL_NOGOAL';
   if (/^(?:1|X|2|1X2)$/.test(market)) return '1X2';
+  if (OR_MARKETS.has(market)) return 'OR';
   // Exact official football-market key; not a synthetic handicap.
   if (/^HCP EURO CASA [+-]?[0-5] [1X2]$/.test(market)) return 'HANDICAP_EUROPEAN';
   return null;
@@ -133,6 +143,13 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
     if (!Number.isFinite(kickoff.getTime()) || kickoff <= now ||
         !allowedDays.has(localClock(kickoff, timeZone).dayKey)) {
       return {valid: false, reason: 'invalid_or_out_of_day_kickoff'};
+    }
+    if (event.bookmaker !== undefined &&
+        (typeof event.bookmaker !== 'string' ||
+          !event.bookmaker.trim() || event.bookmaker.length > 80 ||
+          ['n/d','unknown','sconosciuto','n.a.'].includes(
+            event.bookmaker.trim().toLowerCase()))) {
+      return {valid:false,reason:'invalid_bookmaker'};
     }
     if ('odds' in event && (typeof event.odds !== 'number' ||
         !Number.isFinite(event.odds) || event.odds < 1.20)) {
