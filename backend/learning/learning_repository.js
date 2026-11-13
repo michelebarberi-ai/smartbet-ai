@@ -92,6 +92,15 @@ class LearningRepository {
   // Atomic PostgreSQL lease, fenced by token and attempt. Reclaim a job
   // after a Render restart without allowing an old process to mark READY.
   async claimOnDemandCoupon() {
+    // An unfinished request for yesterday must not block today's only-active
+    // slot forever. Use the same Europe/Rome day boundary as the official engine.
+    await this.pool.query(
+      `UPDATE sb_on_demand_coupon_jobs_v1 SET status='failed',
+         lease_token=NULL, lease_expires_at=NULL,
+         completed_at=clock_timestamp(), updated_at=clock_timestamp()
+       WHERE status IN ('queued','running')
+         AND local_day < (clock_timestamp() AT TIME ZONE 'Europe/Rome')::date`
+    );
     await this.pool.query(
       `UPDATE sb_on_demand_coupon_jobs_v1 SET status='failed',
          lease_token=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
