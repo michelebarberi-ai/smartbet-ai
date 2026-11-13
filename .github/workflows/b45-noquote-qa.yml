@@ -99,6 +99,38 @@ jobs:
             backend/test/auto_coupon_generation_coordinator.test.js \
             backend/test/auto_coupon_worker_route.test.js
 
+  qa-on-demand-postgres:
+    # Ephemeral CI database only; never connects to live Neon.
+    if: github.ref == 'refs/heads/feature/b47-corrections'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: goalvdline_ci
+          POSTGRES_PASSWORD: ephemeral_ci_only
+          POSTGRES_DB: goalvdline_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goalvdline_ci -d goalvdline_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ON_DEMAND_TEST_DATABASE_URL: postgres://goalvdline_ci:ephemeral_ci_only@127.0.0.1:5432/goalvdline_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend dependencies
+        run: npm ci --prefix backend --ignore-scripts --omit=dev
+      - name: Verify real PostgreSQL schema and worker leases
+        run: node --test backend/test/on_demand_postgres_integration.test.js
+
   qa-ios-compile:
     # Validate the Swift notification test handler without any signing or upload.
     needs: qa-flutter
