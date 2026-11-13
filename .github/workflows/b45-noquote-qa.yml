@@ -1,0 +1,49 @@
+name: SmartBet B45 quote-coverage QA
+
+# Code validation ONLY: never signs, archives or uploads to Apple.
+on:
+  push:
+    branches:
+      - fix/b45-noquote-preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smartbet-b45-noquote-qa
+  cancel-in-progress: true
+
+jobs:
+  qa-flutter:
+    if: github.ref == 'refs/heads/fix/b45-noquote-preview'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch dependencies
+        shell: bash
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Analyze Flutter code
+        shell: bash
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Test SISAL coverage, quote cache, safe coupon limits
+        shell: bash
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/sisal_odds_service_coverage_test.dart \
+            test/services/goalvdline_quote_policy_test.dart \
+            test/services/goalvdline_market_probability_filter_test.dart \
+            test/services/goalvdline_three_coupon_system_test.dart \
+            test/services/goalvdline_official_coupon_contract_test.dart
