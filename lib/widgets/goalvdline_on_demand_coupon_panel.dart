@@ -121,8 +121,14 @@ class _GoalVdLineOnDemandCouponPanelState
       market: 'MULTI',
       systemMode: 'THREE_SAME_FIXTURES',
       windowDays: 1,
-      forceNew: _result?.status == 'failed' ||
-          _result?.status == 'no_coupon',
+      // A second generation is only initiated by a fresh tap here.
+      // A network error does not silently create a new (possibly paid) job.
+      forceNew: _result?.isReady == true ||
+          _result?.status == 'failed' ||
+          _result?.status == 'no_coupon' ||
+          (_result?.status == 'error' &&
+              (_result?.message == 'Richiesta scaduta.' ||
+               _result?.message == 'Richiesta non trovata.')),
     );
     if (!mounted) return;
     setState(() {
@@ -261,7 +267,11 @@ class _GoalVdLineOnDemandCouponPanelState
               FilledButton.icon(
                 onPressed: _busy || result?.isPending == true ? null : _submit,
                 icon: const Icon(Icons.cloud_upload_outlined),
-                label: Text(_busy ? 'VERIFICA...' : 'CREA SUL SERVER'),
+                label: Text(_busy
+                    ? 'VERIFICA...'
+                    : result?.isReady == true
+                        ? 'NUOVA SCHEDINA SUL SERVER'
+                        : 'CREA SUL SERVER'),
               ),
               OutlinedButton.icon(
                 onPressed: _busy ? null : _refresh,
