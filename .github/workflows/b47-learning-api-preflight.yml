@@ -1,0 +1,98 @@
+name: GoalVdLine Build 47 - Learning API preflight
+
+# Validation only. No iOS signing, no TestFlight uploads, no production writes.
+on:
+  push:
+    branches:
+      - deploy/b47-learning-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b47-learning-api-preflight-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-and-postgres:
+    if: github.ref == 'refs/heads/deploy/b47-learning-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: goalvdline_ci
+          POSTGRES_PASSWORD: ephemeral_ci_only
+          POSTGRES_DB: goalvdline_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goalvdline_ci -d goalvdline_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ON_DEMAND_TEST_DATABASE_URL: postgres://goalvdline_ci:ephemeral_ci_only@127.0.0.1:5432/goalvdline_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies
+        run: npm ci --prefix backend --ignore-scripts --omit=dev
+      - name: Check startup and authenticated engine integration syntax
+        run: |
+          node --check backend/learning_only_server.js
+          node --check backend/learning/learning_routes.js
+          node --check backend/learning/learning_repository.js
+          node --check backend/auto_coupon/official_engine_client.js
+          node --check backend/auto_coupon/on_demand_coupon_service.js
+          node --check backend/auto_coupon/on_demand_coupon_routes.js
+          node --check backend/auto_coupon/on_demand_scheduler.js
+      - name: Backend regression and on-demand safety checks
+        run: |
+          node --test \
+            backend/test/auto_coupon_on_demand.test.js \
+            backend/test/auto_coupon_on_demand_scheduler.test.js \
+            backend/test/auto_coupon_official_engine_client.test.js \
+            backend/test/auto_coupon_generation_coordinator.test.js \
+            backend/test/auto_coupon_p20_3d_render_transport.test.js \
+            backend/test/learning_routes.test.js
+      - name: Durable jobs on ephemeral PostgreSQL (never production Neon)
+        run: node --test backend/test/on_demand_postgres_integration.test.js
+
+  render-neon-health:
+    needs: backend-and-postgres
+    if: github.ref == 'refs/heads/deploy/b47-learning-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Check deployed API database connectivity (read-only)
+        shell: bash
+        env:
+          HEALTH_URL: https://goalvdline-learning-api.onrender.com/health/database
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/b47-learning-db-health.json"
+          for attempt in 1 2; do
+            status="$(curl --silent --show-error --connect-timeout 15 \
+              --max-time 120 --max-redirs 0 --output "$response_file" \
+              --write-out '%{http_code}' "$HEALTH_URL")" || status="000"
+            if [[ "$status" == "200" ]] && node -e '
+              const fs = require("node:fs");
+              const x = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              if (x.databaseChecked !== true || x.databaseReachable !== true ||
+                  x.schemaReady !== true || x.learningEnabled !== false) process.exit(1);
+            ' "$response_file"; then
+              echo "PASS: deployed Render API connects to Neon baseline schema."
+              echo "On-demand worker and TestFlight remain disabled."
+              exit 0
+            fi
+            echo "Not ready (attempt $attempt, HTTP $status)"
+            if [[ "$attempt" == "1" ]]; then sleep 15; fi
+          done
+          echo "FAIL: cannot certify Render-Neon connectivity"
+          exit 1
