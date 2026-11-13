@@ -162,3 +162,27 @@ test('poll rejects malicious ticket and never follows off-host URL',async()=>{
     sleep:()=>Promise.resolve()});
   await assert.rejects(adapter({dayKey:request.dayKey,now:NOW,preferences}));
 });
+
+
+test('B47 secondary token authenticates without replacing the existing runner token',async()=>{
+  const SECONDARY='Q'.repeat(48);
+  const server=createHeadlessEngineHost({
+    token:TOKEN,additionalToken:SECONDARY,revision:REVISION,
+    execute:async()=>{throw new Error('no generator should run during health check');},
+    now:()=>NOW,
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin=`http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.equal((await req(origin,'GET','/coupon/health','wrong')).status,401);
+    for(const authorized of [TOKEN,SECONDARY]){
+      const response=await req(origin,'GET','/coupon/health',authorized);
+      assert.equal(response.status,200);
+      assert.deepEqual(await response.json(),{
+        protocol:PROTOCOL,officialEngine:true,revision:REVISION,ready:true});
+    }
+    assert.equal((await req(origin,'GET','/coupon/health','Z'.repeat(48))).status,401);
+  }finally{
+    await new Promise(resolve=>server.close(resolve));
+  }
+});
