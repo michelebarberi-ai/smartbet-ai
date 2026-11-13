@@ -40,9 +40,43 @@ Data prima segnalazione: 13/11/2026. Fonte: collaudo utente su iPhone. Stato: **
 
 **Stato:** registrata, **non ancora implementata**. Accorpare con modifica n. 1 per la prossima build correttiva; non pubblicare direttamente.
 
+## 3. PRIORITÀ ALTA — Risultati GoalVdLine / TOP 5 non deve sparire senza quote
+
+**Screenshot TestFlight 1.2.5 (46), 13 novembre 2026:** la scheda **Risultati GoalVdLine**, periodo OGGI, mostra «GoalVdLine non ha trovato selezioni ... con qualità, Auditor e quota reale sufficienti» e nessun risultato.
+
+**Causa verificata nel sorgente:** in `lib/screens/prediction_screen.dart`, `_generate` filtra anzitutto le candidate attraverso `SisalOddsService` e `_bestPickForMatch` (che restituisce null per odds null o tutte le quote sotto 1,20). `quoteQualified` può quindi essere vuoto, determinando pool AI vuoto, Top 5 vuoto e nessuna chiamata a Diego. Non è una prova che le partite non abbiano forecast sportivi validi.
+
+**Correzione richiesta:**
+- [ ] Effettuare ranking / shortlist **sportivo** prima del filtro prezzi anche nella pagina Risultati GoalVdLine, mantenendo il Top 5 dei pronostici principali stimati con controllo qualità e spiegazione trasparente.
+- [ ] Presentare sotto ogni principale la migliore alternativa con quota reale >=1,20, probabilità minima e Auditor, **se disponibile** (vedere modifica n. 2). Una schedina quotata va costruita solo con selezioni realmente ammissibili; niente quote finte.
+- [ ] Se Sisal non c'è, verificare il fallback a fonte quote reale alternativa con nome bookmaker; niente etichetta Sisal su prezzo di terzi.
+- [ ] Distinguere a livello UI «nessun evento futuro analizzabile», «qualità dati insufficiente», «quote non disponibili», «nessuna alternativa giocabile», invece di mostrare un generico vuoto.
+- [ ] Test con quote Sisal assenti ma analisi AI valida, e integrazione con la modalità TOP 5 / 2-3 giorni / personalizzato; collaudo iPhone prima del prossimo TestFlight.
+
+**Stato:** analizzato e registrato; non corretto né distribuito.
+
+## 4. PRIORITÀ ALTA — Confronto Diego AI assente dove mancano quote
+
+**Screenshot TestFlight:** nelle Combinazioni normale e nella pagina Risultati AI non compare più il confronto Diego / SmartBet. La modalità manuale mostrava talvolta il confronto «N/D». Distinguere questi casi: la sola assenza grafica non prova un servizio Diego offline.
+
+**Causa verificata:** `lib/screens/combinations_ai_screen.dart` richiama `_dualEngineService.attachDiego` **soltanto dopo** la validazione delle selezioni quotate (singola o sistema). `lib/screens/prediction_screen.dart` richiama `attachDiego` solo per il Top 5 finale. Se il filtro quote azzera i candidati finali, Diego non viene elaborato. Il servizio `DualEngineAnalysisService` resta nel codice, non è stato rimosso.
+
+**Correzione richiesta:**
+- [ ] Lanciare/conservare una valutazione Diego per i forecast sportivi selezionati **indipendentemente** dall'esistenza di una quota Sisal, in Crea Schedina, Risultati e Combinazioni; non attendere una schedina quotata.
+- [ ] Preservare l'indipendenza di Diego e SmartBet: visualizzare pronostici, percentuali, confronto/accordo e segnali di affidabilità; non trasformare la stima Diego in una selezione giocabile senza quote e Auditor.
+- [ ] Se Diego ha un errore concreto, mostrare motivo e stato tecnico leggibile senza esporre segreti; se non è stato eseguito, scrivere «non ancora analizzato» invece di «N/D» ambiguo.
+- [ ] Deduplicare le chiamate Diego per fixture, mantenere cache, limite costi e verificare che l'assenza quote non aumenti imprevedibilmente le richieste pagate.
+- [ ] Test: combinazioni normali senza Sisal, risultati Top 5 senza Sisal, manuale, Diego temporaneamente indisponibile e ripristino; poi collaudo iPhone.
+
+**Stato:** analizzato e registrato; non corretto né distribuito.
+
+## Verifica di X Premium (non classificata come guasto)
+
+La modalità X Premium appare funzionante negli screenshot; usa `SmartBetXPremiumService` e non richiede quote o Diego. Le X mostrate (~25–31%) sono **simulazioni** sotto le soglie operative, e alcune partite hanno qualità dati N/D. Non confondere la visualizzazione con un pronostico affidabile. Monitorare, senza alterare automaticamente le soglie o promuovere queste X alla schedina.
+
 ## Altri bug del collaudo
 
-Registrare altri bug dal **n. 3** quando l'utente li descriverà.
+Registrare altri bug dal **n. 5** quando l'utente li descriverà.
 
 ## Regole di rilascio
 
