@@ -127,6 +127,9 @@ class _PortfolioShadow {
 }
 
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
+  // Analisi AI read-only: mai aggiunta automaticamente a una schedina.
+  final List<({MatchModel match, String market, int probability})>
+      _sportsOnlyPreview = [];
   final SisalOddsService _oddsService = SisalOddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
@@ -902,6 +905,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _notice = null;
       _results.clear();
       _portfolioResults.clear();
+      _sportsOnlyPreview.clear();
       _selectedPortfolioIndex = 0;
     });
 
@@ -1353,6 +1357,28 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         final probability = b.bestProbability.compareTo(a.bestProbability);
         if (probability != 0) return probability;
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
+      });
+
+      // Preserve the model's sporting forecast even if no bookmaker quotes
+      // it. These records are READ-ONLY and never enter _results/portfolio.
+      final preview = <({MatchModel match, String market, int probability})>[];
+      for (final item in audited) {
+        final markets = _sportsMarketCandidates(item.analysis);
+        if (markets.isEmpty) continue;
+        final top = markets.first;
+        final percent = _livePercent(
+          top.market, top.probability, item.match.fixtureId,
+        );
+        if (percent <= 0 || percent > 100) continue;
+        preview.add((
+          match: item.match, market: top.market, probability: percent,
+        ));
+      }
+      if (!mounted) return;
+      setState(() {
+        _sportsOnlyPreview
+          ..clear()
+          ..addAll(preview.take(_count));
       });
 
       // Fase 4: quote soltanto DOPO l'analisi avanzata.
@@ -1882,9 +1908,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _results.clear();
           _loading = false;
           _phase = '';
-          _error =
-              'GoalVdLine non ha trovato abbastanza selezioni valide '
-              'per costruire il portfolio.';
+          _error = quoteCache.isEmpty
+              ? 'Il feed non ha fornito quote Sisal utilizzabili per le '
+                  'partite analizzate. Le previsioni AI sportive restano '
+                  'visibili sotto, ma non sono una schedina quotata.'
+              : 'Non ci sono abbastanza selezioni che rispettino insieme '
+                  'soglia di probabilità, controlli di qualità e quote '
+                  'Sisal minime di 1,20. Le analisi AI restano sotto.';
         });
 
         return;
@@ -4345,6 +4375,48 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
               ),
             ),
+          ],
+          if (_mode == _CouponMode.automatic &&
+              !_loading &&
+              _results.isEmpty &&
+              _sportsOnlyPreview.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'PRONOSTICI AI — SOLO ANALISI, NON SCHEDINA',
+              style: TextStyle(color: Colors.orangeAccent,
+                  fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Queste sono previsioni sportive senza una selezione '
+              'giocabile verificata su Sisal. Non mostrano quote '
+              'inventate e non costituiscono un sistema di gioco.',
+              style: TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            ..._sportsOnlyPreview.map((forecast) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2937),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${forecast.match.homeTeam} - '
+                      '${forecast.match.awayTeam}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${forecast.market} · '
+                      'stima ${forecast.probability}% · '
+                      'selezione Sisal non disponibile'
+                      '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
+                    style: const TextStyle(color: Colors.orangeAccent,
+                      fontSize: 11)),
+                ],
+              ),
+            )),
           ],
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 28),
