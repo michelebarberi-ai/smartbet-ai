@@ -165,3 +165,37 @@ jobs:
           done
           echo "FAIL: private runner readiness could not be verified"
           exit 1
+
+
+  private-neon-worker-ready:
+    # Read-only check: proves the paid runner can reach the restricted Neon queue.
+    needs: private-runner-health
+    if: github.ref == 'refs/heads/deploy/b47-learning-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Confirm restricted Neon worker is actually ready
+        shell: bash
+        env:
+          PROBE_URL: https://goalvdline-learning-api.onrender.com/health/official-engine
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/b47-private-neon-worker-health.json"
+          for attempt in 1 2 3 4; do
+            status="$(curl --silent --show-error --connect-timeout 15 \
+              --max-time 120 --max-redirs 0 --output "$response_file" \
+              --write-out '%{http_code}' "$PROBE_URL")" || status="000"
+            if [[ "$status" == "200" ]] && node -e '
+              const fs = require("node:fs");
+              const x = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              if (x.engineVerified !== true || x.workerReady !== true) process.exit(1);
+            ' "$response_file"; then
+              echo "PASS: private B47 worker is connected to the restricted Neon queue."
+              echo "No mobile requests, predictions or coupons created by this check."
+              exit 0
+            fi
+            echo "Private Neon worker not ready (attempt $attempt, HTTP $status)"
+            if [[ "$attempt" != "4" ]]; then sleep 25; fi
+          done
+          echo "FAIL: private Neon worker was not independently certified."
+          exit 1
