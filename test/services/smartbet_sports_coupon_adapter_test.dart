@@ -12,6 +12,8 @@ void main() {
     awayProbability: 10,
     goalProbability: 82,
     over25Probability: 75,
+    expectedHomeGoals: 1.8,
+    expectedAwayGoals: 1.1,
     prediction: 'GOAL',
     valueBet: '',
     risk: 'Basso',
