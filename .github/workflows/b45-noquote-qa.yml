@@ -44,6 +44,7 @@ jobs:
           flutter test --no-pub --reporter compact \
             test/services/sisal_odds_service_coverage_test.dart \
             test/services/goalvdline_quote_policy_test.dart \
+            test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
             test/services/goalvdline_official_coupon_contract_test.dart
