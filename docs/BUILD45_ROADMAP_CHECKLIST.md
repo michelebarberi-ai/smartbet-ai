@@ -8,7 +8,10 @@ Aggiornamento: 12 novembre 2026. Riferimento: feature/b45-p20-4-multiday, PR #1 
 
 - [ ] **Modifica 1 / priorità alta:** le schedine **su richiesta** devono continuare a essere elaborate sul server anche se l'iPhone va in background, viene bloccato o l'app si chiude. Riutilizzare **prima** Render/Flutter già pagati e Neon solo dopo verifica, con richiesta autenticata, job persistente, stato e recupero su iPhone, notifica solo a READY. Nessun servizio aggiuntivo o flag AutoSchedina giornaliera abilitato automaticamente.
 - [ ] **Modifica 2 / priorità alta:** il pronostico AI con probabilità sportiva maggiore deve apparire sempre per primo, anche con quota reale <1,20 o N/D; subito sotto, quando disponibile, la migliore alternativa con quota reale >=1,20 che supera soglia e Auditor. Se Sisal non offre quote, usare fonte bookmaker verificata alternativa con nome esatto (mai etichettarla Sisal). Non inventare quote né forzare schedine.
-- [ ] Altri bug del collaudo: numerare dal punto 3 in avanti.
+- [ ] **Modifica 3 / priorità alta:** Risultati GoalVdLine TOP 5 non deve sparire quando mancano quote Sisal. Classificare i forecast sportivi con qualità, mostrare il migliore e un'alternativa realmente quotata >=1,20 quando disponibile. Distinguere quota mancante da analisi insufficiente.
+- [ ] **Modifica 4 / priorità alta:** confronto Diego AI / SmartBet da eseguire anche sui pronostici sportivi non quotati, con deduplicazione e controllo costi. Attualmente Diego viene richiamato solo dopo la selezione con quota, quindi appare assente quando i risultati sono vuoti.
+- [~] **X Premium:** visualizza simulazioni senza quota e senza Diego; negli screenshot le X ~25–31% sono sotto soglia e alcune hanno qualità dati N/D. Nessuna modifica automatica della logica, da monitorare.
+- [ ] Altri bug del collaudo: numerare dal punto 5 in avanti.
 - Registro dedicato: [`docs/BUILD46_TESTFLIGHT_BUGS.md`](BUILD46_TESTFLIGHT_BUGS.md). La modifica 1 è **registrata, non ancora implementata**. Nessun deploy Render, Neon o TestFlight autorizzato dal solo registro.
 
 Legenda:
