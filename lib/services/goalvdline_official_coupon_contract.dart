@@ -89,7 +89,9 @@ class GoalVdLineOfficialCouponContract {
           probability > 100)
         continue;
       // Every exported quote comes from the actual sports market pick.
-      if (!pick.odd.isFinite || pick.odd <= 1.0) continue;
+      if (!GoalVdLineQuotePolicy.isSisal(selection.bookmaker) ||
+          !pick.odd.isFinite ||
+          pick.odd < GoalVdLineQuotePolicy.minimumOdd) continue;
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();
       if (kickoff == null ||
           !GoalVdLineRomeDayWindow.includes(
@@ -151,6 +153,7 @@ class GoalVdLineOfficialCouponContract {
       final percent = selection.effectiveProbabilityPercent;
       if (percent < preferences.minimumMarketProbability ||
           percent > 100 ||
+          !GoalVdLineQuotePolicy.isSisal(selection.bookmaker) ||
           !pick.odd.isFinite ||
           pick.odd < GoalVdLineQuotePolicy.minimumOdd) {
         continue;

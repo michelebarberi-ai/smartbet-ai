@@ -135,7 +135,7 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
       return {valid: false, reason: 'invalid_or_out_of_day_kickoff'};
     }
     if ('odds' in event && (typeof event.odds !== 'number' ||
-        !Number.isFinite(event.odds) || event.odds <= 1)) {
+        !Number.isFinite(event.odds) || event.odds < 1.20)) {
       return {valid: false, reason: 'invalid_odds'};
     }
     // All three coordinated variants must have genuine quoted odds.

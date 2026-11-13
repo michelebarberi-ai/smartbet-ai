@@ -54,10 +54,10 @@ void main() {
     expect(pick?.market, 'GOAL');
   });
 
-  test('Sotto 1.25 passa al mercato successivo', () {
+  test('Sotto 1.20 passa al mercato successivo', () {
     final pick = SmartBetSportsCouponAdapter.bestPlayable(
       analysis: analysis(),
-      odds: odds({'GOAL': 1.24, 'OVER 2.5': 1.50, '1': 3.50}),
+      odds: odds({'GOAL': 1.19, 'OVER 2.5': 1.50, '1': 3.50}),
     );
 
     expect(pick?.market, 'OVER 2.5');
@@ -66,7 +66,7 @@ void main() {
   test('Senza una quota ammissibile non sceglie', () {
     final pick = SmartBetSportsCouponAdapter.bestPlayable(
       analysis: analysis(),
-      odds: odds({'GOAL': 1.20, 'OVER 2.5': 1.12}),
+      odds: odds({'GOAL': 1.19, 'OVER 2.5': 1.12}),
     );
 
     expect(pick, isNull);

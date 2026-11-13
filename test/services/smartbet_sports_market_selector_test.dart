@@ -23,19 +23,19 @@ void main() {
     expect(pick?.market, 'GOAL');
   });
 
-  test('Il limite di 1.25 e incluso', () {
+  test('Il limite di 1.20 e incluso', () {
     final pick = SmartBetSportsMarketSelector.bestPlayable(
       sportsProbabilities: probabilities,
-      quotedOdds: const {'GOAL': 1.25, 'OVER 2.5': 2.40},
+      quotedOdds: const {'GOAL': 1.20, 'OVER 2.5': 2.40},
     );
 
     expect(pick?.market, 'GOAL');
   });
 
-  test('Quota sotto 1.25 passa al secondo mercato sportivo', () {
+  test('Quota sotto 1.20 passa al secondo mercato sportivo', () {
     final pick = SmartBetSportsMarketSelector.bestPlayable(
       sportsProbabilities: probabilities,
-      quotedOdds: const {'GOAL': 1.24, 'OVER 2.5': 1.50, '1': 5.00},
+      quotedOdds: const {'GOAL': 1.19, 'OVER 2.5': 1.50, '1': 5.00},
     );
 
     expect(pick?.market, 'OVER 2.5');
@@ -45,7 +45,7 @@ void main() {
   test('Mercati senza quote ammissibili vengono esclusi', () {
     final pick = SmartBetSportsMarketSelector.bestPlayable(
       sportsProbabilities: probabilities,
-      quotedOdds: const {'GOAL': 1.10, 'OVER 2.5': 1.20},
+      quotedOdds: const {'GOAL': 1.10, 'OVER 2.5': 1.19},
     );
 
     expect(pick, isNull);

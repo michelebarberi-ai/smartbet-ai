@@ -84,6 +84,7 @@ SmartBetCouponSelection pick(
     probability: probability,
     odd: odd,
   ),
+  sportsBookmaker: 'Sisal',
   calibratedProbabilityPercent: effective,
 );
 
@@ -113,6 +114,20 @@ GoalVdLineAutoCouponPreferences prefs({
 );
 
 void main() {
+  test('P20.6: non esporta quota di bookmaker diverso da Sisal', () {
+    final selection = SmartBetCouponSelection(
+      match: fixture(300), analysis: analysis(),
+      sportsPick: const SmartBetSportsMarketPick(
+        market: '1', probability: 80, odd: 1.60,
+      ),
+      sportsBookmaker: 'Altro Bookmaker',
+    );
+    expect(GoalVdLineOfficialCouponContract.serialize(
+      coupon: coupon([selection, pick(301, '1', 70), pick(302, '1', 70)]),
+      preferences: prefs(), now: now,
+    ), isNull);
+  });
+
   test('P20: tre schedine con stessi 3 eventi, mercati reali diversi', () {
     final set = SmartBetCouponSet(
       premium: coupon([pick(1, 'UNDER 2.5', 70)]),

@@ -146,9 +146,9 @@ void main() {
     }
   });
 
-  test('Quota sotto 1.25: usa il mercato successivo', () async {
+  test('Quota sotto 1.20: usa il mercato successivo', () async {
     final result = await fakeService(
-      goalOdd: 1.24,
+      goalOdd: 1.19,
     ).buildCouponSet(matches: [fixture(1)], minimumRequired: 1);
 
     expect(result.premium.hasCoupon, isTrue);

@@ -51,10 +51,10 @@ void main() {
     expect(result.options.map((e) => e.market), contains('GOAL'));
   });
 
-  test('P19C: quota <1.25 usa alternativa sportiva', () {
+  test('P19C: quota <1.20 usa alternativa sportiva', () {
     final result = SmartBetMultiMarketSelectionService.bestQuoted(
       analysis: a,
-      odds: quotes({'OVER 1.5': 1.24, 'GOAL': 1.40, '1': 2.80}),
+      odds: quotes({'OVER 1.5': 1.19, 'GOAL': 1.40, '1': 2.80}),
       families: ['OVER', 'GOAL', '1'],
     );
     expect(result!.market, 'GOAL');
@@ -64,7 +64,7 @@ void main() {
   test('P19C: quota elevata non influenza ranking', () {
     final result = SmartBetMultiMarketSelectionService.bestQuoted(
       analysis: a,
-      odds: quotes({'OVER 1.5': 1.25, 'GOAL': 15.00}),
+      odds: quotes({'OVER 1.5': 1.20, 'GOAL': 15.00}),
       families: ['OVER', 'GOAL'],
     );
     expect(result!.market, 'OVER 1.5');
@@ -73,19 +73,19 @@ void main() {
   test('P19C: senza quota reale non inventa selezioni', () {
     final result = SmartBetMultiMarketSelectionService.bestQuoted(
       analysis: a,
-      odds: quotes({'OVER 1.5': 1.20, 'GOAL': 1.24}),
+      odds: quotes({'OVER 1.5': 1.19, 'GOAL': 1.18}),
       families: ['OVER', 'GOAL'],
     );
     expect(result, isNull);
   });
 
-  test('P19C: minimo 1.25 incluso', () {
+  test('P19C: minimo 1.20 incluso', () {
     final result = SmartBetMultiMarketSelectionService.bestQuoted(
       analysis: a,
-      odds: quotes({'OVER 1.5': 1.25}),
+      odds: quotes({'OVER 1.5': 1.20}),
       families: ['OVER', 'GOAL'],
     );
-    expect(result!.odd, 1.25);
+    expect(result!.odd, 1.20);
   });
 
   test('P19C: quarto mercato respinto', () {
