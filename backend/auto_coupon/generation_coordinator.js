@@ -109,6 +109,19 @@ class AutoCouponGenerationCoordinator {
         {status: 'superseded'};
     }
 
+    // An official, legitimately empty generation is a sporting-data outcome,
+    // not a provider/transport fault and never a reason to invent selections.
+    if (proposed && !Array.isArray(proposed) &&
+        Object.keys(proposed).length === 1 &&
+        proposed.status === 'no_coupon') {
+      const completed = await this.repository.finishAutoCouponRun({
+        ...lease, outcome: 'retry', reason: 'no_coupon',
+        now: checkedAt, retryMinutes: 60,
+      });
+      return completed ? {status: 'retry', reason: 'no_coupon'} :
+        {status: 'superseded'};
+    }
+
     const validation = validateGeneratedCoupon({coupon: proposed,
       preferences, now: checkedAt});
     if (!validation.valid || validation.dayKey !== due.dayKey) {
