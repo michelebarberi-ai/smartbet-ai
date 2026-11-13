@@ -1,5 +1,6 @@
 import '../models/analysis_result.dart';
 import 'odds_service.dart';
+import 'goalvdline_quote_policy.dart';
 import 'smartbet_european_handicap_candidate_service.dart';
 import 'smartbet_market_probability_service.dart';
 import 'smartbet_refundable_market_candidate_service.dart';
@@ -196,7 +197,7 @@ class SmartBetMultiMarketSelectionService {
     required AnalysisResult analysis,
     required FixtureMarketOdds odds,
     required Iterable<String> families,
-    double minimumOdd = 1.25,
+    double minimumOdd = GoalVdLineQuotePolicy.minimumOdd,
   }) {
     final selected = _validate(families);
     final options = <SmartBetMultiMarketOption>[];

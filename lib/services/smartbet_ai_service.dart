@@ -393,6 +393,7 @@ class SmartBetAiService {
 
     final odds = await _oddsService.getMatchWinnerOdds(
       fixtureId: match.fixtureId,
+      bookmakerName: 'Sisal',
     );
 
     if (odds == null) {

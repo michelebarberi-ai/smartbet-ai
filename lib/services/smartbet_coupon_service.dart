@@ -7,6 +7,8 @@ import 'smartbet_shared_local_learning_service.dart';
 import 'smartbet_live_calibration_service.dart';
 import 'smartbet_analysis_registration_service.dart';
 import 'odds_service.dart';
+import 'sisal_odds_service.dart';
+import 'goalvdline_quote_policy.dart';
 
 // ============================================================
 // SINGOLA SELEZIONE DELLA SCHEDINA
@@ -259,7 +261,7 @@ class SmartBetCouponService {
   // massimo 2 partite contemporaneamente.
   static const int advancedBatchSize = 2;
 
-  static const double minimumOdd = 1.25;
+  static const double minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
 
   static const double maximumCouponStakePercent = 0.50;
 
@@ -395,7 +397,7 @@ class SmartBetCouponService {
         : await const SmartBetSharedLocalLearningService().prepare();
 
     final aiService = analysisProvider == null ? SmartBetAiService() : null;
-    final oddsService = oddsProvider == null ? OddsService() : null;
+    final oddsService = oddsProvider == null ? SisalOddsService() : null;
 
     final analyzed = <SmartBetCouponSelection>[];
     final verifiedMarketAlternatives = <SmartBetCouponSelection>[];

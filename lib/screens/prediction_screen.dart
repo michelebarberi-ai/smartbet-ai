@@ -9,6 +9,8 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/odds_service.dart';
+import '../services/sisal_odds_service.dart';
+import '../services/goalvdline_quote_policy.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -33,7 +35,7 @@ class PredictionScreen extends StatefulWidget {
 }
 
 class _PredictionScreenState extends State<PredictionScreen> {
-  final OddsService _oddsService = OddsService();
+  final SisalOddsService _oddsService = SisalOddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
   final DualEngineAnalysisService _dualEngineService =
@@ -58,7 +60,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
   static const int _maximumMatchesToAnalyze = 36;
   static const int _preBatchSize = 6;
   static const int _oddsBatchSize = 6;
-  static const double _minimumOdd = 1.25;
+  static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
 
   static const List<String> _marketOrder = [
     '1',
@@ -1773,7 +1775,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   Text(
                     'GoalVdLine cerca fino a 5 selezioni solide nel periodo selezionato '
                     'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
-                    'e quota bookmaker reale almeno 1.25.',
+                    'e quota Sisal reale almeno 1,20.',
                     style: TextStyle(color: Colors.white, height: 1.35),
                   ),
                 ],

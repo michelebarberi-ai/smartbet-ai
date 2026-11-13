@@ -8,6 +8,8 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/sisal_odds_service.dart';
+import '../services/goalvdline_quote_policy.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
@@ -122,7 +124,7 @@ class _PortfolioShadow {
 }
 
 class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
-  final OddsService _oddsService = OddsService();
+  final SisalOddsService _oddsService = SisalOddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
   final DualEngineAnalysisService _dualEngineService =
@@ -221,7 +223,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   final Map<int, MatchModel> _manualSelectedMatches = <int, MatchModel>{};
 
-  static const double _minimumOdd = 1.25;
+  static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
   // PATCH 02F-A — CAMPIONATI + RECOVERY RAPIDA
 
   static const List<String> _marketOrder = [
@@ -1965,7 +1967,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _notice =
               '${parts.join(' • ')}. '
               'Sistema $_riskProfileName di ${_portfolioResults.length} schedine creato. '
-              'Quota minima: 1.25.';
+              'Quota minima Sisal: 1,20.';
         } else {
           _notice =
               'Sistema GoalVdLine $_riskProfileName creato: '

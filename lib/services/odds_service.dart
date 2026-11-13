@@ -155,8 +155,13 @@ class OddsService {
   // COMPATIBILITÀ: 1X2
   // ============================================================
 
-  Future<MatchOdds?> getMatchWinnerOdds({required int fixtureId}) async {
-    final all = await getFixtureMarketOdds(fixtureId: fixtureId);
+  Future<MatchOdds?> getMatchWinnerOdds({
+    required int fixtureId,
+    String? bookmakerName,
+  }) async {
+    final all = await getFixtureMarketOdds(
+      fixtureId: fixtureId, bookmakerName: bookmakerName,
+    );
     return all?.matchWinner;
   }
 
@@ -966,6 +971,8 @@ class OddsService {
     final w = _normalizeBookmaker(wanted);
 
     if (a.isEmpty || w.isEmpty) return false;
+    // Never accept another bookmaker while the app explicitly asks for Sisal.
+    if (w == 'sisal') return a == 'sisal' || a == 'sisalit';
     return a == w || a.contains(w) || w.contains(a);
   }
 

@@ -8,6 +8,8 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/sisal_odds_service.dart';
+import '../services/goalvdline_quote_policy.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
 import '../services/smartbet_shared_local_learning_service.dart';
@@ -203,7 +205,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         minimumPercent: _minimumMarketProbability,
       );
 
-  static const double _minimumOdd = 1.25;
+  static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
 
   // P19I — gruppi di sola presentazione. I valori dei mercati restano
   // invariati per quote, probabilita, Auditor e storico.
@@ -2286,7 +2288,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _checkingOdds = true;
       });
 
-      final oddsService = OddsService();
+      final oddsService = SisalOddsService();
       final validCandidates = <_CombinationCandidate>[];
       final reserveCount = math.max(2, (_topCount * 0.50).ceil());
 
@@ -4714,7 +4716,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Text(
                 'Nessun risultato disponibile '
                 'per $_selectedMarketLabel con i '
-                'filtri scelti e quota minima 1.25.',
+                'filtri scelti e quota minima Sisal 1,20.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white60, height: 1.4),
               ),

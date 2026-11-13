@@ -1,3 +1,5 @@
+import 'goalvdline_quote_policy.dart';
+
 /// Seleziona mercati usando esclusivamente probabilita sportive.
 ///
 /// Le quote sono consultate soltanto dopo il ranking,
@@ -17,7 +19,7 @@ class SmartBetSportsMarketPick {
 class SmartBetSportsMarketSelector {
   const SmartBetSportsMarketSelector._();
 
-  static const double minimumOdd = 1.25;
+  static const double minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
 
   static String _normalizeMarket(String value) {
     return value

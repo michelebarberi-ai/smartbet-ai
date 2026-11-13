@@ -2,6 +2,7 @@ import 'goalvdline_auto_coupon_preferences.dart';
 import 'goalvdline_rome_day_window.dart';
 import 'goalvdline_three_coupon_system.dart';
 import 'smartbet_coupon_service.dart';
+import 'goalvdline_quote_policy.dart';
 
 /// P16: exports ONLY the official Flutter selections. This is not a new
 /// prediction/ranking model, and does not send anything to the server.
@@ -151,7 +152,7 @@ class GoalVdLineOfficialCouponContract {
       if (percent < preferences.minimumMarketProbability ||
           percent > 100 ||
           !pick.odd.isFinite ||
-          pick.odd < 1.25) {
+          pick.odd < GoalVdLineQuotePolicy.minimumOdd) {
         continue;
       }
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();

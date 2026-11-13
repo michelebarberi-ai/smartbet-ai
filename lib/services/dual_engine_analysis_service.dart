@@ -286,7 +286,7 @@ class DualEngineAnalysisService {
         requestedProbability <= 100 &&
         requestedOdd != null &&
         requestedOdd.isFinite &&
-        requestedOdd >= 1.25 &&
+        requestedOdd >= 1.20 &&
         !smartBet.sportsAuditBlockedMarkets.any(
           (item) => _normalizeMarket(item) == normalizedRequestedMarket,
         );
@@ -408,7 +408,7 @@ class DualEngineAnalysisService {
       // essere sostituita per aggirare il filtro.
       final verifiedOdd = oddOverride ?? marketOdds?.oddFor(market)?.odd;
 
-      if (verifiedOdd == null || !verifiedOdd.isFinite || verifiedOdd < 1.25) {
+      if (verifiedOdd == null || !verifiedOdd.isFinite || verifiedOdd < 1.20) {
         return unavailable;
       }
 
@@ -431,7 +431,7 @@ class DualEngineAnalysisService {
     }
 
     // Stessa scelta sportiva utilizzata dalle schedine.
-    // Le quote verificano solo disponibilita' e minimo 1.25.
+    // Le quote verificano solo disponibilita' e minimo 1.20.
     final pick = SmartBetSportsCouponAdapter.bestPlayable(
       analysis: result,
       odds: marketOdds,
@@ -520,7 +520,7 @@ class DualEngineAnalysisService {
 
   _EngineMarketChoice? _diegoChoice(DiegoAiAnalysis analysis) {
     // Prima viene valutata la probabilita' sportiva.
-    // La quota verifica soltanto disponibilita' e minimo 1.25.
+    // La quota verifica soltanto disponibilita' e minimo 1.20.
     final pick = DiegoAiSportsMarketSelector.bestPlayable(
       markets: analysis.markets,
       odds: analysis.marketOdds,

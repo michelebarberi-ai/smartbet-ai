@@ -307,6 +307,7 @@ class DiegoAiService {
 
     final fixtureOdds = await _oddsService.getFixtureMarketOdds(
       fixtureId: match.fixtureId,
+      bookmakerName: 'Sisal',
     );
 
     final odds = fixtureOdds?.matchWinner;
