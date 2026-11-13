@@ -56,7 +56,7 @@ jobs:
           docker run --rm \
             --entrypoint /bin/sh \
             smartbet-b45-linux-preflight:${{ github.sha }} \
-            -c 'set -eu; flutter --version; node --version; node --check backend/auto_coupon/official_headless_runner.js; node --check backend/auto_coupon/background_worker.js'
+            -c 'set -eu; flutter --version; node --version; node --check backend/auto_coupon/official_headless_runner.js; node --check backend/auto_coupon/private_neon_worker.js; node --check backend/auto_coupon/background_worker.js'
 
       - name: Backend and Flutter tests inside Linux container
         shell: bash
