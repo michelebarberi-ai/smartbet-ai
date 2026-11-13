@@ -12,5 +12,5 @@ class GoalVdLineQuotePolicy {
   }
 
   static bool isPlayable(double? odd) =>
-      odd != null && odd.isFinite && odd >= minimumOdd;
+      odd != null && odd.isFinite && odd > minimumOdd;
 }
