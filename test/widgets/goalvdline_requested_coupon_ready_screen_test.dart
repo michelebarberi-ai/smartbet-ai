@@ -18,7 +18,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('b45-local-ready-summary')), findsOneWidget);
-    expect(find.textContaining('Torino - Udinese'), findsOneWidget);
+    final summary = tester.widget<SelectableText>(
+      find.byKey(const Key('b45-local-ready-summary')),
+    );
+    expect(summary.data, contains('Torino - Udinese'));
   });
 
   testWidgets('B45 local tap never invents missing results', (tester) async {
