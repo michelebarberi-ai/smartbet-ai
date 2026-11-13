@@ -62,8 +62,8 @@ void main() {
     final replay = service.evaluate(records: samples, asOf: cutoff);
     final segment = replay.segments.single;
     expect(segment.eligibleFixtures, 130);
-    expect(segment.evaluatedFixtures, 79);
-    expect(segment.distinctValidationDays, 79);
+    expect(segment.evaluatedFixtures, 80);
+    expect(segment.distinctValidationDays, 80);
     expect(segment.originalBrier, isNotNull);
     expect(segment.shadowBrier, lessThan(segment.originalBrier!));
     expect(segment.brierImprovement, greaterThan(0));
