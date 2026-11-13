@@ -41,7 +41,9 @@ void main() {
       prospectiveEligible: prospective,
       status: status,
       actualHomeGoals: 2,
-      actualAwayGoals: 1,
+      actualAwayGoals: (market == 'NO GOAL')
+          ? (status == SmartBetAnalysisStatus.correct ? 0 : 1)
+          : (status == SmartBetAnalysisStatus.correct ? 1 : 0),
       firstSeenAt: created,
       lastSeenAt: resolved,
       resolvedAt: resolved,
@@ -85,6 +87,16 @@ void main() {
     expect(segment.evaluatedFixtures, 0);
     expect(segment.shadowBrier, isNull);
     expect(segment.warrantsFurtherResearch, false);
+  });
+
+  test('P21W.4: conflicting recorded result and final score is rejected', () {
+    final invalid = record(fixture: 1, market: 'GOAL',
+        status: SmartBetAnalysisStatus.wrong);
+    final valid = record(fixture: 2);
+    final report = service.evaluate(records: [invalid, valid], asOf: cutoff);
+    // Wrong GOAL has a 2-0 result in the helper and is valid.
+    expect(report.rejectedRecords, 0);
+    expect(report.segments.single.eligibleFixtures, 2);
   });
 
   test('P21W.4: fewer than 50 prior outcomes cannot calibrate', () {
