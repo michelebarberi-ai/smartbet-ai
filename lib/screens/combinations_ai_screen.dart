@@ -2406,7 +2406,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
             final bestOdd = marketOdds?.oddFor(item.market);
 
-            // Quota assente o inferiore a 1.25: selezione esclusa.
+            // Quota Sisal assente o inferiore a 1.20: esclusa dalla schedina,
+            // non dal pronostico sportivo.
             if (bestOdd == null || bestOdd.odd < _minimumOdd) {
               continue;
             }
@@ -3884,6 +3885,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     final scoreColor = _scoreColor(result.smartScore);
     final isComboChance = _selectedMarket == 'COMBO CHANCE';
     final isFamilyMarket = _multiMarketMode || _isFamilyMarket(_selectedMarket);
+    // Family options are ranked by sporting probability, not by price.
+    final modelOptions = item.familyOptions
+        .where((option) => option.probability > 0)
+        .toList()
+      ..sort((a, b) => b.probability.compareTo(a.probability));
+    final mainSport = modelOptions.isEmpty ? null : modelOptions.first;
+    final isSisalAlternative =
+        mainSport != null && mainSport.market != item.market;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3952,7 +3961,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ),
 
           const SizedBox(height: 15),
-
+          if (isSisalAlternative) ...[
+            Text(
+              'PRONOSTICO PRINCIPALE AI: '
+              '${_familyDisplayName(mainSport.market)} '
+              '· ${mainSport.probability}% (quote escluse dal ranking)',
+              style: const TextStyle(
+                color: Color(0xFF69F0AE),
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 9),
+          ],
           Row(
             children: [
               Expanded(
@@ -3964,6 +3985,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   ),
                   child: Column(
                     children: [
+                      if (isSisalAlternative)
+                        const Text(
+                          'ALTERNATIVA SISAL',
+                          style: TextStyle(color: Colors.amberAccent, fontSize: 10),
+                        ),
                       Text(
                         _familyDisplayName(item.market),
                         style: const TextStyle(

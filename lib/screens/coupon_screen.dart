@@ -452,7 +452,9 @@ class _CouponScreenState extends State<CouponScreen> {
             children: [
               Expanded(
                 child: _detailBox(
-                  'PRONOSTICO',
+                  selection.usesCouponAlternative
+                      ? 'ALTERNATIVA SISAL'
+                      : 'PRONOSTICO AI',
                   selection.outcome,
                   const Color(0xFF00C853),
                 ),
@@ -480,6 +482,18 @@ class _CouponScreenState extends State<CouponScreen> {
             ],
           ),
 
+          if (selection.usesCouponAlternative) ...[
+            const SizedBox(height: 9),
+            Text(
+              'Pronostico principale AI (invariato): '
+              '${selection.primaryForecastMarket} · '
+              '${selection.primaryForecastProbability}%'
+              '${selection.primarySisalOdd == null ? ' · quota Sisal N/D' : ' · quota Sisal ${selection.primarySisalOdd!.toStringAsFixed(2)}'}',
+              style: const TextStyle(
+                color: Color(0xFF69F0AE), fontSize: 11,
+              ),
+            ),
+          ],
           if (selection.hasLocalCalibration) ...[
             const SizedBox(height: 9),
             Text(

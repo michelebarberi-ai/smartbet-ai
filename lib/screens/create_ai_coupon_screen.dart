@@ -4462,6 +4462,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   Widget _resultCard(_CouponPick item, int position) {
+    // Independent of odds: always show the AI's top sporting forecast.
+    // A different quoted pick is explicitly labeled as a coupon alternative.
+    final rankedSports = _sportsMarketCandidates(item.analysis);
+    final topSport = rankedSports.isEmpty ? null : rankedSports.first;
+    final isSisalAlternative =
+        topSport != null && topSport.market != item.market;
     final probabilityColor = _probabilityColor(item.probability);
     final localAuditLabel = switch (item.auditorStatus) {
       'CONFERMATA' => 'SUPERATO',
@@ -4520,14 +4526,29 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 13),
+          if (isSisalAlternative) ...[
+            Text(
+              'PRONOSTICO PRINCIPALE AI: '
+              '${GoalVdLineMarketRelationService.displayMarket(topSport.market)} '
+              '· ${topSport.probability}% (non modificato dalle quote)',
+              style: const TextStyle(
+                color: Color(0xFF69F0AE),
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'SCELTA GOALVDLINE',
+                    Text(
+                      isSisalAlternative
+                          ? 'ALTERNATIVA SISAL PER LA SCHEDINA'
+                          : 'PRONOSTICO PRINCIPALE AI',
                       style: TextStyle(
                         color: Colors.white38,
                         fontSize: 9,
@@ -4597,7 +4618,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 const SizedBox(width: 7),
                 Text(
                   item.odd == null
-                      ? 'Quota combo N/D'
+                      ? 'Quota Sisal N/D'
                       : '@ ${item.odd!.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
