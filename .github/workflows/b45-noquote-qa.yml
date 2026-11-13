@@ -48,6 +48,7 @@ jobs:
             test/services/smartbet_multi_market_selection_service_test.dart \
             test/services/smartbet_or_markets_test.dart \
             test/services/goalvdline_multi_bookmaker_odds_test.dart \
+            test/services/goalvdline_on_demand_coupon_client_test.dart \
             test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
@@ -85,12 +86,15 @@ jobs:
         run: |
           node --check backend/auto_coupon/on_demand_coupon_service.js
           node --check backend/auto_coupon/on_demand_coupon_routes.js
+          node --check backend/auto_coupon/on_demand_scheduler.js
+          node --check backend/learning_only_server.js
           node --check backend/learning/learning_repository.js
           node --check backend/learning/learning_routes.js
       - name: On-demand authentication, official engine, durability tests
         run: |
           node --test \
             backend/test/auto_coupon_on_demand.test.js \
+            backend/test/auto_coupon_on_demand_scheduler.test.js \
             backend/test/auto_coupon_generation_coordinator.test.js \
             backend/test/auto_coupon_worker_route.test.js
 
