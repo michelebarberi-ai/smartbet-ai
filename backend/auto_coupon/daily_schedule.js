@@ -144,6 +144,13 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
         !allowedDays.has(localClock(kickoff, timeZone).dayKey)) {
       return {valid: false, reason: 'invalid_or_out_of_day_kickoff'};
     }
+    for (const key of ['homeTeam','awayTeam']) {
+      if (event[key] !== undefined &&
+          (typeof event[key] !== 'string' || !event[key].trim() ||
+            event[key].length > 120)) {
+        return {valid:false,reason:'invalid_fixture_label'};
+      }
+    }
     if (event.bookmaker !== undefined &&
         (typeof event.bookmaker !== 'string' ||
           !event.bookmaker.trim() || event.bookmaker.length > 80 ||
