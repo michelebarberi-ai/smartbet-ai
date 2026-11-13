@@ -160,7 +160,7 @@ jobs:
       - name: Compile iOS without code signing
         run: flutter build ios --no-codesign
 
-qa-render-neon-readiness:
+  qa-render-neon-readiness:
     # Read-only smoke check, no credentials or database writes.
     if: github.ref == 'refs/heads/feature/b47-corrections'
     needs: qa-on-demand-postgres
