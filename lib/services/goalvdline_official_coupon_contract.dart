@@ -119,6 +119,8 @@ class GoalVdLineOfficialCouponContract {
 
       events.add(<String, Object>{
         'fixtureId': selection.match.fixtureId,
+        'homeTeam': selection.match.homeTeam,
+        'awayTeam': selection.match.awayTeam,
         'market': pick.market,
         'marketProbability': probability,
         'kickoffAt': kickoff.toIso8601String(),
@@ -306,6 +308,8 @@ class GoalVdLineOfficialCouponContract {
         if (kickoff == null) return null;
         events.add(<String, Object>{
           'fixtureId': candidate.fixtureId,
+          'homeTeam': selected.match.homeTeam,
+          'awayTeam': selected.match.awayTeam,
           'market': candidate.market,
           'marketProbability': candidate.probability,
           'kickoffAt': kickoff.toIso8601String(),
