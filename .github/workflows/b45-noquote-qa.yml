@@ -1,21 +1,21 @@
-name: SmartBet B45 quote-coverage QA
+name: SmartBet B47 corrections QA
 
 # Code validation ONLY: never signs, archives or uploads to Apple.
 on:
   push:
     branches:
-      - fix/b45-noquote-preview
+      - feature/b47-corrections
 
 permissions:
   contents: read
 
 concurrency:
-  group: smartbet-b45-noquote-qa
+  group: smartbet-b47-corrections-qa
   cancel-in-progress: true
 
 jobs:
   qa-flutter:
-    if: github.ref == 'refs/heads/fix/b45-noquote-preview'
+    if: github.ref == 'refs/heads/feature/b47-corrections'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -38,12 +38,15 @@ jobs:
         shell: bash
         run: flutter analyze --no-pub --no-fatal-infos
 
-      - name: Test SISAL coverage, quote cache, safe coupon limits
+      - name: Test bookmaker coverage, quote policy, safe coupon limits and OR markets
         shell: bash
         run: |
           flutter test --no-pub --reporter compact \
             test/services/sisal_odds_service_coverage_test.dart \
             test/services/goalvdline_quote_policy_test.dart \
+            test/services/smartbet_sports_market_selector_test.dart \
+            test/services/smartbet_multi_market_selection_service_test.dart \
+            test/services/smartbet_or_markets_test.dart \
             test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/services/goalvdline_market_probability_filter_test.dart \
             test/services/goalvdline_three_coupon_system_test.dart \
@@ -52,7 +55,7 @@ jobs:
   qa-ios-compile:
     # Validate the Swift notification test handler without any signing or upload.
     needs: qa-flutter
-    if: github.ref == 'refs/heads/fix/b45-noquote-preview'
+    if: github.ref == 'refs/heads/feature/b47-corrections'
     runs-on: macos-26-intel
     timeout-minutes: 35
     steps:
