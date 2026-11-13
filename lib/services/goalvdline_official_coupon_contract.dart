@@ -3,12 +3,25 @@ import 'goalvdline_rome_day_window.dart';
 import 'goalvdline_three_coupon_system.dart';
 import 'smartbet_coupon_service.dart';
 import 'goalvdline_quote_policy.dart';
+import 'smartbet_market_probability_service.dart';
 
 /// P16: exports ONLY the official Flutter selections. This is not a new
 /// prediction/ranking model, and does not send anything to the server.
 /// An independent, headless execution of the official engine is still needed.
 class GoalVdLineOfficialCouponContract {
   const GoalVdLineOfficialCouponContract._();
+
+  /// Only the bookmaker attached to the quoted sports pick is admissible.
+  /// A fallback stake bookmaker from the forecast is not evidence of a quote.
+  static String? _verifiedQuotedBookmaker(SmartBetCouponSelection selection) {
+    final name = selection.sportsBookmaker?.trim();
+    if (name == null || name.isEmpty || name.length > 80 ||
+        const <String>{'n/d', 'unknown', 'sconosciuto', 'n.a.'}
+            .contains(name.toLowerCase())) {
+      return null;
+    }
+    return name;
+  }
 
   static String? marketFamily(String market) {
     final normalized = market
@@ -32,6 +45,9 @@ class GoalVdLineOfficialCouponContract {
     }
     if (const <String>{'1', 'X', '2', '1X2'}.contains(normalized)) {
       return GoalVdLineAutoCouponPreferences.oneXTwo;
+    }
+    if (SmartBetMarketProbabilityService.orMarkets.contains(normalized)) {
+      return 'OR';
     }
     // Official European handicap candidates are selected only when quoted.
     // Accepted range and outcome match the real Flutter candidate service.
@@ -89,9 +105,9 @@ class GoalVdLineOfficialCouponContract {
           probability > 100)
         continue;
       // Every exported quote comes from the actual sports market pick.
-      if (!GoalVdLineQuotePolicy.isSisal(selection.bookmaker) ||
-          !pick.odd.isFinite ||
-          pick.odd < GoalVdLineQuotePolicy.minimumOdd) continue;
+      final bookmaker = _verifiedQuotedBookmaker(selection);
+      if (bookmaker == null ||
+          !GoalVdLineQuotePolicy.isPlayable(pick.odd)) continue;
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();
       if (kickoff == null ||
           !GoalVdLineRomeDayWindow.includes(
@@ -107,6 +123,7 @@ class GoalVdLineOfficialCouponContract {
         'marketProbability': probability,
         'kickoffAt': kickoff.toIso8601String(),
         'odds': pick.odd,
+        'bookmaker': bookmaker,
       });
       if (events.length == preferences.events) break;
     }
@@ -153,9 +170,8 @@ class GoalVdLineOfficialCouponContract {
       final percent = selection.effectiveProbabilityPercent;
       if (percent < preferences.minimumMarketProbability ||
           percent > 100 ||
-          !GoalVdLineQuotePolicy.isSisal(selection.bookmaker) ||
-          !pick.odd.isFinite ||
-          pick.odd < GoalVdLineQuotePolicy.minimumOdd) {
+          _verifiedQuotedBookmaker(selection) == null ||
+          !GoalVdLineQuotePolicy.isPlayable(pick.odd)) {
         continue;
       }
       final kickoff = DateTime.tryParse(selection.match.date)?.toUtc();
@@ -294,6 +310,7 @@ class GoalVdLineOfficialCouponContract {
           'marketProbability': candidate.probability,
           'kickoffAt': kickoff.toIso8601String(),
           'odds': candidate.odd,
+          'bookmaker': _verifiedQuotedBookmaker(selected)!,
         });
       }
       result.add(<String, Object>{'name': names[i], 'events': events});
