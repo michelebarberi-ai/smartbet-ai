@@ -15,6 +15,7 @@ const {validToken} = require('../learning/learning_core');
 const {validatePreferences, localClock, validateGeneratedCoupon} = require('./daily_schedule');
 const {PROTOCOL} = require('./official_engine_client');
 const {createDurableHeadlessJobStore} = require('./durable_headless_job_store');
+const {createPrivateNeonWorker} = require('./private_neon_worker');
 
 const REVISION = /^[a-f0-9]{7,40}$/;
 const JOB_ID = /^[0-9a-f]{32}$/;
@@ -102,7 +103,7 @@ function createFlutterExecutor({projectRoot = path.resolve(__dirname, '../..'),
 }
 
 function createHeadlessEngineHost({token, additionalToken = null, revision, execute = createFlutterExecutor(),
-  now = () => new Date(), jobStore = null} = {}) {
+  now = () => new Date(), jobStore = null, onDemandWorker = null} = {}) {
   if (typeof token !== 'string' || token.length < 32 ||
       !REVISION.test(revision || '')) throw new Error('Headless engine disabled');
   const jobs = new Map();
@@ -144,7 +145,20 @@ function createHeadlessEngineHost({token, additionalToken = null, revision, exec
     }
     // B47: authenticated connectivity probe; never creates a job or accesses providers.
     if (req.method === 'GET' && req.url === '/coupon/health') {
-      return respond(res, 200, {protocol:PROTOCOL,officialEngine:true,revision,ready:true});
+      return respond(res, 200, {protocol:PROTOCOL,officialEngine:true,revision,
+        ready:true,workerReady:onDemandWorker?.ready===true});
+    }
+    // Private B47 bearer wakes the EXISTING paid runner's Neon worker.
+    // It cannot inject a coupon or caller identity; the worker claims jobs from Neon.
+    if (req.method === 'POST' && req.url === '/coupon/on-demand/wake') {
+      if (!b47Authorized) return respond(res, 401, {error:'unauthorized'});
+      if (!onDemandWorker?.ready) return respond(res, 503, {error:'worker_unavailable'});
+      if (req.headers['transfer-encoding'] ||
+          (req.headers['content-length'] && req.headers['content-length'] !== '0')) {
+        return respond(res, 400, {error:'unexpected_body'});
+      }
+      void onDemandWorker.tick();
+      return respond(res, 202, {protocol:PROTOCOL,workerNotified:true});
     }
     if (req.method === 'POST' && req.url === '/coupon/generate') {
       let raw = '';
@@ -253,12 +267,20 @@ if (require.main === module) {
     try {
       const stateDir = env.AUTO_COUPON_HEADLESS_STATE_DIR;
       const jobStore = stateDir ? createDurableHeadlessJobStore(stateDir) : null;
+      const onDemandWorker=createPrivateNeonWorker({env});
       const host = createHeadlessEngineHost({token:env.AUTO_COUPON_HEADLESS_TOKEN,
         additionalToken:env.AUTO_COUPON_HEADLESS_B47_TOKEN,
-        revision:env.AUTO_COUPON_HEADLESS_REVISION,jobStore});
+        revision:env.AUTO_COUPON_HEADLESS_REVISION,jobStore,onDemandWorker});
       const port = Number(env.AUTO_COUPON_HEADLESS_PORT || '8799');
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
-      host.listen(port, headlessListenAddress(env), () => console.log('Headless runner listening (authenticated).'));
+      host.listen(port, headlessListenAddress(env), () => {
+        console.log('Headless runner listening (authenticated).');
+        if(onDemandWorker)onDemandWorker.start();
+      });
+      if(onDemandWorker)process.once('SIGTERM',()=>{
+        host.close();
+        void onDemandWorker.stop().catch(()=>console.error('Private worker shutdown_failed'));
+      });
     } catch (_) {console.error('Invalid headless runner configuration.');process.exitCode = 2;}
   }
 }
