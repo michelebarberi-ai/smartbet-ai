@@ -136,7 +136,10 @@ function validateSingleCoupon({coupon, preferences, now, timeZone}) {
     }
     if ('odds' in event && (typeof event.odds !== 'number' ||
         !Number.isFinite(event.odds) || event.odds < 1.20)) {
-      return {valid: false, reason: 'invalid_odds'};
+      // Triple slips use a distinct reason; SINGLE retains the legacy
+      // invalid-optional-odds classification.
+      return {valid: false, reason: preferences.systemMode === THREE_MODE
+        ? 'missing_or_low_triple_odds' : 'invalid_odds'};
     }
     // All three coordinated variants must have genuine quoted odds.
     // Legacy SINGLE keeps its backward-compatible optional-odds contract.

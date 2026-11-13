@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/services/smartbet_coupon_service.dart';
 
 void main() {
-  test('La quota minima delle schedine e 1.25', () {
-    expect(SmartBetCouponService.minimumOdd, 1.25);
+  test('La quota minima delle schedine e 1.20', () {
+    expect(SmartBetCouponService.minimumOdd, 1.20);
   });
 
   test('Premium, Bilanciata e Value gestiscono zero partite', () async {

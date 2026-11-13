@@ -56,10 +56,10 @@ void main() {
     expect(second?.probability, first?.probability);
   });
 
-  test('Sotto quota 1.25 sceglie il mercato successivo', () {
+  test('Sotto quota 1.20: solo alternativa quotata, non nuovo forecast', () {
     final pick = DiegoAiSportsMarketSelector.bestPlayable(
       markets: probabilities,
-      odds: quotes({'GOAL': 1.24, 'OVER 2.5': 1.60, '1': 2.50}),
+      odds: quotes({'GOAL': 1.19, 'OVER 2.5': 1.60, '1': 2.50}),
     );
 
     expect(pick?.market, 'OVER 2.5');

@@ -130,14 +130,15 @@ void main() {
     expect(result.comparison.status, DualEngineAgreement.partial);
   });
 
-  test('Quota Goal sotto 1.25: entrambi passano a Over', () {
+  test('Quota GOAL sotto 1.20: entrambi mantengono GOAL come pronostico AI', () {
     final result = service.comparePrepared(
       smartBet: smart(),
-      diego: diego(odds: quotes({'GOAL': 1.24, 'OVER 2.5': 1.60})),
+      diego: diego(odds: quotes({'GOAL': 1.19, 'OVER 2.5': 1.60})),
     );
 
-    expect(result.comparison.smartBetMarket, 'OVER 2.5');
-    expect(result.comparison.diegoMarket, 'OVER 2.5');
+    expect(result.comparison.smartBetMarket, 'GOAL');
+    expect(result.comparison.diegoMarket, 'GOAL');
+    expect(result.comparison.diegoOdd, isNull);
     expect(result.comparison.status, DualEngineAgreement.agree);
   });
 
@@ -156,13 +157,13 @@ void main() {
     expect(result.comparison.statisticalSmartBetProbability, 0.80);
   });
 
-  test('P19B2A: quota sotto 1.25 non produce preview', () {
+  test('P19B2A: quota sotto 1.20 non produce preview', () {
     final result = service.comparePrepared(
       smartBet: smart(audit: 'NOT_RUN'),
       diego: diego(odds: quotes(baseQuotes)),
       smartBetMarket: 'GOAL',
       smartBetProbability: 80,
-      smartBetOdd: 1.24,
+      smartBetOdd: 1.19,
     );
 
     expect(result.comparison.status, DualEngineAgreement.unavailable);
@@ -242,25 +243,25 @@ void main() {
     expect(result.comparison.smartBetMarket, 'N/D');
   });
 
-  test('Quota esplicita sotto 1.25: rifiutata', () {
+  test('Quota esplicita sotto 1.20: rifiutata', () {
     final result = service.comparePrepared(
       smartBet: smart(),
       diego: diego(odds: quotes({'GOAL': 1.40, 'OVER 2.5': 1.60, '1': 2.00})),
       smartBetMarket: '1',
-      smartBetOdd: 1.24,
+      smartBetOdd: 1.19,
     );
 
     expect(result.comparison.status, DualEngineAgreement.unavailable);
     expect(result.comparison.smartBetMarket, 'N/D');
   });
 
-  test('Quota esattamente 1.25: consentita', () {
+  test('Quota esattamente 1.20: consentita', () {
     final result = service.comparePrepared(
       smartBet: smart(),
       diego: diego(odds: quotes(baseQuotes)),
       smartBetMarket: '1',
       smartBetProbability: 65,
-      smartBetOdd: 1.25,
+      smartBetOdd: 1.20,
     );
 
     expect(result.comparison.smartBetMarket, '1');

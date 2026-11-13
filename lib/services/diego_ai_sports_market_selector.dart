@@ -1,5 +1,6 @@
 import 'diego_ai_market_probability_service.dart';
 import 'odds_service.dart';
+import 'goalvdline_quote_policy.dart';
 
 /// Selezione sportiva DiegoAI indipendente dal Value Engine.
 class DiegoAiSportsMarketPick {
@@ -22,7 +23,7 @@ class DiegoAiSportsMarketPick {
 class DiegoAiSportsMarketSelector {
   const DiegoAiSportsMarketSelector._();
 
-  static const double minimumOdd = 1.25;
+  static const double minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
 
   static DiegoAiSportsMarketPick? bestPlayable({
     required Iterable<DiegoAiMarketProbability> markets,

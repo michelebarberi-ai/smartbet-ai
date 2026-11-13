@@ -518,21 +518,27 @@ class DualEngineAnalysisService {
   }
 
   _EngineMarketChoice? _diegoChoice(DiegoAiAnalysis analysis) {
-    // Prima viene valutata la probabilita' sportiva.
-    // La quota verifica soltanto disponibilita' e minimo 1.20.
-    final pick = DiegoAiSportsMarketSelector.bestPlayable(
+    // A playable Sisal alternative only establishes coupon availability.
+    // It must never replace the sporting forecast in the AI comparison.
+    final playable = DiegoAiSportsMarketSelector.bestPlayable(
       markets: analysis.markets,
       odds: analysis.marketOdds,
     );
+    if (playable == null) return null;
 
-    if (pick == null) return null;
-
+    final forecast = _diegoStatisticalChoice(analysis);
+    final primaryOdd = analysis.marketOdds?.oddFor(forecast.market);
+    final validPrimaryPrice = primaryOdd != null &&
+        primaryOdd.odd.isFinite &&
+        primaryOdd.odd >= DiegoAiSportsMarketSelector.minimumOdd;
     return _EngineMarketChoice(
-      market: _normalizeMarket(pick.market),
-      probability: pick.probability,
-      odd: pick.odd,
-      bookmaker: pick.bookmaker,
-      classification: 'SPORTS PICK',
+      market: forecast.market,
+      probability: forecast.probability,
+      odd: validPrimaryPrice ? primaryOdd.odd : null,
+      bookmaker: validPrimaryPrice ? primaryOdd.bookmakerName : null,
+      classification: validPrimaryPrice
+          ? 'SPORTS FORECAST'
+          : 'SPORTS FORECAST - QUOTED ALTERNATIVE AVAILABLE',
     );
   }
 
