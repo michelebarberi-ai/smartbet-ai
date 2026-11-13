@@ -7,6 +7,7 @@ import UserNotifications
   private var pendingTokenResult: FlutterResult?
   private var pushRegistrationChannel: FlutterMethodChannel?
   private var pendingAutoCouponDay: String?
+  private var pendingOnDemandCouponTap = false
 
   override func application(
     _ application: UIApplication,
@@ -84,6 +85,12 @@ import UserNotifications
           self?.pendingAutoCouponDay = nil
           result(value)
         }
+      case "consumePendingOnDemandCouponTap":
+        DispatchQueue.main.async {
+          let value = self?.pendingOnDemandCouponTap ?? false
+          self?.pendingOnDemandCouponTap = false
+          result(value)
+        }
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -120,6 +127,9 @@ import UserNotifications
        day.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
       pendingAutoCouponDay = day
       pushRegistrationChannel?.invokeMethod("autoCouponOpened", arguments: day)
+    } else if (info["kind"] as? String) == "on_demand_coupon_ready" {
+      pendingOnDemandCouponTap = true
+      pushRegistrationChannel?.invokeMethod("onDemandCouponOpened", arguments: nil)
     }
     super.userNotificationCenter(center, didReceive: response,
       withCompletionHandler: completionHandler)
