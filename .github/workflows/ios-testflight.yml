@@ -19,7 +19,8 @@ jobs:
     if: >-
       (github.ref != 'refs/heads/release/b45-testflight' &&
        github.ref != 'refs/heads/release/b47-testflight') ||
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref != 'refs/heads/release/b47-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
