@@ -50,9 +50,27 @@ class _GoalVdLineCouponReadyNotificationCardState
     }
   }
 
+  Future<void> _sendTest() async {
+    if (_loading || !_enabled) return;
+    setState(() => _loading = true);
+    final sent = await _notifier.sendTestNotification();
+    if (!mounted) return;
+    setState(() => _loading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(sent
+          ? 'Notifica di prova programmata. Controlla il banner '
+              'e il Centro Notifiche dell’iPhone.'
+          : 'Notifica di prova non programmata. Controlla '
+              'Impostazioni iPhone > Notifiche > GoalVdLine.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
       key: const Key('b45-on-demand-ready-notification'),
       contentPadding: EdgeInsets.zero,
       title: const Text('Avvisami quando la schedina è pronta'),
@@ -62,6 +80,25 @@ class _GoalVdLineCouponReadyNotificationCardState
       ),
       value: _enabled,
       onChanged: _loading ? null : _toggle,
+        ),
+        if (_enabled) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              'La notifica di schedina pronta arriva soltanto se '
+              'la generazione termina con almeno una selezione valida. '
+              'Attivare il consenso non avvia analisi automatiche.',
+              style: TextStyle(fontSize: 11, color: Colors.white60),
+            ),
+          ),
+          TextButton.icon(
+            key: const Key('b45-send-local-test-notification'),
+            onPressed: _loading ? null : _sendTest,
+            icon: const Icon(Icons.notifications_active_outlined),
+            label: const Text('INVIA NOTIFICA DI PROVA'),
+          ),
+        ],
+      ],
     );
   }
 }
