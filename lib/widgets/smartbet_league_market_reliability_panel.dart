@@ -85,7 +85,7 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
               const Padding(
                 key: Key('p21w4-no-validation'),
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('Campione futuro indipendente insufficiente: confronto non disponibile.'),
+                child: Text('Campione prospettico insufficiente: confronto non disponibile.'),
               ),
             ...shadowReport!.segments.where((s) => s.evaluatedFixtures > 0).take(8).map((s) {
               final engine = s.engine.name == 'diego'
