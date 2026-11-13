@@ -105,3 +105,13 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - [ ] **Prima di marcarlo collaudato:** eseguire i nuovi widget test e `flutter analyze` sul Mac sulla revisione UI; i sette test verdi sono precedenti ai commit UI.
 - [ ] Verificare sul dispositivo reale campioni, intervalli, cronologia e assenza di riscritture di preferenze; nessuna raccolta o sincronizzazione di dati aggiuntivi è stata abilitata.
 - [ ] Full suite Flutter e Node alla revisione finale della Build 45, senza pubblicazione anticipata.
+
+
+## P21W.4 — Replay prospettico SHADOW campionato × mercato (13/11/2026)
+
+- [x] Implementato `smartbet_league_market_shadow_service.dart`: replay locale di confronto tra Brier originale e Brier corretto; correzione shrinkage con massimo ±10 punti percentuali, dopo almeno 50 esiti precedenti.
+- [x] Ogni pronostico viene confrontato solo con risultati già conosciuti **prima** del suo `firstSeenAt`, mai con risultati futuri; dati partizione per motore/paese/campionato/mercato, deduplica, esclusione conflitti, esiti non verificabili e mercati non liquidabili.
+- [x] Pannello P21W integrato in `Intelligenza e apprendimento` e `Learning Monitor` con Brier originale/SHADOW, campione di validazione e messaggi di dati insufficienti. Non modifica forecast, quote, ordinamenti, schedine, storage o server.
+- [x] Aggiunti test mirati `smartbet_league_market_shadow_service_test.dart` e un widget test P21W.4; `warrantsFurtherResearch` segnala soltanto ricerca esplorativa, **non autorizza promozione/ACTIVE**.
+- [ ] **DA ESEGUIRE SU MAC**: test P21W.4, widget, suite Flutter completa, analisi statica. Nessun esito dei nuovi test dichiarato finché non risponde il Mac.
+- [ ] Validare su archivio reale iPhone; poi solo eventuale ricerca su campioni futuri indipendenti e gate espliciti. Nessun deployment Render/Neon e nessuna Build TestFlight autorizzati da questa modifica.
