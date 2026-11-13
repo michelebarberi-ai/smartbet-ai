@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
+const {isDeepStrictEqual} = require('node:util');
 
 class LearningRepository {
   constructor(pool) {
@@ -68,7 +69,7 @@ class LearningRepository {
       [subjectHash,requestId]
     );
     const saved = result.rows[0];
-    if (!saved || JSON.stringify(saved.preferences) !== JSON.stringify(preferences) ||
+    if (!saved || !isDeepStrictEqual(saved.preferences, preferences) ||
         saved.dayKey !== dayKey) {
       return {conflict:true};
     }
@@ -446,6 +447,10 @@ class LearningRepository {
       );
       await connection.query(
         'DELETE FROM sb_auto_coupon_push_devices_v1 WHERE subject_hash=$1',
+        [subjectHash]
+      );
+      await connection.query(
+        'DELETE FROM sb_on_demand_coupon_jobs_v1 WHERE subject_hash=$1',
         [subjectHash]
       );
       await connection.query(
