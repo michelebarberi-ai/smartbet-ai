@@ -179,7 +179,7 @@ test('B47 secondary token authenticates without replacing the existing runner to
       const response=await req(origin,'GET','/coupon/health',authorized);
       assert.equal(response.status,200);
       assert.deepEqual(await response.json(),{
-        protocol:PROTOCOL,officialEngine:true,revision:REVISION,ready:true});
+        protocol:PROTOCOL,officialEngine:true,revision:REVISION,ready:true,workerReady:false});
     }
     assert.equal((await req(origin,'GET','/coupon/health','Z'.repeat(48))).status,401);
   }finally{
