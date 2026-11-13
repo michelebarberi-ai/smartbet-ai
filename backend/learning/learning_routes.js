@@ -9,7 +9,8 @@ const {apnsReady} = require('../auto_coupon/apns_provider');
 const {registerAutoCouponPushDispatchRoute} = require('../auto_coupon/push_dispatch');
 const {registerOnDemandCouponRoutes} = require('../auto_coupon/on_demand_coupon_routes');
 
-function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null, onDemandWorkerRunning = false}) {
+function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null, onDemandWorkerRunning = false,
+  verifyExternalWorker = null, wakeExternalWorker = null}) {
   const requested = env.LEARNING_SERVER_ENABLED === 'true';
   const configured = requested && !!env.DATABASE_URL &&
     typeof env.LEARNING_ADMIN_TOKEN === 'string' && env.LEARNING_ADMIN_TOKEN.length >= 32 &&
@@ -234,7 +235,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
   registerOnDemandCouponRoutes(app, {
     env,mobileEnabled,authorizeMobile,workerRunning:onDemandWorkerRunning,
     getLearningService:getService,
-    generateOfficialCoupon,now,
+    generateOfficialCoupon,now,verifyExternalWorker,wakeExternalWorker,
   });
 
   // Invoked explicitly by the trusted job *after* official generation.
