@@ -139,9 +139,9 @@ app.get('/health/database', async (_req, res) => {
             data?.officialEngine === true && data?.revision === config.revision &&
             data?.ready === true;
           return {engineConfigured:true,engineReachable:response.status===200,
-            engineVerified:verified};
+            engineVerified:verified,workerReady:verified && data?.workerReady===true};
         } catch (_) {
-          return {engineConfigured:true,engineReachable:false,engineVerified:false};
+          return {engineConfigured:true,engineReachable:false,engineVerified:false,workerReady:false};
         }
       })().then(result => {
         lastEngineResult=result;lastEngineAt=Date.now();return result;
@@ -151,10 +151,42 @@ app.get('/health/database', async (_req, res) => {
     return res.status(result.engineVerified ? 200 : 503).json(result);
   });
 
+  // Private worker gate: a mobile request is refused unless the paid runner
+  // reports its Neon worker active. The wake signal contains no device data.
+  async function runnerCommand(route,method) {
+    const config=officialEngineConfiguration(env);
+    if (!config || env.AUTO_COUPON_OFFICIAL_ENGINE_PRIVATE_RENDER_ENABLED!=='true') {
+      return null;
+    }
+    try {
+      const target=new URL(config.url);
+      target.pathname=route;
+      const response=await fetchImpl(target,{
+        method,redirect:'error',
+        headers:{Authorization:'Bearer '+config.token,Accept:'application/json'},
+        signal:AbortSignal.timeout(6000),
+      });
+      if(response.status!==(method==='GET'?200:202))return null;
+      const payload=await response.json();
+      return payload?.protocol===PROTOCOL ? payload : null;
+    } catch(_) {return null;}
+  }
+  const verifyExternalWorker=async()=>{
+    const state=await runnerCommand('/coupon/health','GET');
+    return state?.officialEngine===true && state?.ready===true &&
+      state?.revision===env.AUTO_COUPON_OFFICIAL_ENGINE_REVISION &&
+      state?.workerReady===true;
+  };
+  const wakeExternalWorker=async()=>{
+    const result=await runnerCommand('/coupon/on-demand/wake','POST');
+    return result?.workerNotified===true;
+  };
+
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
   registerLearningRoutes(app, {
     env, generateOfficialCoupon: officialEngine, onDemandWorkerRunning,
+    verifyExternalWorker,wakeExternalWorker,
     requestApiFootball: (request) => requestFixture(request, {env, fetchImpl}),
   });
   return app;
@@ -206,7 +238,8 @@ if (require.main === module) {
     console.error('On-demand scheduler configuration invalid');
     process.exit(2);
   }
-  const server=createLearningOnlyApp({onDemandWorkerRunning: worker !== null})
+  const server=createLearningOnlyApp({onDemandWorkerRunning: worker !== null ||
+    process.env.ON_DEMAND_COUPON_EXTERNAL_WORKER_ENABLED==='true'})
     .listen(port, '0.0.0.0', () => {
     console.log(`GoalVdLine central learning listening on port ${port}`);
   });
