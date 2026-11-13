@@ -21,7 +21,7 @@ Legenda:
 - [x] `pubspec.yaml` preparato come `version: 1.2.4+45` su sola feature branch (commit `52309cd`); **non implica TestFlight già distribuita**.
 - [x] Workflow iOS TestFlight predisposto anche per il futuro branch `release/b45-testflight` (commit `ced35bb`), con numero Build 45 fissato su tale branch. Nessuna modifica ai trigger delle branch storiche; nessuna esecuzione del workflow avviata da questa preparazione.
 - [x] Release notes interne in `docs/BUILD45_RELEASE_NOTES.md`, con limiti funzionali dichiarati.
-- [ ] Prima del rilascio: verifica quote Sisal e soglia probabilità realmente applicata nelle schermate, collaudo iPhone della notifica/snapshot, poi **creazione deliberata del branch release** soltanto dopo l'esito positivo. Non fare merge PR #1 sullo staging Render.
+- [ ] Prima dell'unica Build 45 TestFlight: verifica quote Sisal e soglie di probabilità nelle schermate, poi **creazione deliberata del branch release**. Il collaudo su iPhone della notifica/snapshot si svolge **con quella stessa Build 45 firmata su TestFlight**, senza generare una build intermedia. Non fare merge PR #1 sullo staging Render.
 - [ ] Pipeline GitHub TestFlight e certificati/segreti **non ancora collaudati** su questa revisione; una build senza firma non è un upload Apple.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
