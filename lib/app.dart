@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:smartbet_ai_new/screens/home_screen.dart';
 import 'package:smartbet_ai_new/screens/goalvdline_auto_coupon_today_screen.dart';
+import 'package:smartbet_ai_new/screens/goalvdline_requested_coupon_ready_screen.dart';
 import 'package:smartbet_ai_new/theme/app_theme.dart';
 
 /// B45 P14: notification taps open an authenticated, read-only coupon screen.
@@ -17,6 +18,7 @@ class _SmartBetAppState extends State<SmartBetApp> {
   static final _dayKey = RegExp(r'^\d{4}-\d{2}-\d{2}$');
   final _navigator = GlobalKey<NavigatorState>();
   bool _couponOpen = false;
+  bool _onDemandCouponOpen = false;
 
   @override
   void initState() {
@@ -28,6 +30,8 @@ class _SmartBetAppState extends State<SmartBetApp> {
   Future<void> _onNativeCall(MethodCall call) async {
     if (call.method == 'autoCouponOpened' && call.arguments is String) {
       _openCoupon(call.arguments as String);
+    } else if (call.method == 'onDemandCouponOpened') {
+      _openRequestedCoupon();
     }
   }
 
@@ -37,6 +41,10 @@ class _SmartBetAppState extends State<SmartBetApp> {
         'consumePendingAutoCouponDay',
       );
       if (mounted && day != null) _openCoupon(day);
+      final requested = await _channel.invokeMethod<bool>(
+        'consumePendingOnDemandCouponTap',
+      );
+      if (mounted && requested == true) _openRequestedCoupon();
     } on MissingPluginException {
       // Android, desktop and widget tests have no native APNs handler.
     } on PlatformException {
@@ -59,6 +67,21 @@ class _SmartBetAppState extends State<SmartBetApp> {
           ),
         )
         .whenComplete(() => _couponOpen = false);
+  }
+
+  void _openRequestedCoupon() {
+    if (!mounted || _onDemandCouponOpen) return;
+    final nav = _navigator.currentState;
+    if (nav == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openRequestedCoupon());
+      return;
+    }
+    _onDemandCouponOpen = true;
+    nav.push<void>(
+      MaterialPageRoute(
+        builder: (_) => const GoalVdLineRequestedCouponReadyScreen(),
+      ),
+    ).whenComplete(() => _onDemandCouponOpen = false);
   }
 
   @override
