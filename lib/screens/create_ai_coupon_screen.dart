@@ -29,6 +29,7 @@ import '../services/smartbet_live_calibration_service.dart';
 import '../services/smartbet_device_learning_preferences.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
+import '../services/goalvdline_competition_order.dart';
 import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
@@ -3527,6 +3528,22 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     return source.contains(normalized);
                   }).toList();
 
+            // Display-only ordering matching other GoalVdLine lists.
+            final ordered = List<MatchModel>.of(filtered)
+              ..sort((a, b) {
+                final areaA = GoalVdLineCompetitionOrder.displayCountry(
+                    a.country, a.league);
+                final areaB = GoalVdLineCompetitionOrder.displayCountry(
+                    b.country, b.league);
+                final byCountry = GoalVdLineCompetitionOrder.compareCountries(
+                    areaA, areaB);
+                if (byCountry != 0) return byCountry;
+                final byLeague = GoalVdLineCompetitionOrder.compareLeagues(
+                    a.league, b.league);
+                if (byLeague != 0) return byLeague;
+                return GoalVdLineCompetitionOrder.compareTimes(a.date, b.date);
+              });
+
             return SizedBox(
               height: MediaQuery.of(modalContext).size.height * 0.84,
               child: Column(
@@ -3590,9 +3607,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${ordered.length} partite in elenco • '
+                        '${_manualSelectedMatches.length}/15 selezionate',
+                        style: const TextStyle(
+                          color: Colors.white54, fontSize: 11),
+                      ),
+                    ),
+                  ),
                   Expanded(
-                    child: filtered.isEmpty
+                    child: ordered.isEmpty
                         ? const Center(
                             child: Text(
                               'Nessuna partita trovata',
@@ -3601,16 +3629,51 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.symmetric(horizontal: 10),
-                            itemCount: filtered.length,
+                            itemCount: ordered.length,
                             separatorBuilder: (_, _) =>
                                 const Divider(color: Colors.white10, height: 1),
                             itemBuilder: (context, index) {
-                              final match = filtered[index];
-
+                              final match = ordered[index];
+                              final area = GoalVdLineCompetitionOrder.displayCountry(
+                                  match.country, match.league);
+                              final previous = index > 0 ? ordered[index - 1] : null;
+                              final previousArea = previous == null
+                                  ? null
+                                  : GoalVdLineCompetitionOrder.displayCountry(
+                                      previous.country, previous.league);
+                              final newArea = area != previousArea;
+                              final newLeague =
+                                  newArea || previous?.league != match.league;
                               final selected = _manualSelectedMatches
                                   .containsKey(match.fixtureId);
 
-                              return CheckboxListTile(
+                              return Column(
+                                key: ValueKey('manual-fixture-${match.fixtureId}'),
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (newArea)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(10, 15, 10, 6),
+                                      child: Text(
+                                        '${GoalVdLineCompetitionOrder.flag(area)} $area',
+                                        style: const TextStyle(
+                                          color: Color(0xFF00C853),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  if (newLeague)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(12, 4, 10, 5),
+                                      child: Text(
+                                        GoalVdLineCompetitionOrder.league(match.league),
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  CheckboxListTile(
                                 value: selected,
                                 activeColor: const Color(0xFF00C853),
                                 checkColor: Colors.white,
@@ -3670,6 +3733,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
                                   setSheetState(() {});
                                 },
+                                  ),
+                                ],
                               );
                             },
                           ),
