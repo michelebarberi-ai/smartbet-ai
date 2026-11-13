@@ -17,14 +17,25 @@ void main() {
     expect(result.couponPick!.probability, 80);
   });
 
-  test('P20.5 1.20 is inclusive and a high odd does not change main', () {
+  test('B47 1.21 is eligible and higher-priced odds do not change main', () {
+    final result = SmartBetSportsMarketSelector.recommend(
+      sportsProbabilities: {'1': 84, 'X': 70, '2': 10},
+      quotedOdds: {'1': 1.21, 'X': 5, '2': 100},
+    )!;
+    expect(result.primary.market, '1');
+    expect(result.couponPick!.market, '1');
+    expect(result.usesAlternative, isFalse);
+  });
+
+  test('B47 1.20 exact is excluded without hiding top sporting forecast', () {
     final result = SmartBetSportsMarketSelector.recommend(
       sportsProbabilities: {'1': 84, 'X': 70, '2': 10},
       quotedOdds: {'1': 1.20, 'X': 5, '2': 100},
     )!;
     expect(result.primary.market, '1');
-    expect(result.couponPick!.market, '1');
-    expect(result.usesAlternative, isFalse);
+    expect(result.primaryOdd, 1.20);
+    expect(result.couponPick!.market, 'X');
+    expect(result.usesAlternative, isTrue);
   });
 
   test('P20.5 missing Sisal quotes retain main but never fabricate odds', () {
