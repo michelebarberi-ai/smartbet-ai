@@ -9,7 +9,6 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/odds_service.dart';
-import '../services/sisal_odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
@@ -35,7 +34,7 @@ class PredictionScreen extends StatefulWidget {
 }
 
 class _PredictionScreenState extends State<PredictionScreen> {
-  final SisalOddsService _oddsService = SisalOddsService();
+  final OddsService _oddsService = OddsService();
   final SmartBetAiService _aiService = SmartBetAiService();
   final SmartBetAnalysisCache _analysisCache = SmartBetAnalysisCache.instance;
   final DualEngineAnalysisService _dualEngineService =
@@ -333,7 +332,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     return probability >= 65 &&
         smartScore >= 55 &&
         odd.isFinite &&
-        odd >= _minimumOdd;
+        odd > _minimumOdd;
   }
 
   bool _passesAdaptive({
@@ -346,7 +345,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     return probability >= 65 &&
         smartScore >= 50 &&
         odd.isFinite &&
-        odd >= _minimumOdd;
+        odd > _minimumOdd;
   }
 
   _DailyPick? _bestPickForMatch({
@@ -382,7 +381,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
       final probability = probabilities[market] ?? 0;
       final bestOdd = odds.oddFor(market);
 
-      if (probability <= 0 || bestOdd == null || bestOdd.odd < _minimumOdd) {
+      if (probability <= 0 || bestOdd == null || bestOdd.odd <= _minimumOdd) {
         continue;
       }
 
@@ -1161,7 +1160,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _resultCard(_DailyPick item, int position) {
-    final usesSisalAlternative = item.primaryForecastMarket != null &&
+    final usesQuotedAlternative = item.primaryForecastMarket != null &&
         item.primaryForecastMarket != item.market;
     final scoreColor = _scoreColor(item.analysis.smartScore);
     final auditColor = _auditColor(item);
@@ -1225,7 +1224,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
           ),
           const SizedBox(height: 15),
-          if (usesSisalAlternative) ...[
+          if (usesQuotedAlternative) ...[
             Text(
               'PRONOSTICO PRINCIPALE AI: '
               '${_dailyMarketDisplayName(item.primaryForecastMarket!)} '
@@ -1241,8 +1240,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
             children: [
               Expanded(
                 child: _mainValueBox(
-                  label: usesSisalAlternative
-                      ? 'ALTERNATIVA SISAL'
+                  label: usesQuotedAlternative
+                      ? 'ALTERNATIVA QUOTATA'
                       : 'PRONOSTICO PRINCIPALE AI',
                   value: _dailyMarketDisplayName(item.market),
                   valueColor: const Color(0xFF00C853),
@@ -1796,7 +1795,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   Text(
                     'GoalVdLine cerca fino a 5 selezioni solide nel periodo selezionato '
                     'tra i mercati supportati, con analisi GoalVdLine avanzata, Auditor '
-                    'e quota Sisal reale almeno 1,20.',
+                    'e quota reale verificata superiore a 1,20.',
                     style: TextStyle(color: Colors.white, height: 1.35),
                   ),
                 ],
