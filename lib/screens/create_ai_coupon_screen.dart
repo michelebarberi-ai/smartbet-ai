@@ -23,6 +23,7 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/goalvdline_on_demand_coupon_panel.dart';
 import '../services/goalvdline_market_relation_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
 import '../services/smartbet_device_learning_preferences.dart';
@@ -4413,6 +4414,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 backgroundColor: const Color(0xFF00C853),
               ),
             ),
+            // Only today/automatic is supported by the remote beta.
+            // Do not replace the audited local coupon engine until parity is
+            // proven on a staging iPhone with Render and Neon.
+            if (_period == _CouponPeriod.today)
+              GoalVdLineOnDemandCouponPanel(
+                events: _count,
+                minimumProbability: _minimumCouponProbability,
+              ),
           ] else ...[
             _manualSelectionPanel(),
             const SizedBox(height: 12),
