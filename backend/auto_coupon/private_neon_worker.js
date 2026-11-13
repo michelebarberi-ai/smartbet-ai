@@ -13,11 +13,26 @@ const IDLE_SWEEP_MS=15*60*1000;
 const RETRY_SWEEP_MS=2*60*1000;
 const DRAIN_DELAY_MS=2000;
 const PINNED_HOST='smartbet-b45-flutter-staging';
+
+// A dedicated queue role requires only SELECT/UPDATE on the job table.
+// Never issue schema DDL from the always-on private runner.
+class ExistingQueueRepository extends LearningRepository {
+  async initialize() {
+    if (!this.ready) {
+      this.ready=this.pool.query(
+        "SELECT to_regclass('public.sb_on_demand_coupon_jobs_v1') IS NOT NULL AS ready"
+      ).then(result=>{
+        if (result.rows?.[0]?.ready!==true) throw new Error('Job schema not ready');
+      }).catch(error=>{this.ready=null;throw error;});
+    }
+    return this.ready;
+  }
+}
 const VALID_REVISION=/^[a-f0-9]{7,40}$/;
 
 function createPrivateNeonWorker({
   env=process.env,fetchImpl=fetch,poolFactory=opts=>new Pool(opts),
-  repositoryFactory=pool=>new LearningRepository(pool),
+  repositoryFactory=pool=>new ExistingQueueRepository(pool),
   timerFn=setTimeout,clearFn=clearTimeout,
 }={}) {
   if(env.AUTO_COUPON_PRIVATE_NEON_WORKER_ENABLED!=='true') return null;
