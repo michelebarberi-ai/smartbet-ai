@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/smartbet_simulation_monitor_panel.dart';
 import '../widgets/smartbet_simulation_learning_panel.dart';
+import '../widgets/smartbet_league_market_reliability_panel.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_market_intelligence_audit_service.dart';
@@ -12,6 +13,7 @@ import '../services/smartbet_walk_forward_backtest_service.dart';
 import '../services/smartbet_shadow_learning_store.dart';
 import '../services/smartbet_shadow_outcome_service.dart';
 import '../services/smartbet_learning_gate_service.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 
 class SmartBetLearningMonitorScreen extends StatefulWidget {
   const SmartBetLearningMonitorScreen({super.key});
@@ -479,6 +481,11 @@ class _SmartBetLearningMonitorScreenState
                   accuracy == null ? 'N/D' : '${accuracy.toStringAsFixed(1)}%',
                 ),
                 metric('Esiti con resolvedAt', '$resolved'),
+                const SizedBox(height: 12),
+                SmartBetLeagueMarketReliabilityPanel(
+                  report: const SmartBetLeagueMarketReliabilityService()
+                      .evaluate(records: _records, asOf: DateTime.now().toUtc()),
+                ),
 
                 const SizedBox(height: 18),
                 const Text(
