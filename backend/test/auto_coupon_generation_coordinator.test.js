@@ -73,6 +73,29 @@ test('below threshold, duplicate match and insufficient coupon retry, never save
   }
 });
 
+
+test('official no_coupon is distinct from transport retry, never persisted as ready', async () => {
+  const repo = makeRepo();
+  const result = await coordinator(repo, async () => ({status:'no_coupon'}))
+    .runOne({subjectHash, preferences});
+  assert.deepEqual(result, {status:'retry',reason:'no_coupon'});
+  assert.equal(repo.completed.length,1);
+  assert.equal(repo.completed[0].outcome,'retry');
+  assert.equal(repo.completed[0].reason,'no_coupon');
+  assert.equal(repo.completed[0].retryMinutes,60);
+  assert.equal(repo.completed[0].coupon ?? null,null);
+});
+
+test('invalid no_coupon-shaped object never bypasses official validation', async () => {
+  const repo = makeRepo();
+  const result = await coordinator(repo,async () => ({
+    status:'no_coupon',coupon:validCoupon, privateToken:'DO_NOT_STORE',
+  })).runOne({subjectHash,preferences});
+  assert.deepEqual(result,{status:'retry',reason:'insufficient_events'});
+  assert.equal(JSON.stringify(repo.completed).includes('DO_NOT_STORE'),false);
+  assert.equal(repo.completed[0].coupon ?? null,null);
+});
+
 test('generator errors become retry without exposing exception messages',async()=>{
   const repo=makeRepo();
   const result=await coordinator(repo,async()=>{throw Error('PRIVATE TOKEN!');})
