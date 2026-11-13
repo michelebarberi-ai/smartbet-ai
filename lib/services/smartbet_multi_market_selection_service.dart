@@ -248,7 +248,7 @@ class SmartBetMultiMarketSelectionService {
         if (probability <= 0 ||
             quote == null ||
             !quote.odd.isFinite ||
-            quote.odd < minimumOdd) {
+            quote.odd <= minimumOdd) {
           continue;
         }
         if (probability > bestProbability) {
