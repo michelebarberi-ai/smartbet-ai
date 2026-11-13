@@ -164,6 +164,31 @@ class SmartBetMultiMarketSelectionService {
     }
   }
 
+  /// Sport-first forecast across one to three market families.
+  /// No odds API and no artificial price-based ranking.
+  /// Handicap lines are intentionally omitted until an exact line exists.
+  static List<({String market, int probability})> rankedSportsMarkets({
+    required AnalysisResult analysis,
+    required Iterable<String> families,
+  }) {
+    final selected = _validate(families);
+    final scores = <String, int>{};
+    for (final family in selected) {
+      for (final market in _options(family)) {
+        final p = _probability(analysis, market);
+        if (p > 0 && p <= 100) scores[market] = p;
+      }
+    }
+    final result = [
+      for (final item in scores.entries)
+        (market: item.key, probability: item.value),
+    ]..sort((a, b) {
+      final rank = b.probability.compareTo(a.probability);
+      return rank != 0 ? rank : a.market.compareTo(b.market);
+    });
+    return List.unmodifiable(result);
+  }
+
   static int searchProbability({
     required AnalysisResult analysis,
     required Iterable<String> families,
