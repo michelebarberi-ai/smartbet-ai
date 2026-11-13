@@ -8,8 +8,9 @@ void main() {
     expect(GoalVdLineQuotePolicy.isSisal('Bet365'), false);
     expect(GoalVdLineQuotePolicy.isSisal('Not Sisal'), false);
   });
-  test('P20.6 quota minima 1,20 inclusa; nessuna quota inventata', () {
-    expect(GoalVdLineQuotePolicy.isPlayable(1.20), true);
+  test('P20.6 quota maggiore di 1,20 (1,20 escluso); nessuna quota inventata', () {
+    expect(GoalVdLineQuotePolicy.isPlayable(1.20), false);
+    expect(GoalVdLineQuotePolicy.isPlayable(1.21), true);
     expect(GoalVdLineQuotePolicy.isPlayable(1.19), false);
     expect(GoalVdLineQuotePolicy.isPlayable(null), false);
     expect(GoalVdLineQuotePolicy.isPlayable(double.infinity), false);
