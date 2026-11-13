@@ -7,6 +7,8 @@ import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
 import '../services/smartbet_learning_coordinator.dart';
 import '../widgets/ai_card.dart';
+import '../widgets/goalvdline_daily_matches_card.dart';
+import 'create_ai_coupon_screen.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
 import '../widgets/goalvdline_central_learning_consent_card.dart';
@@ -549,6 +551,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
 
                   const SizedBox(height: 18),
+                  GoalVdLineDailyMatchesCard(
+                    count: dashboard.todayMatches,
+                    loading: dashboard.loading,
+                    onCreateCoupon: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CreateAiCouponScreen(),
+                        ),
+                      );
+                    },
+                  ),
 
                   ExpansionTile(
                     initiallyExpanded: false,
