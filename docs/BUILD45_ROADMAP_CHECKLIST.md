@@ -31,6 +31,15 @@ Legenda:
 - [ ] **Distribuzione Build 45**: il branch di rilascio `release/b45-testflight` va creato solo con autorizzazione di pubblicazione; il push su tale branch avvia il workflow che firma e carica su App Store Connect. Dopo il caricamento, testare sul dispositivo la notifica locale e la consultazione dell'ultima schedina; mantenere l'AutoSchedina server OFF.
 
 - [ ] La presenza di Sisal nel feed reale del giorno è ancora da confermare: assenza quote deve risultare N/D, mai quote sintetiche. In Combinazioni AI l'opzione esplicita 'Qualsiasi' può togliere il filtro minimo solo su richiesta utente, e non va cambiata silenziosamente.
+### Riscontro TestFlight 1.2.5 (45) — 13/11/2026, NON PUBBLICARE SU STORE
+
+- [x] Bug visibile negli screenshot utente: Combinazioni AI con SmartScore Qualsiasi e mercato X non genera risultati neppure con probabilità Qualsiasi. Con >=65% un messaggio attribuisce genericamente l'assenza alla probabilità. Anche Crea Sistema fallisce per portfolio insufficiente.
+- [x] Audit: SisalOddsService richiede bookmaker Sisal esplicito, OddsService prima memorizzava senza scadenza il miss Sisal, ed entrambe le schermate nascondevano i pronostici quando non c'era quota Sisal. Copertura Sisal in feed non ancora confermata su fixture reali.
+- [x] Correzioni isolate su branch fix/b45-noquote-preview (dalla release 1.2.5+45): anteprima sportiva read-only quando schedina vuota, mai in condivisione, nessuna quota inventata e nessuna modifica alle soglie delle selezioni giocabili.
+- [x] Messaggi distinti fra quote Sisal mancanti e filtri/auditor; cache negativa 10 minuti, positiva 30 minuti; test per recupero quotazioni.
+- [ ] GATE QA: flutter analyze --no-pub --no-fatal-infos e flutter test --no-pub test/services/sisal_odds_service_coverage_test.dart; poi collaudo UI dispositivo.
+- [ ] Non approvare per App Store TestFlight 1.2.5 (45) prima della correzione collaudata e di una nuova build firmata. Release branch invariato, nessun nuovo upload automatico.
+
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
 **Decisione dell'utente: velocizzare senza nuovi costi fissi.** Conservare tutto il codice; rinviato NON significa collaudato.
