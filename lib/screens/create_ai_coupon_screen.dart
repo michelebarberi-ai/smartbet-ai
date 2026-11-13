@@ -3816,51 +3816,36 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
           if (matches.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const Divider(color: Colors.white12, height: 18),
             ...matches.map(
-              (match) => Container(
-                margin: const EdgeInsets.only(bottom: 7),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF111827),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${match.homeTeam} - ${match.awayTeam}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _manualMatchDate(match),
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 9.5,
-                            ),
-                          ),
-                        ],
+              (match) => Column(
+                key: ValueKey('manual-selected-${match.fixtureId}'),
+                children: [
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    leading: const Icon(Icons.check_circle_outline,
+                        color: Color(0xFF00C853), size: 21),
+                    title: Text(
+                      '${match.homeTeam} - ${match.awayTeam}',
+                      style: const TextStyle(
+                        color: Colors.white, fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
+                    subtitle: Text(
+                      _manualMatchDate(match),
+                      style: const TextStyle(
+                        color: Colors.white54, fontSize: 11,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Rimuovi partita',
                       onPressed: _loading
                           ? null
                           : () {
                               setState(() {
                                 _manualSelectedMatches.remove(match.fixtureId);
-
                                 _results.clear();
                                 _portfolioResults.clear();
                                 _selectedPortfolioIndex = 0;
@@ -3869,13 +3854,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                               });
                             },
                       icon: const Icon(
-                        Icons.close,
-                        color: Colors.redAccent,
-                        size: 18,
+                        Icons.close, color: Colors.redAccent, size: 20,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const Divider(color: Colors.white10, height: 1),
+                ],
               ),
             ),
           ],
