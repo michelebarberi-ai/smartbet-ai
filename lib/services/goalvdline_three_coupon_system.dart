@@ -1,3 +1,5 @@
+import 'goalvdline_quote_policy.dart';
+
 /// Tre schedine alternative che mantengono esattamente gli stessi incontri.
 /// Non è un sistema integrale di scommesse: è una proposta di tre varianti.
 class GoalVdLineSystemSelection {
@@ -26,7 +28,7 @@ class GoalVdLineThreeCouponSystem {
       pick.probability >= minProbability &&
       pick.probability <= 100 &&
       pick.odd.isFinite &&
-      pick.odd >= 1.25;
+      GoalVdLineQuotePolicy.isPlayable(pick.odd);
 
   /// Restituisce esattamente tre varianti distinte, oppure null.
   /// Non abbassa la soglia e non forza mercati inesistenti.
