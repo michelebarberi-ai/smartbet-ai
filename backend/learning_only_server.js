@@ -7,6 +7,9 @@ const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
 const {Pool} = require('pg');
 const {createOfficialEngineAdapter} = require('./auto_coupon/official_engine_client');
+const {LearningRepository} = require('./learning/learning_repository');
+const {OnDemandCouponService} = require('./auto_coupon/on_demand_coupon_service');
+const {createOnDemandScheduler} = require('./auto_coupon/on_demand_scheduler');
 
 // Read-only database connectivity and schema probe. It never enables ingest or
 // touches prediction rows, and it deliberately omits connection error details.
@@ -119,11 +122,60 @@ app.get('/health/database', async (_req, res) => {
   return app;
 }
 
+// Explicit opt-in on the existing central-learning Node process. No timers
+// are started just by importing this module or by mobile preference sync.
+function startOnDemandServerScheduler({env=process.env,
+  poolFactory=options=>new Pool(options)}={}) {
+  if(env.ON_DEMAND_COUPON_SERVER_POLL_ENABLED!=='true')return null;
+  if(env.LEARNING_SERVER_ENABLED!=='true' ||
+     env.LEARNING_MOBILE_INGEST_ENABLED!=='true' ||
+     env.ON_DEMAND_COUPON_REQUESTS_ENABLED!=='true' ||
+     env.ON_DEMAND_COUPON_WORKER_ENABLED!=='true' ||
+     typeof env.DATABASE_URL!=='string' || !env.DATABASE_URL.trim() ||
+     typeof env.LEARNING_SUBJECT_SALT!=='string' ||
+     env.LEARNING_SUBJECT_SALT.length<32) {
+    throw new Error('On-demand processing disabled or misconfigured');
+  }
+  const official=createOfficialEngineAdapter({env});
+  if(typeof official!=='function')throw new Error('Official Flutter engine unavailable');
+  const interval=Number(env.ON_DEMAND_COUPON_POLL_INTERVAL_SECONDS||60);
+  if(!Number.isInteger(interval)||interval<30||interval>300){
+    throw new Error('Invalid on-demand polling interval');
+  }
+  const pool=poolFactory({connectionString:env.DATABASE_URL,max:2,
+    connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
+    ssl:env.LEARNING_PG_SSL==='true'?{rejectUnauthorized:true}:undefined});
+  const service=new OnDemandCouponService({
+    repository:new LearningRepository(pool),
+    subjectSalt:env.LEARNING_SUBJECT_SALT,
+    generateOfficialCoupon:official,
+  });
+  const scheduler=createOnDemandScheduler({
+    runOne:()=>service.runOne(),intervalMs:interval*1000,
+    onError:()=>console.error('ON DEMAND WORKER: cycle_failed'),
+  });
+  scheduler.start();
+  return {stop:async()=>{await scheduler.stop();await pool.end();}};
+}
+
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  createLearningOnlyApp().listen(port, '0.0.0.0', () => {
+  // Never enable production work accidentally: this flag must be set by the
+  // operator after checking Render capacity and the official engine revision.
+  let worker=null;
+  try {worker=startOnDemandServerScheduler();}
+  catch (_) {
+    console.error('On-demand scheduler configuration invalid');
+    process.exit(2);
+  }
+  const server=createLearningOnlyApp().listen(port, '0.0.0.0', () => {
     console.log(`GoalVdLine central learning listening on port ${port}`);
+  });
+  if(worker)process.once('SIGTERM',()=>{
+    server.close();
+    void worker.stop().catch(()=>console.error('On-demand shutdown_failed'));
   });
 }
 
-module.exports = {createLearningOnlyApp, requestFixture, probeLearningDatabase};
+module.exports = {createLearningOnlyApp, requestFixture, probeLearningDatabase,
+  startOnDemandServerScheduler};
