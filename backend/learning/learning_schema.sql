@@ -163,3 +163,9 @@ CREATE INDEX IF NOT EXISTS sb_on_demand_lease_v1
   WHERE status='running';
 CREATE INDEX IF NOT EXISTS sb_on_demand_subject_v1
   ON sb_on_demand_coupon_jobs_v1 (subject_hash, created_at DESC);
+
+-- Limit one outstanding request per device, even with distinct idempotency
+-- keys. A completed job can be followed by another legitimate request.
+CREATE UNIQUE INDEX IF NOT EXISTS sb_on_demand_one_active_v1
+  ON sb_on_demand_coupon_jobs_v1 (subject_hash)
+  WHERE status IN ('queued','running');
