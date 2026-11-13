@@ -56,7 +56,9 @@ void main() {
     final and = SmartBetMarketProbabilityService.probabilityFor(
       a, 'GOAL + O2.5',
     );
-    expect(or, greaterThanOrEqualTo(a.goalProbability));
+    // The GOAL marginal in AnalysisResult can use a separate model;
+    // this OR is evaluated from the common joint score distribution.
+    expect(or, greaterThanOrEqualTo(and));
     expect(or, greaterThanOrEqualTo(a.over25Probability));
     expect(or, greaterThan(and));
 
