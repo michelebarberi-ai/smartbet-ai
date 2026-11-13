@@ -127,3 +127,39 @@ CREATE TABLE IF NOT EXISTS sb_auto_coupon_push_deliveries_v1 (
 );
 CREATE INDEX IF NOT EXISTS sb_auto_coupon_push_retry_v1
   ON sb_auto_coupon_push_deliveries_v1(next_retry_at) WHERE status='retry';
+
+
+-- B47: on-demand generation requests are NOT scheduled daily coupons.
+-- Only a mobile-authenticated request inserts one; generation requires
+-- a separately enabled, server-side, officially validated Flutter worker.
+-- Persisted status survives iPhone suspension and Render process restarts.
+CREATE TABLE IF NOT EXISTS sb_on_demand_coupon_jobs_v1 (
+  job_id UUID PRIMARY KEY,
+  subject_hash CHAR(64) NOT NULL,
+  request_id UUID NOT NULL,
+  local_day DATE NOT NULL,
+  preferences JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued'
+    CHECK (status IN ('queued','running','ready','no_coupon','failed')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 3),
+  lease_token UUID,
+  lease_expires_at TIMESTAMPTZ,
+  next_retry_at TIMESTAMPTZ,
+  coupon_json JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  completed_at TIMESTAMPTZ,
+  CONSTRAINT sb_on_demand_idempotency_v1 UNIQUE (subject_hash,request_id),
+  CONSTRAINT sb_on_demand_ready_has_coupon_v1 CHECK (
+    (status='ready' AND coupon_json IS NOT NULL AND completed_at IS NOT NULL)
+    OR (status<>'ready' AND coupon_json IS NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS sb_on_demand_queue_v1
+  ON sb_on_demand_coupon_jobs_v1 (next_retry_at, created_at)
+  WHERE status='queued';
+CREATE INDEX IF NOT EXISTS sb_on_demand_lease_v1
+  ON sb_on_demand_coupon_jobs_v1 (lease_expires_at)
+  WHERE status='running';
+CREATE INDEX IF NOT EXISTS sb_on_demand_subject_v1
+  ON sb_on_demand_coupon_jobs_v1 (subject_hash, created_at DESC);
