@@ -9,6 +9,24 @@ Legenda:
 - [ ] Da completare, correggere oppure collaudare; la sola presenza di codice non costituisce esito positivo
 - [~] Funzione presente, ma verifica funzionale/end-to-end non conclusa
 
+## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
+
+**Decisione dell'utente: velocizzare senza nuovi costi fissi.** Conservare tutto il codice; rinviato NON significa collaudato.
+
+**Build 45 attuale, su richiesta nell'app:** pronostici AI e combinazioni, forecast separato dalla quota Sisal, soglia sportiva e blocco selezioni 7–13%, gestione assenza quota reale, notifica locale iOS solo a schedina pronta con consenso, contatore Home delle partite future di oggi (candidate, non già pronosticate), preferiti/filtri/condivisione senza regressioni.
+
+**RINVIATO, NON BLOCCANTE per questa Build 45:** AutoSchedina giornaliera lato server, APNs dell'AutoSchedina remota, worker Render, e2e Neon→official Render→READY per auto-generazione, nuovo sito web. Codice conservato e flag OFF. Non fare merge verso staging/produzione e non attivare servizi a pagamento.
+
+**Gate essenziali per una sola Build 45:**
+- [ ] Una sola suite Flutter completa finale e controlli Node ancora necessari sulla branch corrente; non ripetere i test già passati senza modifiche rilevanti.
+- [ ] Verifica mirata dei casi quote Sisal assenti/sotto 1.20, alternative probabilità inferiori al minimo e UI schedine/Combinazioni.
+- [x] Build iOS senza firma riuscita prima dell'ultimo fix nativo (13/11: EXIT 0, Runner.app 24.3 MB).
+- [ ] Ricompilare iOS dopo commit 7de226d, poi test dispositivo per notifiche locali reali, autorizzazioni e apertura/recupero schedina. Non promettere che un job locale prosegua dopo chiusura app.
+- [ ] Solo al termine: unica Build 45 TestFlight, release notes e piano riduzione costo staging.
+
+**Fix nativo inserito in 7de226d:** correzione di quattro Swift interpolation erroneamente escape doppio nei testi numerici e ID delle notifiche. QA su dispositivo ancora aperta.
+
+---
 ## A. Motore AutoSchedina AI e integrazione (P0)
 
 - [x] **P20.4 finestra oggi / oggi+domani / oggi+domani+dopodomani**: preferenze, raccolta fixture, verifiche Europe/Rome e 3 varianti. 145/145 test Node mirati; 642 Flutter globali superati (3 skipped), analisi statica exit 0 con 702 info/segnalazioni non bloccanti; collaudo reale Flutter READY: 3 varianti, 3 stesse fixture, 2 eventi 12/11 + 1 evento 14/11. Queste prove non certificano il sistema automatico remoto.
