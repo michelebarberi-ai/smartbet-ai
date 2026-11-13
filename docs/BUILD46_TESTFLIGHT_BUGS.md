@@ -2,6 +2,19 @@
 
 Data prima segnalazione: 13/11/2026. Fonte: collaudo utente su iPhone. Stato: **aperto**, non implementato.
 
+## Stato sviluppo — nuova Build 47 (branch feature/b47-corrections)
+
+Avviato il 13/11/2026 **direttamente da ChatGPT/GitHub**, senza Mac locale. Branch di rilascio/TestFlight 1.2.5 (46) invariato. **Nessuna distribuzione App Store/TestFlight e nessun deploy Render.**
+
+- [x] Quote reali da qualunque bookmaker restituito dal feed, con attribuzione della fonte `BestOdd.bookmakerName` e senza etichetta Sisal per bookmaker terzi: aggiornate Schedina AI, Combinazioni e Risultati GoalVdLine.
+- [x] Soglia di prezzo **strettamente >1,20** per nuova build (1,20 esclusa), prima su policy condivisa e su schermate/selettori; test di confine aggiornati.
+- [x] 14 mercati OR su sette famiglie con linee esplicite, probabilità calcolate dalla distribuzione congiunta, disponibili in Schedina e famiglia «MERCATI OPPURE» delle Combinazioni; nessuna quota OR sintetica.
+- [x] Top 5 con fallback sportivo read-only per slot non coperti dalle quote, e confronto Diego indipendente per tali slot; la schedina quotata resta separata.
+- [x] Anteprime Combinazioni e Crea Schedina arricchite con Diego indipendente (massimo cinque richieste per anteprima), anche quando manca il prezzo verificato.
+- [ ] **GATE QA:** test mirati, test Flutter completi, Flutter analyze e compilazione iOS senza firma via GitHub Actions; errori dei primi test aggiornati nel branch, risultato finale da confermare.
+- [ ] **MODIFICA 1 ancora aperta:** elaborazione remota richiesta dall'iPhone con app chiusa, stato job persistente/Neon e push APNs. Non deployare senza controllo dell'host Flutter Render, autenticazione e stima dei costi effettivi.
+- [ ] **TestFlight Build 47:** solo dopo QA completo e nuova autorizzazione per il singolo upload; la versione attuale resta 1.2.5 (46) sul ramo release.
+
 ## 1. PRIORITÀ ALTA — Schedina su richiesta: elaborazione indipendente dall'iPhone
 
 **Problema osservato:** l'utente segnala che la generazione della schedina sembra interrompersi o non progredire quando l'app passa in background o l'iPhone viene bloccato. La versione 1.2.5 (46) calcola la schedina su richiesta nell'app Flutter. iOS può sospendere le attività; una notifica locale dopo il completamento non garantisce il proseguimento dei calcoli.
