@@ -38,8 +38,14 @@ function oddsStrictlyAboveMinimum(coupon) {
       events.push(...variant.events);
     }
   }
+  // Numeric odds without an attributed live bookmaker source are not
+  // sufficient to mark a remote coupon as playable.
   return events.every(item=>typeof item?.odds==='number' &&
-    Number.isFinite(item.odds) && item.odds>1.20);
+    Number.isFinite(item.odds) && item.odds>1.20 &&
+    typeof item.bookmaker==='string' &&
+    item.bookmaker.trim().length>0 && item.bookmaker.length<=80 &&
+    !['n/d','unknown','sconosciuto','n.a.'].includes(
+      item.bookmaker.trim().toLowerCase()));
 }
 
 class OnDemandCouponService {
