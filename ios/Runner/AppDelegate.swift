@@ -37,6 +37,30 @@ import UserNotifications
             granted, _ in
             DispatchQueue.main.async { result(granted) }
           }
+        case "sendTestNotification":
+          // Only a user-initiated diagnostics notification. Never claim
+          // a coupon was created or re-use a coupon-ready tap payload.
+          let center = UNUserNotificationCenter.current()
+          center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized ||
+                  settings.authorizationStatus == .provisional else {
+              DispatchQueue.main.async { result(false) }
+              return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = "GoalVdLine • Prova notifiche"
+            content.body = "Notifica di prova ricevuta. Non è stata generata una schedina."
+            content.sound = .default
+            content.userInfo = ["kind": "local_notification_test"]
+            let request = UNNotificationRequest(
+              identifier: "goalvdline-local-notification-test",
+              content: content,
+              trigger: UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
+            )
+            center.add(request) { error in
+              DispatchQueue.main.async { result(error == nil) }
+            }
+          }
         case "notifyReady":
           guard let args = call.arguments as? [String: Any],
                 let coupons = args["coupons"] as? Int,
@@ -111,8 +135,9 @@ import UserNotifications
     withCompletionHandler completionHandler:
       @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    if notification.request.content.userInfo["kind"] as? String ==
-        "on_demand_coupon_ready" {
+    let kind = notification.request.content.userInfo["kind"] as? String
+    if kind == "on_demand_coupon_ready" ||
+        kind == "local_notification_test" {
       completionHandler([.banner, .sound, .list])
       return
     }
