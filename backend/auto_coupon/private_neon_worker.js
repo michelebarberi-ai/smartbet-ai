@@ -76,7 +76,7 @@ function createPrivateNeonWorker({
     repository:repositoryFactory(pool),subjectSalt:null,
     generateOfficialCoupon:official,
   });
-  let started=false,stopped=false,running=null,timer=null;
+  let started=false,stopped=false,running=null,timer=null,databaseVerified=false;
   function schedule(delay) {
     if(stopped) return;
     if(timer!==null) clearFn(timer);
@@ -88,8 +88,14 @@ function createPrivateNeonWorker({
     if(running) return {status:'busy'};
     if(timer!==null) {clearFn(timer);timer=null;}
     running=(async()=>{
-      try {return await service.runOne();}
-      catch(_) {return {status:'error'};}
+      try {
+        const outcome=await service.runOne();
+        databaseVerified=true;
+        return outcome;
+      } catch(_) {
+        databaseVerified=false;
+        return {status:'error'};
+      }
     })();
     let result;
     try {result=await running;}
@@ -116,7 +122,7 @@ function createPrivateNeonWorker({
   }
   return {
     start,stop,tick,
-    get ready(){return started && !stopped;},
+    get ready(){return started && !stopped && databaseVerified;},
   };
 }
 
