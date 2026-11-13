@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/services/smartbet_analysis_history_store.dart';
 import 'package:smartbet_ai_new/services/smartbet_league_market_reliability_service.dart';
+import 'package:smartbet_ai_new/services/smartbet_league_market_shadow_service.dart';
 import 'package:smartbet_ai_new/widgets/smartbet_league_market_reliability_panel.dart';
 
 void main() {
@@ -15,9 +16,11 @@ void main() {
       segments: segments,
     );
 
-  Widget app(SmartBetLeagueMarketReliabilityReport value) => MaterialApp(
+  Widget app(SmartBetLeagueMarketReliabilityReport value, {
+    SmartBetLeagueMarketShadowReport? shadow,
+  }) => MaterialApp(
     home: Scaffold(body: ListView(children: [
-      SmartBetLeagueMarketReliabilityPanel(report: value),
+      SmartBetLeagueMarketReliabilityPanel(report: value, shadowReport: shadow),
     ])),
   );
 
@@ -50,4 +53,19 @@ void main() {
     expect(find.textContaining('Affidabilità non determinabile'), findsOneWidget);
     expect(find.textContaining('SHADOW'), findsWidgets);
   });
+  testWidgets('P21W.4: shadow has explicit no-validation state', (tester) async {
+    final shadow = SmartBetLeagueMarketShadowReport(
+      asOf: DateTime.utc(2026, 11, 13),
+      rejectedRecords: 0,
+      duplicateRecords: 0,
+      conflictingFixtureMarkets: 0,
+      segments: const [],
+    );
+    await tester.pumpWidget(app(report([]), shadow: shadow));
+    await tester.tap(find.byKey(const Key('p21w-reliability')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Validazione SHADOW prospettica'), findsOneWidget);
+    expect(find.byKey(const Key('p21w4-no-validation')), findsOneWidget);
+  });
+
 }
