@@ -82,6 +82,18 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter analyze --no-fatal-infos
 
+      # Before any signing/export, reject a release with broken remote iPhone workflow.
+      - name: B47 remote coupon release regression
+        if: github.ref == 'refs/heads/release/b47-testflight'
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_on_demand_coupon_client_test.dart \
+            test/widgets/goalvdline_on_demand_coupon_panel_test.dart \
+            test/services/goalvdline_three_coupon_system_test.dart \
+            test/services/goalvdline_official_coupon_contract_test.dart \
+            test/widgets/goalvdline_requested_coupon_ready_screen_test.dart
+
       - name: Prepare App Store Connect API key
         env:
           APPSTORE_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_PRIVATE_KEY_BASE64 }}
