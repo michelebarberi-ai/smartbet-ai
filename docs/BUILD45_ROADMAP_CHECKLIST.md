@@ -154,3 +154,13 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 - **Costi Render verificati da Billing**: smartbet-ai Starter 0.0097 USD/h (~6.98 USD/30 giorni); staging Flutter 1c-2g 0.0347 USD/h (~24.98 USD/30 giorni) più disco 0.0003 USD/(GB·h) (~0.22 USD/30 giorni per 1GB); addebiti parziali novembre 2.89+2.07=4.96 USD e proiezione Render novembre 23.90 USD. I valori 30gg sono simulazioni di 720 ore, non importi fatturati.
 - [ ] **Prima di spegnere staging**: verificare che il runner non sia usato da altri servizi e che i dati persistenti siano preservati; decidere se sospendere/eliminare lo staging rispettando le regole e i costi di Render (disco incluso). Non toccare smartbet-ai e learning-api senza audit dipendenze.
 - [ ] Implementare e testare notifica locale post-generazione *richiesta dall'utente*; non riutilizzare la registrazione APNs dell'AutoSchedina remota come se fosse già una notifica locale funzionante.
+
+### Build 45 — Notifica locale a fine schedina e riepilogo mattutino (13/11/2026)
+
+- [x] Aggiunto un canale **locale iOS** `goalvdline/local_coupon_notifications` distinto dall'APNs dell'AutoSchedina server. L'utente può abilitare/disabilitare in Impostazioni > Notifiche schedina su richiesta; domanda consenso iOS, OFF di default, nessun worker o abbonamento aggiuntivo.
+- [x] Nella creazione manuale/automatica su richiesta, a fine analisi riuscita l'app mostra un messaggio in primo piano e, solo se autorizzata, programma la notifica iOS. Nessun avviso "schedina pronta" per esito vuoto/errore.
+- [x] Mostrato in Home al mattino un riepilogo del numero di fixture future con dati di calendario potenzialmente analizzabili, **riutilizzando** il numero già caricato da DashboardStore (nessuna richiesta API aggiuntiva). Distinto esplicitamente dai pronostici realmente qualificati dopo SmartCore, Auditor e filtri.
+- [x] Aggiunti test Dart `test/services/goalvdline_coupon_ready_notifier_test.dart` (consenso, opt-out, assenza native handler, risultato vuoto, fallimento notifiche).
+- [ ] **Test Mac**: `flutter test` e `flutter analyze`; **test iPhone**: autorizzazione notifiche iOS, completamento reale, foreground/background, tap, compatibilità AppDelegate/FlutterImplicitEngine.
+- [ ] La notifica delle **quantità aggiornate alle 08:00 senza aprire l'app** richiederebbe un job remoto o un esecuzione background iOS non garantita; non mentire sui conteggi. Per ora il numero è aggiornato quando si apre/aggiorna la Home, non in un push mattutino con quantità calcolata automaticamente.
+- [ ] Nessuna generazione autonoma quotidiana: il motore remoto e i job cron rimangono in pausa in attesa del sito e dei ricavi.
