@@ -131,3 +131,37 @@ jobs:
           done
           echo "FAIL: Render API cannot verify the private Flutter runner."
           exit 1
+
+
+  private-runner-health:
+    needs: render-neon-health
+    if: github.ref == 'refs/heads/deploy/b47-learning-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify authenticated Render private network runner handshake
+        shell: bash
+        env:
+          PROBE_URL: https://goalvdline-learning-api.onrender.com/health/official-engine
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/b47-private-engine-health.json"
+          for attempt in 1 2 3; do
+            status="$(curl --silent --show-error --connect-timeout 15 \
+              --max-time 120 --max-redirs 0 --output "$response_file" \
+              --write-out '%{http_code}' "$PROBE_URL")" || status="000"
+            if [[ "$status" == "200" ]] && node -e '
+              const fs = require("node:fs");
+              const x = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              if (x.engineConfigured !== true || x.engineReachable !== true ||
+                  x.engineVerified !== true) process.exit(1);
+            ' "$response_file"; then
+              echo "PASS: authenticated Flutter runner reachable over Render private network."
+              echo "No coupons generated; on-demand requests and polling remain disabled."
+              exit 0
+            fi
+            echo "Runner handshake not ready (attempt $attempt, HTTP $status)"
+            if [[ "$attempt" != "3" ]]; then sleep 20; fi
+          done
+          echo "FAIL: private runner readiness could not be verified"
+          exit 1
