@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: b47-learning-api-preflight-\${{ github.ref }}
+  group: b47-learning-api-preflight-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
