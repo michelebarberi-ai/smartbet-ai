@@ -221,7 +221,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       'OSPITE SEGNA',
       'MULTIGOL',
     ],
-    'Combinazioni avanzate': ['COMBO CHANCE', 'COMBO AVANZATE'],
+    'Combinazioni avanzate': ['COMBO CHANCE', 'COMBO AVANZATE', 'MERCATI OPPURE'],
     'Handicap': ['HANDICAP EUROPEO', 'HANDICAP ASIATICO'],
   };
 
@@ -298,6 +298,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           'MULTIGOL 2-5',
           'MULTIGOL 3-5',
         ];
+      case 'MERCATI OPPURE':
+        return SmartBetMarketProbabilityService.orMarkets;
       case 'COMBO AVANZATE':
         return const [
           '1X + O1.5',
@@ -346,6 +348,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         market == 'HANDICAP EUROPEO' ||
         market == 'MULTIGOL' ||
         market == 'COMBO AVANZATE' ||
+        market == 'MERCATI OPPURE' ||
         market == 'DRAW NO BET' ||
         market == 'HANDICAP ASIATICO';
   }
@@ -3118,6 +3121,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         return 'Combo Chance';
       case 'COMBO AVANZATE':
         return 'Combo avanzate';
+      case 'MERCATI OPPURE':
+        return 'Mercati OPPURE (OR)';
       case 'HANDICAP EUROPEO':
         return 'Handicap europeo';
       case 'HANDICAP ASIATICO':
