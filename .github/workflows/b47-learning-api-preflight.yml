@@ -60,7 +60,8 @@ jobs:
             backend/test/auto_coupon_official_engine_client.test.js \
             backend/test/auto_coupon_generation_coordinator.test.js \
             backend/test/auto_coupon_p20_3d_render_transport.test.js \
-            backend/test/learning_routes.test.js
+            backend/test/learning_routes.test.js \
+            backend/test/b47_private_engine_health.test.js
       - name: Durable jobs on ephemeral PostgreSQL (never production Neon)
         run: node --test backend/test/on_demand_postgres_integration.test.js
 
