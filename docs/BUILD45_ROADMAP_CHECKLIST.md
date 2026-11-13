@@ -14,7 +14,8 @@ Legenda:
 - [x] Commit `0449c23`, `flutter build ios --no-codesign`: EXIT 0, Runner.app 24.3 MB, Xcode 41,9s; non ha pubblicato TestFlight.
 - [x] Individuato limite reale dopo la suite: prima il tap della notifica locale `on_demand_coupon_ready` non apriva la schedina on-demand; le selezioni erano in memoria nella schermata di generazione.
 - [x] Implementato senza backend aggiuntivo: snapshot testuale dell'ultimo sistema su richiesta nel dispositivo (`GoalVdLineReadyCouponLocalStore`), salvataggio prima della notifica, route iOS warm/cold tap alla schermata read-only locale, notifica con ID unico latest; aggiunti test unit e widget. I vecchi percorsi APNs AutoSchedina restano invariati e OFF.
-- [ ] **Nuovo gate dopo commit `5ffea0a`**: test mirati del nuovo store/view e ricompilazione iOS senza firma sul Mac; poi sul dispositivo testare notifica, tap e accesso alla schedina. Non dichiarare validata la navigazione finché non provata su iPhone.
+- [x] **Nuovo gate Mac su commit `5c969a7` (13/11/2026)**: 5/5 test mirati superati, `EXIT TEST: 0`; `flutter build ios --no-codesign`: `EXIT IOS: 0`, Xcode 82,6 s, Runner.app 24,3 MB. Questi risultati certificano il codice e la compilazione, non il comportamento runtime della notifica.
+- [ ] **Test dispositivo reale ancora necessario**: attivazione consenso, generazione su richiesta completata, banner in primo piano, tap e lettura dello snapshot locale dopo riapertura. Una build senza firma non è installabile direttamente: usare una build firmata con percorso già previsto (Xcode o singola Build 45 TestFlight) soltanto quando pronto il release gate.
 - [ ] La vista da notifica è un riepilogo testuale locale dell'**ultima** schedina creata su richiesta, non l'intero editor interattivo; quote snapshot al momento della creazione. Richiesta eventuale UI completa dopo release.
 ## SCOPE DI RILASCIO RAPIDO BUILD 45 — 13/11/2026
 
