@@ -4,6 +4,7 @@ import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_device_learning_preferences.dart';
 import '../services/smartbet_learning_overview_service.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
+import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
@@ -23,6 +24,7 @@ class _SmartBetLearningOverviewScreenState
     extends State<SmartBetLearningOverviewScreen> {
   SmartBetLearningOverview? _summary;
   SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
+  SmartBetLeagueMarketShadowReport? _shadowMarketReport;
   bool? _enabled;
   bool _loading = true;
   String? _error;
@@ -53,8 +55,11 @@ class _SmartBetLearningOverviewScreenState
       // network calls, resolving results or altering any prediction.
       final leagueReport = const SmartBetLeagueMarketReliabilityService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
+      final shadowReport = const SmartBetLeagueMarketShadowService()
+          .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       if (!mounted) return;
       setState(() {
+        _shadowMarketReport = shadowReport;
         _enabled = enabled;
         _summary = snapshot;
         _leagueMarketReport = leagueReport;
@@ -187,6 +192,7 @@ class _SmartBetLearningOverviewScreenState
                 if (_leagueMarketReport != null)
                   SmartBetLeagueMarketReliabilityPanel(
                     report: _leagueMarketReport!,
+                    shadowReport: _shadowMarketReport,
                   ),
                 _panel('Esportazione diagnostica', [
                   const SmartBetDiagnosticExportButton(),
