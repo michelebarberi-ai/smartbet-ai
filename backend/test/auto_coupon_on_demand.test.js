@@ -16,7 +16,7 @@ const input={requestId,events:3,minimumMarketProbability:65,market:'MULTI',
   systemMode:'SINGLE',windowDays:1};
 const events=[1,2,3].map(i=>({fixtureId:i,market:'OVER 1.5',
   marketProbability:85,kickoffAt:'2026-11-13T18:00:00Z',odds:1.32,
-  bookmaker:'Bookmaker Test'}));
+  bookmaker:'Bookmaker Test',homeTeam:`Home ${i}`,awayTeam:`Away ${i}`}));
 const coupon={events};
 
 function fakeRepo() {
@@ -142,6 +142,8 @@ test('B47: worker publishes only validated official forecasts >1.20',async()=>{
   assert.equal(ready.status,200);
   assert.equal(ready.body.coupon.events.length,3);
   assert.equal('secret' in ready.body.coupon,false);
+  assert.equal(ready.body.coupon.events[0].bookmaker,'Bookmaker Test');
+  assert.equal(ready.body.coupon.events[0].homeTeam,'Home 1');
   assert.equal((await s.runOne()).status,'idle');
 });
 
