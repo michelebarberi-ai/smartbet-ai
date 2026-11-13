@@ -109,11 +109,73 @@ void main() {
             {
               'fixtureId': i, 'market': 'OVER 1.5',
               'marketProbability': 85, 'odds': 1.35,
+              'bookmaker': 'Bookmaker di prova',
+              'homeTeam': 'Casa $i', 'awayTeam': 'Ospite $i',
               'kickoffAt': '2026-11-13T18:00:00Z',
             },
         ],
       },
     });
     expect(valid.isReady, true);
+    final events = (valid.coupon!['events'] as List)
+        .cast<Map<String, dynamic>>();
+    final withoutSource = events.map((e) => {...e}).toList()
+      ..first.remove('bookmaker');
+    expect(GoalVdLineOnDemandStatus.fromJson({
+      ...response, 'coupon': {'events': withoutSource},
+    }).isReady, false);
+    final exact120 = events.map((e) => {...e}).toList()
+      ..first['odds'] = 1.20;
+    expect(GoalVdLineOnDemandStatus.fromJson({
+      ...response, 'coupon': {'events': exact120},
+    }).isReady, false);
+    final duplicates = events.map((e) => {...e}).toList()
+      ..last['fixtureId'] = 1;
+    expect(GoalVdLineOnDemandStatus.fromJson({
+      ...response, 'coupon': {'events': duplicates},
+    }).isReady, false);
+  });
+
+  test('B47: only three distinct slips on identical ordered fixtures are READY',
+      () {
+    final original = [
+      for (var i = 1; i <= 3; i++)
+        <String, dynamic>{
+          'fixtureId': i, 'market': 'OVER 1.5',
+          'marketProbability': 85, 'odds': 1.35,
+          'bookmaker': 'Bookmaker di prova',
+          'homeTeam': 'Casa $i', 'awayTeam': 'Ospite $i',
+          'kickoffAt': '2026-11-13T18:00:00Z',
+        },
+    ];
+    final alternative1 = original.map((e) => {...e}).toList()
+      ..first['market'] = 'GOAL';
+    final alternative2 = original.map((e) => {...e}).toList()
+      ..last['market'] = 'UNDER 3.5';
+    final response = <String, dynamic>{
+      'success': true, 'jobId': jobId, 'dayKey': day, 'status': 'ready',
+      'coupon': {
+        'events': original,
+        'coupons': [
+          {'name': 'PRINCIPALE', 'events': original},
+          {'name': 'ALTERNATIVA_1', 'events': alternative1},
+          {'name': 'ALTERNATIVA_2', 'events': alternative2},
+        ],
+      },
+    };
+    expect(GoalVdLineOnDemandStatus.fromJson(response).isReady, true);
+    final wrong = (response['coupon'] as Map<String, dynamic>);
+    final changed = {
+      ...wrong, 'coupons': [
+        {'name': 'PRINCIPALE', 'events': original},
+        {'name': 'ALTERNATIVA_1', 'events': alternative1},
+        {'name': 'ALTERNATIVA_2',
+         'events': (alternative2.map((e) => {...e}).toList()
+             ..last['fixtureId'] = 99)},
+      ],
+    };
+    expect(GoalVdLineOnDemandStatus.fromJson({
+      ...response, 'coupon': changed,
+    }).isReady, false);
   });
 }
