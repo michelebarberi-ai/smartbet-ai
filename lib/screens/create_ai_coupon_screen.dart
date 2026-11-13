@@ -252,17 +252,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   Future<void> _notifyReadyAfterSaving({required int coupons}) async {
-    // Notification taps open the ACTUAL completed coupon saved locally.
-    // If local persistence failed, don't send a misleading notification.
-    final saved = await const GoalVdLineReadyCouponLocalStore()
-        .save(_readyCouponSnapshotText());
+    // Freeze the completed result before an await or a new generation can
+    // replace the visible portfolio. No notification without local snapshot.
+    final fixtures = _results.length;
+    if (fixtures == 0 || coupons == 0) return;
+    final summary = _readyCouponSnapshotText();
+    final saved = await const GoalVdLineReadyCouponLocalStore().save(summary);
     if (!saved) {
       debugPrint('B45 on-demand coupon: local snapshot unavailable');
       return;
     }
     await const GoalVdLineCouponReadyNotifier().notifyReady(
       coupons: coupons,
-      fixturesInPrimary: _results.length,
+      fixturesInPrimary: fixtures,
     );
   }
 
