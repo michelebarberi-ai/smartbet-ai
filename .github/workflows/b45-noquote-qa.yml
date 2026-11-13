@@ -71,6 +71,29 @@ jobs:
           flutter pub get
           flutter test --no-pub --reporter compact
 
+  qa-on-demand-backend:
+    if: github.ref == 'refs/heads/feature/b47-corrections'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate on-demand service syntax
+        run: |
+          node --check backend/auto_coupon/on_demand_coupon_service.js
+          node --check backend/auto_coupon/on_demand_coupon_routes.js
+          node --check backend/learning/learning_repository.js
+          node --check backend/learning/learning_routes.js
+      - name: On-demand authentication, official engine, durability tests
+        run: |
+          node --test \
+            backend/test/auto_coupon_on_demand.test.js \
+            backend/test/auto_coupon_generation_coordinator.test.js \
+            backend/test/auto_coupon_worker_route.test.js
+
   qa-ios-compile:
     # Validate the Swift notification test handler without any signing or upload.
     needs: qa-flutter
