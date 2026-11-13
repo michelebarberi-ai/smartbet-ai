@@ -123,12 +123,18 @@ Non portare il PR draft in staging/Render prima che i test siano verdi e il vinc
 
 ### P20.6 — Regressioni forecast-first aggiunte (13/11/2026)
 - [x] Aggiunti test in `test/services/smartbet_sports_market_selector_test.dart`: Sisal assente, quota principale sotto 1.20, alternativa almeno al 65%, protezione contro esiti 7–13% e invariabilità del ranking al cambiare delle sole quote.
-- [ ] Eseguire nuovi test sul Mac (commit `6757a87`); il codice del selettore non è stato modificato. Questi test non certificano la disponibilità commerciale/reale delle quote Sisal né la UI end-to-end.
+- [x] **Mac, commit `6390f4a`**: test selettore P20.6, 10/10 superati, exit 0. I test non certificano disponibilità reale delle quote Sisal né il comportamento UI end-to-end.
 
 ### P20.3/P20.4 — Separazione `no_coupon` da errori di trasporto (13/11/2026)
 
 - [x] Il runner ufficiale esistente restituisce HTTP 503 `{"error":"no_coupon"}` quando il job termina senza schedina valida. L'adapter riconosce **solo questa risposta minimale** dopo ticket/job autenticato sullo stesso host configurato.
 - [x] Il coordinatore Neon distingue il risultato `no_coupon` da `provider_unavailable` e da `insufficient_events`, registrando un retry senza `coupon_json` e senza un finto READY. Payload ibridi `no_coupon` + schedina vengono rifiutati.
 - [x] Test aggiunti in `auto_coupon_official_headless_runner.test.js` e `auto_coupon_generation_coordinator.test.js` per `no_coupon`, failure tecnica, sicurezza del payload e assenza di READY falso.
-- [ ] **Da verificare sul Mac**: test backend `auto_coupon_*.test.js` sulla revisione con questi cambi; non confondere i test con un vero collaudo Render/Neon.
+- [x] **Mac, commit `84a2c64` (13/11/2026)**: `node --test backend/test/auto_coupon_*.test.js` — 138/138 test passati, 0 falliti, 0 saltati, exit 0. Verificati anche i nuovi casi `no_coupon`/errore remoto; non equivale a un collaudo live Render/Neon.
 - [ ] **Bloccante**: collaudo P20.4 sul container Linux isolato con Neon *staging*, READY persistito e letto da iPhone, deduplica/lease/retry, APNs dove consentito. Non usare Neon Primary né fare merge della PR draft verso staging Render senza verifica e gate.
+
+### Preparazione collaudo P20.4 Render/Neon — stato GitHub (13/11/2026)
+- PR [#1](https://github.com/michelebarberi-ai/smartbet-ai/pull/1) ancora DRAFT: `feature/b45-p20-4-multiday` → `staging/b45-render-linux`. Base staging invariata `2ee681c`; non è stata effettuata alcuna promozione/merge.
+- Nessuna esecuzione GitHub Actions associata alla revisione `84a2c64` mostrata dalla ricerca; i risultati Mac forniti dall'utente sono la sola evidenza dei test per tale revisione.
+- [ ] Verificare separatamente la disponibilità e la scadenza di Neon staging prima di collegare un worker (scadenza precedentemente annotata 17/11/2026). Conservare Primary completamente isolata.
+- [ ] Individuare e verificare il container Linux P20.4 isolato, confrontare commit/schema/provider, quindi collaudo reale `coordinator → official engine → Neon READY → lettura iPhone`, inclusi casi `no_coupon`, retry, lease e sicurezza. Non dichiarare E2E concluso con i soli test mock.
