@@ -56,3 +56,45 @@ jobs:
         run: flutter pub get
       - name: Run every Flutter test
         run: flutter test --no-pub --reporter compact
+
+  ios-compile-check:
+    name: iOS compilation without signing or upload
+    needs: flutter-full-regression
+    if: github.ref == 'refs/heads/fix/b47-diego-statistical-reading'
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated fixes branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce no release and no committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/b47-diego-statistical-reading'
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "Refusing build with tracked .env"
+            exit 1
+          fi
+          echo "Source commit: $(git rev-parse --short=12 HEAD)"
+      - name: Select installed Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Prepare Flutter iOS dependencies
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter precache --ios
+          flutter pub get
+      - name: Install iOS pods
+        run: |
+          cd ios
+          pod install
+      - name: Compile iOS without code signing
+        run: flutter build ios --no-codesign
