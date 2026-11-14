@@ -1596,10 +1596,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             usableHistoryX
                 ? 'Storico X nel campionato: '
-                    '${historyX!.observedAccuracyPercent.toStringAsFixed(1)}% '
-                    'su ${historyX!.sampleSize} incontri conclusi '
+                    '${historyX.observedAccuracyPercent.toStringAsFixed(1)}% '
+                    'su ${historyX.sampleSize} incontri conclusi '
                     '(limite inferiore 95%: '
-                    '${historyX!.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                    '${historyX.wilsonLower95Percent.toStringAsFixed(1)}%). '
                     'Non e una probabilita per questo incontro.'
                 : 'Storico X nel campionato: dati insufficienti'
                     '${historyX == null ? '' : ' (${historyX.sampleSize} partite)'}.',
@@ -1998,10 +1998,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             Text(
               hasHistoricalSample
                   ? 'Storico ${selection!.market} in ${item.match.league}: '
-                      '${historical!.observedAccuracyPercent.toStringAsFixed(1)}% '
-                      'su ${historical!.sampleSize} partite risolte '
+                      '${historical.observedAccuracyPercent.toStringAsFixed(1)}% '
+                      'su ${historical.sampleSize} partite risolte '
                       '(limite inferiore 95%: '
-                      '${historical!.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                      '${historical.wilsonLower95Percent.toStringAsFixed(1)}%). '
                       'Non è la probabilità di questa partita.'
                   : 'Storico per questo mercato/campionato: '
                       'dati insufficienti'
