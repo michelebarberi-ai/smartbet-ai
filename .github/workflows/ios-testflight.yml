@@ -11,6 +11,7 @@ on:
       - release/b45-testflight
       - release/b47-testflight
       - release/b48-testflight
+      - release/b49-testflight
 
 jobs:
   build-ios:
@@ -20,17 +21,21 @@ jobs:
     if: >-
       (github.ref != 'refs/heads/release/b45-testflight' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
-       github.ref != 'refs/heads/release/b48-testflight') ||
+       github.ref != 'refs/heads/release/b48-testflight' &&
+       github.ref != 'refs/heads/release/b49-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
-       github.ref != 'refs/heads/release/b48-testflight') ||
+       github.ref != 'refs/heads/release/b48-testflight' &&
+       github.ref != 'refs/heads/release/b49-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b47-testflight' &&
          github.event.head_commit.message == 'release(build47): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b48-testflight' &&
-         github.event.head_commit.message == 'release(build48): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build48): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b49-testflight' &&
+         github.event.head_commit.message == 'release(build49): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -88,10 +93,11 @@ jobs:
           flutter analyze --no-fatal-infos
 
       # Before any signing/export, reject a release with broken remote iPhone workflow.
-      - name: B47/B48 remote coupon release regression
+      - name: B47/B48/B49 remote coupon release regression
         if: >-
           github.ref == 'refs/heads/release/b47-testflight' ||
-          github.ref == 'refs/heads/release/b48-testflight'
+          github.ref == 'refs/heads/release/b48-testflight' ||
+          github.ref == 'refs/heads/release/b49-testflight'
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter test --no-pub --reporter compact \
@@ -253,6 +259,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="48"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b49-testflight" ]]; then
+            grep -qx 'version: 1.2.5+49' pubspec.yaml || {
+              echo "ERROR: Build 49 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="49"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
