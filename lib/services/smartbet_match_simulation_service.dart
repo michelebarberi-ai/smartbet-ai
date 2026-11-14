@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'smartbet_market_probability_service.dart';
+
 /// Motore sportivo indipendente dalle quote (P21A).
 ///
 /// Questa prima versione e' un modello di distribuzione dei gol, non ancora
@@ -152,6 +154,9 @@ class SmartBetMatchSimulationService {
       'NO GOAL': 0,
       'HOME SCORES': 0,
       'AWAY SCORES': 0,
+      // Probabilita' OR come unione logica, mai somma di due marginali.
+      for (final market in SmartBetMarketProbabilityService.orMarkets)
+        market: 0,
       for (final threshold in [0, 1, 2, 3, 4]) ...{
         'OVER ${threshold}.5': 0,
         'UNDER ${threshold}.5': 0,
@@ -180,6 +185,16 @@ class SmartBetMatchSimulationService {
       if (h == 0 || a == 0) add('NO GOAL');
       if (h > 0) add('HOME SCORES');
       if (a > 0) add('AWAY SCORES');
+      for (final market in SmartBetMarketProbabilityService.orMarkets) {
+        final legs = market.split(' O ');
+        if (legs.length != 2) {
+          throw StateError('Mercato OR non riconosciuto: $market');
+        }
+        if (_matchesOrLeg(legs.first, h, a) ||
+            _matchesOrLeg(legs.last, h, a)) {
+          add(market);
+        }
+      }
       for (final threshold in [0, 1, 2, 3, 4]) {
         add(goals > threshold ? 'OVER ${threshold}.5' : 'UNDER ${threshold}.5');
       }
@@ -196,6 +211,24 @@ class SmartBetMatchSimulationService {
       exactScores: List.unmodifiable(scores),
       truncatedTailProbability: tail,
     );
+  }
+
+  // Stesse condizioni usate dai mercati OR dell'app. Gli esiti
+  // correlati vengono valutati sullo stesso punteggio simulato.
+  static bool _matchesOrLeg(String market, int home, int away) {
+    final goals = home + away;
+    return switch (market) {
+      'GOAL' => home > 0 && away > 0,
+      '1X' => home >= away,
+      'X' => home == away,
+      '1' => home > away,
+      '2' => away > home,
+      'OVER 1.5' => goals >= 2,
+      'OVER 2.5' => goals >= 3,
+      'UNDER 2.5' => goals <= 2,
+      'UNDER 3.5' => goals <= 3,
+      _ => throw StateError('Gamba OR sconosciuta: $market'),
+    };
   }
 
   static List<double> _poissonSeries(double lambda) {
