@@ -140,6 +140,21 @@ class GoalVdLineCompetitionOrder {
     return country(rawCountry);
   }
 
+  /// Caption per la partita nelle anteprime, separata dai mercati.
+  /// Se il feed non riporta un paese o una lega non inventa la competizione.
+  static String matchCompetitionLabel(String rawCountry, String rawLeague) {
+    final leagueLabel = rawLeague.trim();
+    final countryLabel = rawCountry.trim().isEmpty
+        ? ''
+        : displayCountry(rawCountry, rawLeague);
+    if (countryLabel.isEmpty) {
+      return leagueLabel.isEmpty ? 'Campionato non disponibile' : leagueLabel;
+    }
+    return leagueLabel.isEmpty
+        ? '$countryLabel · Campionato non disponibile'
+        : '$countryLabel · $leagueLabel';
+  }
+
   static int compareCountries(String a, String b) {
     final first = country(a);
     final second = country(b);
