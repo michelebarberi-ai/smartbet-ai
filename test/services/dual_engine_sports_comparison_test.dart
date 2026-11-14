@@ -157,6 +157,23 @@ void main() {
     expect(result.comparison.statisticalSmartBetProbability, 0.80);
   });
 
+  test('B47: combinazioni X senza quota mostra solo stima, non giocabilita', () {
+    final result = service.comparePrepared(
+      smartBet: smart(audit: 'SKIPPED_FAST'),
+      diego: diego(odds: null),
+      smartBetMarket: 'X',
+      smartBetProbability: 34,
+      smartBetOdd: null,
+    );
+
+    expect(result.comparison.status, DualEngineAgreement.unavailable);
+    expect(result.comparison.smartBetMarket, 'N/D');
+    expect(result.comparison.statisticalSmartBetMarket, 'X');
+    expect(result.comparison.statisticalSmartBetProbability, 0.34);
+    expect(result.comparison.diegoMarket, 'GOAL');
+    expect(result.comparison.diegoOdd, isNull);
+  });
+
   test('B47: Diego resta visibile senza quote e senza auditor SmartBet', () {
     final result = service.comparePrepared(
       smartBet: smart(audit: 'NOT_RUN'),
