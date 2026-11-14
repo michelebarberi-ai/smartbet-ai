@@ -36,3 +36,22 @@ jobs:
             test/services/smartbet_or_markets_test.dart \
             test/services/smartbet_local_auditor_threshold_test.dart \
             test/services/smartbet_league_market_reliability_service_test.dart
+
+  flutter-full-regression:
+    name: Full Flutter regression (no deployment)
+    needs: flutter-diego-qa
+    if: github.ref == 'refs/heads/fix/b47-diego-statistical-reading'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Run every Flutter test
+        run: flutter test --no-pub --reporter compact
