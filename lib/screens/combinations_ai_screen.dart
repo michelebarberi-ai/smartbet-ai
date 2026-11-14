@@ -1809,6 +1809,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       'GOAL',
       'MULTIGOL',
       'SEGNA',
+      'MERCATI OPPURE',
     ];
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1893,6 +1894,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 '${(option.probability * 100).toStringAsFixed(1)}%',
           )
           .join(' • ');
+      final familyLeaders = item.ranking.familyLeaders.entries
+          .map((entry) =>
+              '${entry.key}: ${entry.value.market} '
+              '${(entry.value.probability * 100).toStringAsFixed(1)}%')
+          .join(' • ');
       return Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -1929,6 +1935,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               '• ${item.ranking.reason}',
               style: const TextStyle(color: Colors.white60, fontSize: 11),
             ),
+            if (familyLeaders.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Migliore per famiglia: $familyLeaders',
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
+              ),
+            ],
             if (alternatives.isNotEmpty)
               Text(
                 'Alternative: $alternatives',
@@ -1957,9 +1970,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const Text(
-          'Ranking statistico senza quote bookmaker. Verde: '
-          'probabilita simulata almeno 70% e qualita dati almeno 65%. '
-          'Non equivale a una selezione giocabile.',
+          'Ranking statistico senza quote bookmaker o Auditor sportivo. '
+          'Verde: probabilita simulata almeno 70% e qualita dati almeno 65%. '
+          'Le stime OR non implicano quote disponibili.',
           style: TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const SizedBox(height: 10),
