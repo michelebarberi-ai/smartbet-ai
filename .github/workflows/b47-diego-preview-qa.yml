@@ -33,4 +33,5 @@ jobs:
             test/services/smartbet_sports_audit_status_test.dart \
             test/services/smartbet_match_simulation_service_test.dart \
             test/services/smartbet_multimarket_ranking_service_test.dart \
-            test/services/smartbet_or_markets_test.dart
+            test/services/smartbet_or_markets_test.dart \
+            test/services/smartbet_local_auditor_threshold_test.dart
