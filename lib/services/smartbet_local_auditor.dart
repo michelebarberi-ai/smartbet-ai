@@ -1,4 +1,5 @@
 import '../models/analysis_result.dart';
+import 'goalvdline_quote_policy.dart';
 
 enum SmartBetLocalAuditStatus { confirm, doubt, block }
 
@@ -33,10 +34,24 @@ class SmartBetLocalAuditor {
       );
     }
 
-    if (odd < 1.25) {
+    // B47: un'unica soglia in app, esclusivamente quote finite > 1.20.
+    if (!GoalVdLineQuotePolicy.isPlayable(odd)) {
       return const SmartBetLocalAudit(
         status: SmartBetLocalAuditStatus.block,
-        reasons: <String>['Quota reale inferiore a 1.25.'],
+        reasons: <String>['Quota reale assente o non superiore a 1.20.'],
+      );
+    }
+
+    // Se l'audit sportivo remoto e' stato effettivamente eseguito,
+    // il suo eventuale veto ha precedenza sul controllo locale.
+    if (analysis.hasSportsAuditVeto ||
+        analysis.sportsAuditBlockedMarkets.any(
+          (blocked) => blocked.trim().toUpperCase() ==
+              market.trim().toUpperCase(),
+        )) {
+      return const SmartBetLocalAudit(
+        status: SmartBetLocalAuditStatus.block,
+        reasons: <String>['Mercato escluso dall’Auditor sportivo.'],
       );
     }
 
