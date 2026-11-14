@@ -227,7 +227,8 @@ class DualEngineSummary extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _engineBox(
-                title: comparison.status == DualEngineAgreement.noSelection
+                title: comparison.status == DualEngineAgreement.noSelection ||
+                        comparison.diegoClassification == 'STATISTICAL ONLY'
                     ? 'DIEGO AI • LETTURA'
                     : 'DIEGO AI',
                 market: GoalVdLineMarketRelationService.displayMarket(
