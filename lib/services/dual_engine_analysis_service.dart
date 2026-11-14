@@ -319,6 +319,13 @@ class DualEngineAnalysisService {
     // Non confrontiamo un mercato SmartBet non approvato
     // o non disponibile con una selezione Diego.
     if (smartChoice.market == 'N/D') {
+      // L'assenza di un audit SmartBet verificato non cancella la
+      // previsione indipendente gia' calcolata da Diego.
+      // Se Diego non trova quote giocabili, resta solo statistica:
+      // il confronto continua a essere NON DISPONIBILE.
+      final statisticalDiego = _diegoStatisticalChoice(diego);
+      final displayedDiego = diegoChoice ?? statisticalDiego;
+
       return DualEngineAnalysis(
         smartBet: smartBet,
         diego: diego,
@@ -327,11 +334,12 @@ class DualEngineAnalysisService {
           statisticalSmartBetMarket: statisticalPreviewMarket,
           statisticalSmartBetProbability: statisticalPreviewProbability,
           smartBetMarket: 'N/D',
-          diegoMarket: diegoChoice?.market ?? 'N/D',
-          diegoProbability: diegoChoice?.probability,
+          diegoMarket: displayedDiego.market,
+          diegoProbability: displayedDiego.probability,
           diegoOdd: diegoChoice?.odd,
           diegoBookmaker: diegoChoice?.bookmaker,
-          diegoClassification: diegoChoice?.classification,
+          diegoClassification:
+              diegoChoice?.classification ?? 'STATISTICAL ONLY',
         ),
       );
     }
