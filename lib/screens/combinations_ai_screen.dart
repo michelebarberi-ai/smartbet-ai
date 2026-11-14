@@ -1957,12 +1957,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const Text(
-          'Livelli operativi, non probabilita di vincita garantita.',
+          'Ranking statistico senza quote bookmaker. Verde: '
+          'probabilita simulata almeno 70% e qualita dati almeno 65%. '
+          'Non equivale a una selezione giocabile.',
           style: TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const SizedBox(height: 10),
         Text(
-          'PIU FAVOREVOLI (${primary.length})',
+          'PIU PROBABILI • SIMULAZIONE (${primary.length})',
           style: const TextStyle(
             color: Color(0xFF00C853),
             fontWeight: FontWeight.bold,
@@ -4860,6 +4862,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ],
 
           if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
               !_loading &&
               _results.isEmpty &&
               _processed > 0 &&
@@ -4874,7 +4877,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Text(
                 'Nessun risultato disponibile '
                 'per $_selectedMarketLabel con i '
-                'filtri scelti e quota minima Sisal 1,20.',
+                'filtri scelti e quota reale superiore a 1,20.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white60, height: 1.4),
               ),
