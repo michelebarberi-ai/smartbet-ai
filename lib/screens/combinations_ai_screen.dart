@@ -23,6 +23,8 @@ import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_x_premium_service.dart';
 import '../services/smartbet_multimarket_ranking_service.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
@@ -163,6 +165,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final List<_MultiMarketDisplayItem> _multiMarketResults = [];
   final SmartBetMultiMarketRankingService _multiMarketRanker =
       const SmartBetMultiMarketRankingService();
+  SmartBetLeagueMarketReliabilityReport? _multiMarketHistoricalEvidence;
   bool _xPremiumEnabled = false;
   // P21U: l'utente indica soltanto il numero di risultati, mai le fixture.
   // I candidati si caricano esclusivamente dopo AVVIA.
@@ -1657,6 +1660,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<void> _findMultiMarketRanking() async {
     if (_loading || _multiMarketFamilies.isEmpty) return;
     setState(() {
+      _multiMarketHistoricalEvidence = null;
       _loading = true;
       _processed = 0;
       _total = 0;
@@ -1668,6 +1672,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final analyzed = <int, SmartBetMultiMarketFixture>{};
     try {
+      // Lettura locale dei soli pronostici prepartita risolti.
+      // Non influenza la graduatoria, evita nuove API e non modifica
+      // l'apprendimento ufficiale senza una validazione prospettica.
+      try {
+        final history = SmartBetAnalysisHistoryStore.instance;
+        await history.initialize();
+        final report = const SmartBetLeagueMarketReliabilityService().evaluate(
+          records: history.records,
+          asOf: DateTime.now(),
+        );
+        if (!mounted) return;
+        setState(() => _multiMarketHistoricalEvidence = report);
+      } catch (error) {
+        debugPrint('P21W multimarket evidence unavailable: $error');
+      }
       final matches = await _automaticCandidatePool(drawOnly: false);
       if (!mounted) return;
       if (matches.isEmpty) {
@@ -1887,6 +1906,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final quality = item.ranking.dataQuality;
       final priority = item.ranking.band == SmartBetFixtureBand.priority;
       final color = priority ? const Color(0xFF00C853) : Colors.orangeAccent;
+      final historical = selection == null
+          ? null
+          : _multiMarketHistoricalEvidence?.find(
+              engine: SmartBetAnalysisEngine.smartBet,
+              country: item.match.country,
+              league: item.match.league,
+              market: selection.market,
+            );
+      final hasHistoricalSample = historical != null &&
+          historical.evidenceLevel !=
+              SmartBetLeagueMarketEvidenceLevel.insufficient;
       final alternatives = item.ranking.alternatives
           .map(
             (option) =>
@@ -1934,6 +1964,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               'Qualita dati: ${quality == null ? 'N/D' : '${(quality * 100).toStringAsFixed(0)}%'} '
               '• ${item.ranking.reason}',
               style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              hasHistoricalSample
+                  ? 'Storico ${selection!.market} in ${item.match.league}: '
+                      '${historical.observedAccuracyPercent.toStringAsFixed(1)}% '
+                      'su ${historical.sampleSize} partite risolte '
+                      '(limite inferiore 95%: '
+                      '${historical.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                      'Non è la probabilità di questa partita.'
+                  : 'Storico per questo mercato/campionato: '
+                      'dati insufficienti'
+                      '${historical == null ? '' : ' (${historical.sampleSize} partite)'}.',
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
             ),
             if (familyLeaders.isNotEmpty) ...[
               const SizedBox(height: 6),
