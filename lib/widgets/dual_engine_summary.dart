@@ -227,7 +227,8 @@ class DualEngineSummary extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _engineBox(
-                title: comparison.status == DualEngineAgreement.noSelection
+                title: comparison.status == DualEngineAgreement.noSelection ||
+                        comparison.diegoClassification == 'STATISTICAL ONLY'
                     ? 'DIEGO AI • LETTURA'
                     : 'DIEGO AI',
                 market: GoalVdLineMarketRelationService.displayMarket(
@@ -316,6 +317,21 @@ class DualEngineSummary extends StatelessWidget {
                 height: 1.35,
               ),
             ),
+            if (hasStatisticalPreview && previewMarket == 'X') ...[
+              const SizedBox(height: 6),
+              Text(
+                'Stima X (solo statistica) • '
+                'GoalVdLine ${_percent(previewProbability)} · '
+                'Diego AI ${_percent(diego.drawProbability)}. '
+                'Non indica che Diego abbia scelto X né '
+                'che esista una quota utilizzabile.',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  height: 1.35,
+                ),
+              ),
+            ],
           ],
 
           const SizedBox(height: 8),

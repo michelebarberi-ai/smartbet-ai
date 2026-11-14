@@ -1,4 +1,5 @@
 import 'smartbet_match_simulation_service.dart';
+import 'smartbet_market_probability_service.dart';
 
 /// La valutazione viene fatta SOLO DOPO l'esito definitivo e non modifica
 /// il modello. Le previsioni devono essere state archiviate prima del match.
@@ -90,6 +91,16 @@ class SmartBetSimulationAuditService {
   }
 
   bool _settled(String market, int h, int a) {
+    // I 14 mercati OPPURE sono unioni logiche sul risultato finale.
+    // Sono esattamente gli stessi mercati ammessi dal simulatore;
+    // non li sommiamo come eventi indipendenti.
+    if (SmartBetMarketProbabilityService.orMarkets.contains(market)) {
+      final parts = market.split(' O ');
+      if (parts.length != 2) {
+        throw StateError('Mercato OR non valido: $market');
+      }
+      return _settled(parts.first, h, a) || _settled(parts.last, h, a);
+    }
     final total = h + a;
     if (market == '1') return h > a;
     if (market == 'X') return h == a;

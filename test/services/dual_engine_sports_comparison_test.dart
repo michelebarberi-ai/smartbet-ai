@@ -157,6 +157,57 @@ void main() {
     expect(result.comparison.statisticalSmartBetProbability, 0.80);
   });
 
+  test('B47: combinazioni X senza quota mostra solo stima, non giocabilita', () {
+    final result = service.comparePrepared(
+      smartBet: smart(audit: 'SKIPPED_FAST'),
+      diego: diego(odds: null),
+      smartBetMarket: 'X',
+      smartBetProbability: 34,
+      smartBetOdd: null,
+    );
+
+    expect(result.comparison.status, DualEngineAgreement.unavailable);
+    expect(result.comparison.smartBetMarket, 'N/D');
+    expect(result.comparison.statisticalSmartBetMarket, 'X');
+    expect(result.comparison.statisticalSmartBetProbability, 0.34);
+    expect(result.comparison.diegoMarket, 'GOAL');
+    expect(result.comparison.diegoOdd, isNull);
+  });
+
+  test('B47: Diego resta visibile senza quote e senza auditor SmartBet', () {
+    final result = service.comparePrepared(
+      smartBet: smart(audit: 'NOT_RUN'),
+      diego: diego(odds: null),
+      smartBetMarket: 'GOAL',
+      smartBetProbability: 80,
+      smartBetOdd: 1.40,
+    );
+
+    expect(result.comparison.status, DualEngineAgreement.unavailable);
+    expect(result.comparison.smartBetMarket, 'N/D');
+    expect(result.comparison.statisticalSmartBetMarket, 'GOAL');
+    expect(result.comparison.diegoMarket, 'GOAL');
+    expect(result.comparison.diegoProbability, 0.80);
+    expect(result.comparison.diegoOdd, isNull);
+    expect(result.comparison.diegoClassification, 'STATISTICAL ONLY');
+  });
+
+  test('B47: Diego statistico visibile ma veto SmartBet resta attivo', () {
+    final result = service.comparePrepared(
+      smartBet: smart(audit: 'STRONG_CONTRADICTION'),
+      diego: diego(odds: null),
+      smartBetMarket: 'GOAL',
+      smartBetProbability: 80,
+      smartBetOdd: 1.40,
+    );
+
+    expect(result.comparison.status, DualEngineAgreement.unavailable);
+    expect(result.comparison.statisticalSmartBetMarket, isNull);
+    expect(result.comparison.smartBetMarket, 'N/D');
+    expect(result.comparison.diegoMarket, 'GOAL');
+    expect(result.comparison.diegoOdd, isNull);
+  });
+
   test('P19B2A: quota sotto 1.20 non produce preview', () {
     final result = service.comparePrepared(
       smartBet: smart(audit: 'NOT_RUN'),

@@ -23,6 +23,8 @@ import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../services/smartbet_x_premium_service.dart';
 import '../services/smartbet_multimarket_ranking_service.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/team_stats_expansion.dart';
@@ -163,6 +165,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final List<_MultiMarketDisplayItem> _multiMarketResults = [];
   final SmartBetMultiMarketRankingService _multiMarketRanker =
       const SmartBetMultiMarketRankingService();
+  SmartBetLeagueMarketReliabilityReport? _historicalEvidence;
   bool _xPremiumEnabled = false;
   // P21U: l'utente indica soltanto il numero di risultati, mai le fixture.
   // I candidati si caricano esclusivamente dopo AVVIA.
@@ -1294,9 +1297,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     return [for (final id in shortlist) byId[id]!];
   }
 
+  Future<void> _loadHistoricalEvidenceReadOnly() async {
+    // P21W: un report locale da soli incontri risolti, mai un
+    // aggiustamento ai pronostici o alle quote del ranking.
+    try {
+      final history = SmartBetAnalysisHistoryStore.instance;
+      await history.initialize();
+      final report = const SmartBetLeagueMarketReliabilityService().evaluate(
+        records: history.records,
+        asOf: DateTime.now(),
+      );
+      if (!mounted) return;
+      setState(() => _historicalEvidence = report);
+    } catch (error) {
+      debugPrint('P21W historic evidence unavailable: $error');
+    }
+  }
+
   Future<void> _findXPremium() async {
     if (_loading) return;
     setState(() {
+      _historicalEvidence = null;
       _loading = true;
       _processed = 0;
       _total = 0;
@@ -1308,6 +1329,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final resultByFixture = <int, _XPremiumDisplayItem>{};
     try {
+      await _loadHistoricalEvidenceReadOnly();
+      if (!mounted) return;
       final matches = await _automaticCandidatePool(drawOnly: true);
       if (!mounted) return;
       if (matches.isEmpty) {
@@ -1508,6 +1531,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   Widget _xPremiumCard(_XPremiumDisplayItem item, int rank) {
     final assessment = item.assessment;
+    final historyX = _historicalEvidence?.find(
+      engine: SmartBetAnalysisEngine.smartBet,
+      country: item.match.country,
+      league: item.match.league,
+      market: 'X',
+    );
+    final usableHistoryX = historyX != null &&
+        historyX.evidenceLevel !=
+            SmartBetLeagueMarketEvidenceLevel.insufficient;
     final green = assessment.priority;
     final color = green ? const Color(0xFF00C853) : Colors.orangeAccent;
     String display(double? probability) => probability == null
@@ -1559,6 +1591,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             assessment.reason,
             style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            usableHistoryX
+                ? 'Storico X nel campionato: '
+                    '${historyX.observedAccuracyPercent.toStringAsFixed(1)}% '
+                    'su ${historyX.sampleSize} incontri conclusi '
+                    '(limite inferiore 95%: '
+                    '${historyX.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                    'Non e una probabilita per questo incontro.'
+                : 'Storico X nel campionato: dati insufficienti'
+                    '${historyX == null ? '' : ' (${historyX.sampleSize} partite)'}.',
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
           ),
           if (assessment.alternatives.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1657,6 +1702,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<void> _findMultiMarketRanking() async {
     if (_loading || _multiMarketFamilies.isEmpty) return;
     setState(() {
+      _historicalEvidence = null;
       _loading = true;
       _processed = 0;
       _total = 0;
@@ -1668,6 +1714,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final analyzed = <int, SmartBetMultiMarketFixture>{};
     try {
+      await _loadHistoricalEvidenceReadOnly();
+      if (!mounted) return;
       final matches = await _automaticCandidatePool(drawOnly: false);
       if (!mounted) return;
       if (matches.isEmpty) {
@@ -1809,6 +1857,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       'GOAL',
       'MULTIGOL',
       'SEGNA',
+      'MERCATI OPPURE',
     ];
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1886,12 +1935,28 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final quality = item.ranking.dataQuality;
       final priority = item.ranking.band == SmartBetFixtureBand.priority;
       final color = priority ? const Color(0xFF00C853) : Colors.orangeAccent;
+      final historical = selection == null
+          ? null
+          : _historicalEvidence?.find(
+              engine: SmartBetAnalysisEngine.smartBet,
+              country: item.match.country,
+              league: item.match.league,
+              market: selection.market,
+            );
+      final hasHistoricalSample = historical != null &&
+          historical.evidenceLevel !=
+              SmartBetLeagueMarketEvidenceLevel.insufficient;
       final alternatives = item.ranking.alternatives
           .map(
             (option) =>
                 '${option.market} '
                 '${(option.probability * 100).toStringAsFixed(1)}%',
           )
+          .join(' • ');
+      final familyLeaders = item.ranking.familyLeaders.entries
+          .map((entry) =>
+              '${entry.key}: ${entry.value.market} '
+              '${(entry.value.probability * 100).toStringAsFixed(1)}%')
           .join(' • ');
       return Container(
         margin: const EdgeInsets.only(bottom: 10),
@@ -1929,6 +1994,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               '• ${item.ranking.reason}',
               style: const TextStyle(color: Colors.white60, fontSize: 11),
             ),
+            const SizedBox(height: 5),
+            Text(
+              hasHistoricalSample
+                  ? 'Storico ${selection!.market} in ${item.match.league}: '
+                      '${historical.observedAccuracyPercent.toStringAsFixed(1)}% '
+                      'su ${historical.sampleSize} partite risolte '
+                      '(limite inferiore 95%: '
+                      '${historical.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                      'Non è la probabilità di questa partita.'
+                  : 'Storico per questo mercato/campionato: '
+                      'dati insufficienti'
+                      '${historical == null ? '' : ' (${historical.sampleSize} partite)'}.',
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+            if (familyLeaders.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Migliore per famiglia: $familyLeaders',
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
+              ),
+            ],
             if (alternatives.isNotEmpty)
               Text(
                 'Alternative: $alternatives',
@@ -1957,12 +2043,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const Text(
-          'Livelli operativi, non probabilita di vincita garantita.',
+          'Ranking statistico senza quote bookmaker o Auditor sportivo. '
+          'Verde: probabilita simulata almeno 70% e qualita dati almeno 65%. '
+          'Le stime OR non implicano quote disponibili.',
           style: TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const SizedBox(height: 10),
         Text(
-          'PIU FAVOREVOLI (${primary.length})',
+          'PIU PROBABILI • SIMULAZIONE (${primary.length})',
           style: const TextStyle(
             color: Color(0xFF00C853),
             fontWeight: FontWeight.bold,
@@ -4860,6 +4948,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ],
 
           if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
               !_loading &&
               _results.isEmpty &&
               _processed > 0 &&
@@ -4874,7 +4963,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Text(
                 'Nessun risultato disponibile '
                 'per $_selectedMarketLabel con i '
-                'filtri scelti e quota minima Sisal 1,20.',
+                'filtri scelti e quota reale superiore a 1,20.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white60, height: 1.4),
               ),

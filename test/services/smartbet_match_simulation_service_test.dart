@@ -33,6 +33,42 @@ void main() {
     }
   });
 
+  test('B47: mercati OPPURE sono unioni sulla stessa distribuzione', () {
+    final r = run(1.8, 1.2);
+    final goalOrOver = r.probabilityFor('GOAL O OVER 1.5');
+
+    // GOAL implica sempre due reti: unione identica a OVER 1.5.
+    expect(goalOrOver, closeTo(r.probabilityFor('OVER 1.5'), 1e-10));
+    expect(
+      r.probabilityFor('X O UNDER 3.5'),
+      greaterThanOrEqualTo(r.probabilityFor('UNDER 3.5')),
+    );
+    expect(
+      r.probabilityFor('X O UNDER 3.5'),
+      greaterThanOrEqualTo(r.draw),
+    );
+    expect(
+      r.probabilityFor('1X O OVER 2.5'),
+      greaterThanOrEqualTo(r.probabilityFor('1X')),
+    );
+    expect(
+      r.probabilityFor('GOAL O OVER 2.5'),
+      greaterThanOrEqualTo(r.probabilityFor('OVER 2.5')),
+    );
+  });
+
+  test('B47: tutti i 14 OR sono valori finiti e non una quota', () {
+    final r = run(1.2, 1.1);
+    final markets = r.marketProbabilities.keys
+        .where((market) => market.contains(' O ')).toList();
+    expect(markets.length, 14);
+    for (final market in markets) {
+      final p = r.probabilityFor(market);
+      expect(p.isFinite, isTrue, reason: market);
+      expect(p, inInclusiveRange(0, 1), reason: market);
+    }
+  });
+
   test('Goal e No Goal sono complementari', () {
     final r = run(1.2, 0.9);
     expect(
