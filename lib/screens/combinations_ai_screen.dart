@@ -165,7 +165,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final List<_MultiMarketDisplayItem> _multiMarketResults = [];
   final SmartBetMultiMarketRankingService _multiMarketRanker =
       const SmartBetMultiMarketRankingService();
-  SmartBetLeagueMarketReliabilityReport? _multiMarketHistoricalEvidence;
+  SmartBetLeagueMarketReliabilityReport? _historicalEvidence;
   bool _xPremiumEnabled = false;
   // P21U: l'utente indica soltanto il numero di risultati, mai le fixture.
   // I candidati si caricano esclusivamente dopo AVVIA.
@@ -1297,9 +1297,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     return [for (final id in shortlist) byId[id]!];
   }
 
+  Future<void> _loadHistoricalEvidenceReadOnly() async {
+    // P21W: un report locale da soli incontri risolti, mai un
+    // aggiustamento ai pronostici o alle quote del ranking.
+    try {
+      final history = SmartBetAnalysisHistoryStore.instance;
+      await history.initialize();
+      final report = const SmartBetLeagueMarketReliabilityService().evaluate(
+        records: history.records,
+        asOf: DateTime.now(),
+      );
+      if (!mounted) return;
+      setState(() => _historicalEvidence = report);
+    } catch (error) {
+      debugPrint('P21W historic evidence unavailable: $error');
+    }
+  }
+
   Future<void> _findXPremium() async {
     if (_loading) return;
     setState(() {
+      _historicalEvidence = null;
       _loading = true;
       _processed = 0;
       _total = 0;
@@ -1311,6 +1329,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final resultByFixture = <int, _XPremiumDisplayItem>{};
     try {
+      await _loadHistoricalEvidenceReadOnly();
+      if (!mounted) return;
       final matches = await _automaticCandidatePool(drawOnly: true);
       if (!mounted) return;
       if (matches.isEmpty) {
@@ -1511,6 +1531,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   Widget _xPremiumCard(_XPremiumDisplayItem item, int rank) {
     final assessment = item.assessment;
+    final historyX = _historicalEvidence?.find(
+      engine: SmartBetAnalysisEngine.smartBet,
+      country: item.match.country,
+      league: item.match.league,
+      market: 'X',
+    );
+    final usableHistoryX = historyX != null &&
+        historyX.evidenceLevel !=
+            SmartBetLeagueMarketEvidenceLevel.insufficient;
     final green = assessment.priority;
     final color = green ? const Color(0xFF00C853) : Colors.orangeAccent;
     String display(double? probability) => probability == null
@@ -1562,6 +1591,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             assessment.reason,
             style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            usableHistoryX
+                ? 'Storico X nel campionato: '
+                    '${historyX!.observedAccuracyPercent.toStringAsFixed(1)}% '
+                    'su ${historyX!.sampleSize} incontri conclusi '
+                    '(limite inferiore 95%: '
+                    '${historyX!.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                    'Non e una probabilita per questo incontro.'
+                : 'Storico X nel campionato: dati insufficienti'
+                    '${historyX == null ? '' : ' (${historyX.sampleSize} partite)'}.',
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
           ),
           if (assessment.alternatives.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1660,7 +1702,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<void> _findMultiMarketRanking() async {
     if (_loading || _multiMarketFamilies.isEmpty) return;
     setState(() {
-      _multiMarketHistoricalEvidence = null;
+      _historicalEvidence = null;
       _loading = true;
       _processed = 0;
       _total = 0;
@@ -1672,21 +1714,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
     final analyzed = <int, SmartBetMultiMarketFixture>{};
     try {
-      // Lettura locale dei soli pronostici prepartita risolti.
-      // Non influenza la graduatoria, evita nuove API e non modifica
-      // l'apprendimento ufficiale senza una validazione prospettica.
-      try {
-        final history = SmartBetAnalysisHistoryStore.instance;
-        await history.initialize();
-        final report = const SmartBetLeagueMarketReliabilityService().evaluate(
-          records: history.records,
-          asOf: DateTime.now(),
-        );
-        if (!mounted) return;
-        setState(() => _multiMarketHistoricalEvidence = report);
-      } catch (error) {
-        debugPrint('P21W multimarket evidence unavailable: $error');
-      }
+      await _loadHistoricalEvidenceReadOnly();
+      if (!mounted) return;
       final matches = await _automaticCandidatePool(drawOnly: false);
       if (!mounted) return;
       if (matches.isEmpty) {
@@ -1908,7 +1937,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final color = priority ? const Color(0xFF00C853) : Colors.orangeAccent;
       final historical = selection == null
           ? null
-          : _multiMarketHistoricalEvidence?.find(
+          : _historicalEvidence?.find(
               engine: SmartBetAnalysisEngine.smartBet,
               country: item.match.country,
               league: item.match.league,
