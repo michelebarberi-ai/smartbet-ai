@@ -1,5 +1,6 @@
 import '../models/analysis_result.dart';
 import 'smartbet_match_simulation_service.dart';
+import 'smartbet_market_probability_service.dart';
 
 /// P21K: graduatoria multimercato su fixture SCELTE dall'utente.
 /// Quote estranee al modello sportivo; eventuali quote intervengono SOLO dopo
@@ -40,6 +41,8 @@ class SmartBetRankedMultiMarketFixture {
   final double? dataQuality;
   final SmartBetMultiMarketOption? selection;
   final List<SmartBetMultiMarketOption> alternatives;
+  /// La migliore stima per ciascuna famiglia, indipendente dalla scelta globale.
+  final Map<String, SmartBetMultiMarketOption> familyLeaders;
   final String reason;
 
   const SmartBetRankedMultiMarketFixture({
@@ -48,6 +51,7 @@ class SmartBetRankedMultiMarketFixture {
     required this.dataQuality,
     required this.selection,
     required this.alternatives,
+    this.familyLeaders = const {},
     required this.reason,
   });
 }
@@ -63,6 +67,7 @@ class SmartBetMultiMarketRankingService {
     'DOPPIA CHANCE': ['1X', 'X2', '12'],
     'OVER': ['OVER 1.5', 'OVER 2.5', 'OVER 3.5'],
     'UNDER': ['UNDER 1.5', 'UNDER 2.5', 'UNDER 3.5', 'UNDER 4.5'],
+    'MERCATI OPPURE': SmartBetMarketProbabilityService.orMarkets,
     'GOAL': ['GOAL', 'NO GOAL'],
     'GOL': ['GOAL', 'NO GOAL'],
     'MULTIGOL': [
@@ -167,6 +172,18 @@ class SmartBetMultiMarketRankingService {
         return p != 0 ? p : x.market.compareTo(y.market);
       });
       final choice = options.isEmpty ? null : options.first;
+      // Non limitare i mercati diversi ai tre piazzamenti globali:
+      // ciascuna famiglia scelta conserva il suo miglior pronostico.
+      final familyLeaders = <String, SmartBetMultiMarketOption>{};
+      for (final family in groups.isEmpty ? allowedGroups.keys : groups) {
+        final memberMarkets = allowedGroups[family]!.toSet();
+        for (final option in options) {
+          if (memberMarkets.contains(option.market)) {
+            familyLeaders[family] = option;
+            break;
+          }
+        }
+      }
       final band = choice == null || quality == null
           ? SmartBetFixtureBand.insufficientData
           : quality >= 0.65 && choice.probability >= 0.70
@@ -186,6 +203,7 @@ class SmartBetMultiMarketRankingService {
           dataQuality: quality,
           selection: choice,
           alternatives: List.unmodifiable(options.skip(1).take(3)),
+          familyLeaders: Map.unmodifiable(familyLeaders),
           reason: reason,
         ),
       );
