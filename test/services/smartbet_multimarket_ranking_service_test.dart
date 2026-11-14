@@ -76,6 +76,41 @@ void main() {
       throwsArgumentError,
     );
   });
+  test('B47: ranking multimercato include OR senza inventare quote', () {
+    final ranked = ranker.rank(
+      selectedMatches: [
+        SmartBetMultiMarketFixture(fixtureId: 70, analysis: analysis()),
+      ],
+      families: ['OVER', 'GOAL', 'MERCATI OPPURE'],
+    );
+    final item = ranked.single;
+    expect(item.familyLeaders.keys,
+        containsAll(['OVER', 'GOAL', 'MERCATI OPPURE']));
+    expect(item.familyLeaders['OVER']!.market, startsWith('OVER'));
+    expect(item.familyLeaders['GOAL']!.market,
+        anyOf('GOAL', 'NO GOAL'));
+    expect(item.familyLeaders['MERCATI OPPURE']!.market,
+        contains(' O '));
+    for (final leader in item.familyLeaders.values) {
+      expect(leader.probability, inInclusiveRange(0, 1));
+      expect(leader.decimalOdd, isNull);
+    }
+    expect(item.selection!.probability, greaterThanOrEqualTo(0));
+  });
+
+  test('B47: una sola famiglia non mostra mercati estranei', () {
+    final item = ranker.rank(
+      selectedMatches: [
+        SmartBetMultiMarketFixture(fixtureId: 71, analysis: analysis()),
+      ],
+      families: ['MERCATI OPPURE'],
+    ).single;
+    expect(item.selection!.market, contains(' O '));
+    expect(item.familyLeaders.keys, ['MERCATI OPPURE']);
+    expect(item.familyLeaders['MERCATI OPPURE']!.market,
+        item.selection!.market);
+  });
+
   test('P21K: blocca 16 partite', () {
     expect(
       () => ranker.rank(
