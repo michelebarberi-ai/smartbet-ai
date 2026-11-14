@@ -153,7 +153,7 @@ class _GoalVdLineThreeCouponViewerState
             const SizedBox(height: 8),
             Text(
               'MERCATO ALTERNATIVO · originale: '
-              '${GoalVdLineMarketRelationService.displayMarket(originalMarket!)}',
+              '${GoalVdLineMarketRelationService.displayMarket(originalMarket)}',
               style: const TextStyle(
                 color: Colors.orangeAccent,
                 fontSize: 10,
