@@ -17,6 +17,59 @@ void main() {
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
+  test('B49: iOS lock screen status is read independently of opt-in', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'getNotificationStatus') {
+        return <String, Object>{
+          'authorization': 'authorized',
+          'lockScreen': false,
+          'alerts': true,
+          'notificationCenter': true,
+        };
+      }
+      return null;
+    });
+    final status = await notifier.notificationStatus();
+    expect(status, isNotNull);
+    expect(status!.isAllowed, true);
+    expect(status.lockScreen, false);
+    expect(status.italianSummary, contains('Schermo bloccato'));
+  });
+
+  test('B49: denied iOS authorization is not reported as enabled', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return <String, Object>{
+        'authorization': 'denied',
+        'lockScreen': false,
+        'alerts': false,
+        'notificationCenter': false,
+      };
+    });
+    final status = await notifier.notificationStatus();
+    expect(status!.isAllowed, false);
+    expect(status.italianSummary, contains('negato'));
+  });
+
+  test('B49: locked screen test needs opt-in and reports native schedule', () async {
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+    expect(await notifier.sendLockScreenTestNotification(), false);
+    expect(calls, isEmpty);
+    expect(await notifier.setEnabled(true), true);
+    expect(await notifier.sendLockScreenTestNotification(), true);
+    expect(calls, ['requestPermission', 'sendLockScreenTestNotification']);
+  });
+
+  test('B49: absent iOS handler does not claim lock test or status', () async {
+    expect(await notifier.notificationStatus(), isNull);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(GoalVdLineCouponReadyNotifier.storageKey, true);
+    expect(await notifier.sendLockScreenTestNotification(), false);
+  });
+
   test('B45: notifications disabled by default and no native call', () async {
     var called = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {

@@ -44,6 +44,56 @@ import UserNotifications
             granted, _ in
             DispatchQueue.main.async { result(granted) }
           }
+        case "getNotificationStatus":
+          UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let authorization: String
+            switch settings.authorizationStatus {
+            case .authorized:
+              authorization = "authorized"
+            case .provisional:
+              authorization = "provisional"
+            case .denied:
+              authorization = "denied"
+            case .notDetermined:
+              authorization = "notDetermined"
+            case .ephemeral:
+              authorization = "ephemeral"
+            @unknown default:
+              authorization = "unknown"
+            }
+            DispatchQueue.main.async {
+              result([
+                "authorization": authorization,
+                "lockScreen": settings.lockScreenSetting == .enabled,
+                "alerts": settings.alertSetting == .enabled,
+                "notificationCenter": settings.notificationCenterSetting == .enabled
+              ])
+            }
+          }
+        case "sendLockScreenTestNotification":
+          // Delayed local notification is scheduled BEFORE the phone locks.
+          // It tests iOS delivery, not background coupon generation or APNs.
+          let center = UNUserNotificationCenter.current()
+          center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized ||
+                  settings.authorizationStatus == .provisional else {
+              DispatchQueue.main.async { result(false) }
+              return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = "GoalVdLine • Prova schermo bloccato"
+            content.body = "Test iOS: notifica programmata 15 secondi fa. Nessuna schedina generata."
+            content.sound = .default
+            content.userInfo = ["kind": "local_notification_test"]
+            let request = UNNotificationRequest(
+              identifier: "goalvdline-lock-screen-diagnostic",
+              content: content,
+              trigger: UNTimeIntervalNotificationTrigger(timeInterval: 15, repeats: false)
+            )
+            center.add(request) { error in
+              DispatchQueue.main.async { result(error == nil) }
+            }
+          }
         case "sendTestNotification":
           // Only a user-initiated diagnostics notification. Never claim
           // a coupon was created or re-use a coupon-ready tap payload.

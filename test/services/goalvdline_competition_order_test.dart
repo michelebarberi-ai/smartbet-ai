@@ -2,6 +2,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/services/goalvdline_competition_order.dart';
 
 void main() {
+  test('B49: preview combinazioni mostra paese e campionato', () {
+    expect(
+      GoalVdLineCompetitionOrder.matchCompetitionLabel(
+        'Italy', 'Serie C - Girone A',
+      ),
+      'ITALIA · Serie C - Girone A',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.matchCompetitionLabel(
+        'Spain', 'Segunda División RFEF - Group 2',
+      ),
+      'SPAGNA · Segunda División RFEF - Group 2',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.matchCompetitionLabel(
+        'Europe', 'AFC Champions League Elite',
+      ),
+      'ASIA · AFC Champions League Elite',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.matchCompetitionLabel('', ''),
+      'Campionato non disponibile',
+    );
+    expect(
+      GoalVdLineCompetitionOrder.matchCompetitionLabel('', 'Serie A'),
+      'Serie A',
+    );
+  });
+
   test('P22: ordine paesi prioritari e alias italiani/inglesi', () {
     final values = [
       'Sweden',
