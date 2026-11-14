@@ -1,0 +1,33 @@
+name: GoalVdLine B47 Diego preview QA
+
+# Isolated read-only validation; no signing, deployment, or paid resources.
+on:
+  push:
+    branches:
+      - fix/b47-diego-statistical-reading
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-diego-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout changes
+        uses: actions/checkout@v4
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Validate analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Run dual engine and audit tests
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/dual_engine_sports_comparison_test.dart \
+            test/services/dual_engine_summary_preview_test.dart \
+            test/services/smartbet_sports_audit_status_test.dart
