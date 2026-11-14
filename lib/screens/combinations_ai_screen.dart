@@ -1969,10 +1969,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             Text(
               hasHistoricalSample
                   ? 'Storico ${selection!.market} in ${item.match.league}: '
-                      '${historical.observedAccuracyPercent.toStringAsFixed(1)}% '
-                      'su ${historical.sampleSize} partite risolte '
+                      '${historical!.observedAccuracyPercent.toStringAsFixed(1)}% '
+                      'su ${historical!.sampleSize} partite risolte '
                       '(limite inferiore 95%: '
-                      '${historical.wilsonLower95Percent.toStringAsFixed(1)}%). '
+                      '${historical!.wilsonLower95Percent.toStringAsFixed(1)}%). '
                       'Non è la probabilità di questa partita.'
                   : 'Storico per questo mercato/campionato: '
                       'dati insufficienti'
