@@ -57,6 +57,24 @@ void main() {
     );
   });
 
+  test('B47: audit prospettico OR rispetta il risultato finale', () {
+    final result = audit.summarize([
+      complete('or-1', 1, 1),
+      complete('or-2', 0, 0),
+      complete('or-3', 0, 4),
+    ]);
+    // 1-1: GOAL e OVER 1.5; 0-0: nessuno dei due.
+    // 0-4: OVER 1.5, senza Goal.
+    expect(result['GOAL O OVER 1.5']!.sampleSize, 3);
+    expect(result['GOAL O OVER 1.5']!.observedFrequency,
+        closeTo(2 / 3, 1e-12));
+    // X oppure Under 3.5: 1-1 e 0-0 sono veri, 0-4 no.
+    expect(result['X O UNDER 3.5']!.observedFrequency,
+        closeTo(2 / 3, 1e-12));
+    // 1X O OVER 2.5: 1-1 e 0-0 via 1X, 0-4 via Over.
+    expect(result['1X O OVER 2.5']!.observedFrequency, 1);
+  });
+
   test('nessun dato: nessuna statistica inventata', () {
     expect(audit.summarize([]), isEmpty);
   });
