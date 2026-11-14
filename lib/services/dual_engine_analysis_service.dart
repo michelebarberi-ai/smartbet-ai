@@ -284,9 +284,11 @@ class DualEngineAnalysisService {
         requestedProbability != null &&
         requestedProbability >= 0 &&
         requestedProbability <= 100 &&
-        requestedOdd != null &&
-        requestedOdd.isFinite &&
-        requestedOdd >= 1.20 &&
+        // Senza quota si conserva soltanto la lettura statistica:
+        // la scelta verificata resta N/D e non diventa giocabile.
+        // Una quota esplicitamente sotto 1.20 non viene promossa.
+        (requestedOdd == null ||
+            (requestedOdd.isFinite && requestedOdd >= 1.20)) &&
         !smartBet.sportsAuditBlockedMarkets.any(
           (item) => _normalizeMarket(item) == normalizedRequestedMarket,
         );
