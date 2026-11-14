@@ -10,6 +10,7 @@ on:
       # Preparing this workflow on feature branch does NOT publish TestFlight.
       - release/b45-testflight
       - release/b47-testflight
+      - release/b48-testflight
 
 jobs:
   build-ios:
@@ -18,14 +19,18 @@ jobs:
     # Preserve legacy branches and allow a manual workflow dispatch if needed.
     if: >-
       (github.ref != 'refs/heads/release/b45-testflight' &&
-       github.ref != 'refs/heads/release/b47-testflight') ||
+       github.ref != 'refs/heads/release/b47-testflight' &&
+       github.ref != 'refs/heads/release/b48-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
-       github.ref != 'refs/heads/release/b47-testflight') ||
+       github.ref != 'refs/heads/release/b47-testflight' &&
+       github.ref != 'refs/heads/release/b48-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b47-testflight' &&
-         github.event.head_commit.message == 'release(build47): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build47): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b48-testflight' &&
+         github.event.head_commit.message == 'release(build48): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -83,8 +88,10 @@ jobs:
           flutter analyze --no-fatal-infos
 
       # Before any signing/export, reject a release with broken remote iPhone workflow.
-      - name: B47 remote coupon release regression
-        if: github.ref == 'refs/heads/release/b47-testflight'
+      - name: B47/B48 remote coupon release regression
+        if: >-
+          github.ref == 'refs/heads/release/b47-testflight' ||
+          github.ref == 'refs/heads/release/b48-testflight'
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter test --no-pub --reporter compact \
@@ -240,6 +247,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="47"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b48-testflight" ]]; then
+            grep -qx 'version: 1.2.5+48' pubspec.yaml || {
+              echo "ERROR: Build 48 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="48"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
