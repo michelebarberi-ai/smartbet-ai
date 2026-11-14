@@ -30,4 +30,7 @@ jobs:
           flutter test --no-pub --reporter compact \
             test/services/dual_engine_sports_comparison_test.dart \
             test/services/dual_engine_summary_preview_test.dart \
-            test/services/smartbet_sports_audit_status_test.dart
+            test/services/smartbet_sports_audit_status_test.dart \
+            test/services/smartbet_match_simulation_service_test.dart \
+            test/services/smartbet_multimarket_ranking_service_test.dart \
+            test/services/smartbet_or_markets_test.dart
