@@ -24,6 +24,7 @@ import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/goalvdline_on_demand_coupon_panel.dart';
+import '../widgets/goalvdline_three_coupon_viewer.dart';
 import '../services/goalvdline_market_relation_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
 import '../services/smartbet_device_learning_preferences.dart';
@@ -2977,12 +2978,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         );
         return;
       }
-      final matchNames = {
-        for (final item in originalPicks)
-          item.match.fixtureId:
-              '${item.match.homeTeam} - ${item.match.awayTeam}',
+      final matchesById = <int, MatchModel>{
+        for (final item in originalPicks) item.match.fixtureId: item.match,
       };
-      await _showThreeSystemCoupons(coupons, matchNames);
+      await _showThreeSystemCoupons(coupons, matchesById);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3002,7 +3001,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   Future<void> _showThreeSystemCoupons(
     List<List<GoalVdLineSystemSelection>> coupons,
-    Map<int, String> matchNames,
+    Map<int, MatchModel> matchesById,
   ) async {
     const names = ['ORIGINALE', 'ALTERNATIVA 1', 'ALTERNATIVA 2'];
     String summary() {
@@ -3013,11 +3012,17 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           1.0,
           (value, pick) => value * pick.odd,
         );
-        buffer.writeln('\n${names[index]} | Quota ${total.toStringAsFixed(2)}');
+        buffer.writeln('\n${names[index]} | '
+            '${coupon.length} partite | Quota ${total.toStringAsFixed(2)}');
         for (final pick in coupon) {
+          final match = matchesById[pick.fixtureId];
+          final matchName = match == null
+              ? 'Partita ${pick.fixtureId}'
+              : '${match.homeTeam} - ${match.awayTeam}';
           buffer.writeln(
-            '${matchNames[pick.fixtureId]} | ${pick.market} '
-            '| ${pick.probability}% | ${pick.odd.toStringAsFixed(2)}',
+            '$matchName | ${pick.market} '
+            '| ${pick.probability}% | ${pick.odd.toStringAsFixed(2)}'
+            ' | ${pick.bookmaker}',
           );
         }
       }
@@ -3030,79 +3035,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       backgroundColor: const Color(0xFF111827),
       builder: (sheetContext) => SafeArea(
         child: FractionallySizedBox(
-          heightFactor: 0.85,
-          child: Column(
-            children: [
-              const SizedBox(height: 14),
-              const Text(
-                '3 SCHEDINE — STESSE PARTITE',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text(
-                  'Mercati diversi soltanto dove esistono quote '
-                  'e probabilità valide. Non è un sistema integrale.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: coupons.length,
-                  itemBuilder: (_, index) {
-                    final coupon = coupons[index];
-                    final quota = coupon.fold<double>(1.0, (v, p) => v * p.odd);
-                    return Card(
-                      color: const Color(0xFF1F2937),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${names[index]} · ${coupon.length} partite '
-                              '· Quota ${quota.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Color(0xFF00C853),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            for (final pick in coupon)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 3,
-                                ),
-                                child: Text(
-                                  '${matchNames[pick.fixtureId]} — ${pick.market} '
-                                  '(${pick.probability}%) @${pick.odd.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: OutlinedButton.icon(
-                  onPressed: () => Share.share(summary()),
-                  icon: const Icon(Icons.ios_share),
-                  label: const Text('CONDIVIDI LE 3 SCHEDINE'),
-                ),
-              ),
-            ],
+          heightFactor: 0.92,
+          child: GoalVdLineThreeCouponViewer(
+            coupons: coupons,
+            matchesById: matchesById,
+            onShareAll: () => Share.share(summary()),
           ),
         ),
       ),
