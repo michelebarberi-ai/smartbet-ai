@@ -4714,7 +4714,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     // A different quoted pick is explicitly labeled as a coupon alternative.
     final rankedSports = _sportsMarketCandidates(item.analysis);
     final topSport = rankedSports.isEmpty ? null : rankedSports.first;
-    final isSisalAlternative =
+    final isQuotedAlternative =
         topSport != null && topSport.market != item.market;
     final probabilityColor = _probabilityColor(item.probability);
     final localAuditLabel = switch (item.auditorStatus) {
@@ -4774,7 +4774,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 13),
-          if (isSisalAlternative) ...[
+          if (isQuotedAlternative) ...[
             Text(
               'PRONOSTICO PRINCIPALE AI: '
               '${GoalVdLineMarketRelationService.displayMarket(topSport.market)} '
@@ -4794,8 +4794,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSisalAlternative
-                          ? 'ALTERNATIVA SISAL PER LA SCHEDINA'
+                      isQuotedAlternative
+                          ? 'ALTERNATIVA QUOTATA PER LA SCHEDINA'
                           : 'PRONOSTICO PRINCIPALE AI',
                       style: TextStyle(
                         color: Colors.white38,
