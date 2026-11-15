@@ -6,6 +6,10 @@ on:
     branches:
       - feature/b59-owner-console-release-prep
 
+concurrency:
+  group: b59-qa-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
