@@ -2440,7 +2440,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       setState(() {
         _sportsOnlyPreview
           ..clear()
-          ..addAll(sportsOnly.take(_topCount));
+          ..addAll(sportsOnly.take(_advancedShortlistSize(sportsOnly.length)));
         _checkingOdds = true;
       });
 
@@ -4838,61 +4838,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
-          if (!_xPremiumEnabled &&
-              !_multiMarketRankingEnabled &&
-              !_loading &&
-              _results.isEmpty &&
-              _sportsOnlyPreview.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            const Text(
-              'ANTEPRIMA PRONOSTICI AI — NON GIOCABILE',
-              style: TextStyle(color: Colors.orangeAccent,
-                  fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 7),
-            const Text(
-              'Stime sportive calcolate prima delle quote. '
-              'Non sono selezioni di schedina: la quota reale è '
-              'assente o la selezione non ha superato i controlli.',
-              style: TextStyle(color: Colors.white60, fontSize: 11),
-            ),
-            const SizedBox(height: 10),
-            ..._sportsOnlyPreview.map((item) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F2937),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${item.match.homeTeam} - ${item.match.awayTeam}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(
-                    GoalVdLineCompetitionOrder.matchCompetitionLabel(
-                      item.match.country, item.match.league,
-                    ),
-                    key: const Key('b49-combinations-preview-competition'),
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${item.market} · stima ${item.probability}% · quota non certificata'
-                      '${!_acceptsMarketProbability(item.probability) ? ' · sotto soglia' : ''}',
-                    style: const TextStyle(color: Colors.orangeAccent,
-                        fontSize: 11)),
-                  if (item.dualAnalysis != null) ...[
-                    const SizedBox(height: 10),
-                    DualEngineSummary(analysis: item.dualAnalysis!),
-                  ],
-                ],
-              ),
-            )),
-          ],
-
           if (_xPremiumEnabled && _xPremiumResults.isNotEmpty)
             _xPremiumResultList(),
 
@@ -4940,6 +4885,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ],
             ),
 
+            if (!_loading &&
+                _outputMode == _CombinationOutputMode.single &&
+                _results.length < _topCount) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${_results.length} selezioni confermate su $_topCount richieste. '
+                'Le stime aggiuntive, se presenti, sono mostrate separatamente.',
+                key: const Key('b51-combinations-partial-count'),
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
 
             ..._groupedResultWidgets(),
@@ -4956,6 +4916,71 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ),
               ),
             ),
+          ],
+
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              !_loading &&
+              (_results.isEmpty ||
+                  (_outputMode == _CombinationOutputMode.single &&
+                      _results.length < _topCount)) &&
+              _sportsOnlyPreview.any((item) => !_results.any(
+                    (pick) => pick.match.fixtureId == item.match.fixtureId,
+                  ))) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'ALTRE STIME AI — NON CONFERMATE PER LA SCHEDINA',
+              style: TextStyle(color: Colors.orangeAccent,
+                  fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 7),
+            const Text(
+              'Stime sportive disponibili ma non confermate per questa schedina. '
+              'La quota potrebbe essere assente, sotto il minimo di 1,20, '
+              'non verificata o la selezione potrebbe non avere superato '
+              'i controlli. Non sono eventi giocabili confermati.',
+              style: TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            ..._sportsOnlyPreview
+                .where((item) => !_results.any(
+                      (pick) => pick.match.fixtureId == item.match.fixtureId,
+                    ))
+                .take(math.max(0, _topCount - _results.length))
+                .map((item) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2937),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${item.match.homeTeam} - ${item.match.awayTeam}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(
+                    GoalVdLineCompetitionOrder.matchCompetitionLabel(
+                      item.match.country, item.match.league,
+                    ),
+                    key: const Key('b49-combinations-preview-competition'),
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${item.market} · stima ${item.probability}% · selezione non confermata'
+                      '${!_acceptsMarketProbability(item.probability) ? ' · sotto soglia' : ''}',
+                    style: const TextStyle(color: Colors.orangeAccent,
+                        fontSize: 11)),
+                  if (item.dualAnalysis != null) ...[
+                    const SizedBox(height: 10),
+                    DualEngineSummary(analysis: item.dualAnalysis!),
+                  ],
+                ],
+              ),
+            )),
           ],
 
           if (!_xPremiumEnabled &&
