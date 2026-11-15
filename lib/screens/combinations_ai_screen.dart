@@ -172,6 +172,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   int _autoAvailableCount = 0;
   int _autoExaminedCount = 0;
   int _autoDeepCount = 0;
+  int _autoRejectedNoSimulation = 0;
   bool _xPremiumChoosing = false;
   final Map<int, MatchModel> _xPremiumSelectedMatches = <int, MatchModel>{};
   final List<_XPremiumDisplayItem> _xPremiumResults = <_XPremiumDisplayItem>[];
@@ -1206,6 +1207,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         .where(
           (match) =>
               match.fixtureId > 0 &&
+              match.hasTeamIds &&
               _isUpcoming(match) &&
               (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
               (_selectedCompetitionKeys.isEmpty ||
@@ -1217,78 +1219,100 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     _autoAvailableCount = fixtures.length;
     _autoExaminedCount = 0;
     _autoDeepCount = 0;
+    _autoRejectedNoSimulation = 0;
     if (fixtures.isEmpty) return const <MatchModel>[];
 
-    // Budget esplicito: la ricerca non puo' produrre centinaia di
-    // analisi avanzate in un solo tocco. Ordinamento iniziale per data,
-    // senza pregiudizi legati alle quote o ai campionati.
-    const maxPreliminary = 45;
+    // P21U/B52: il primo gruppo cronologico (spesso Serie C e Serie D)
+    // non deve esaurire il budget prima di arrivare alle altre competizioni.
+    // Round-robin per campionato, data conservata dentro ciascun gruppo.
+    const initialBudget = 45;
+    const maxPreliminary = 75;
     const maxDeep = 30;
-    final preliminaryFixtures = fixtures.take(maxPreliminary).toList();
+    final selector = const SmartBetAutoFixtureSelectionService();
+    final preliminaryFixtures = selector.diversifiedPreliminary<MatchModel>(
+      candidates: fixtures,
+      competitionKeyOf: CompetitionFilterSheet.keyFor,
+      limit: math.min(maxPreliminary, fixtures.length),
+    );
     final preliminary = <SmartBetAutomaticFixtureEstimate>[];
     final byId = <int, MatchModel>{};
+    final desiredDeep = math.min(30, math.max(12, _topCount * 2));
     for (
       var start = 0;
       start < preliminaryFixtures.length;
       start += _batchSize
     ) {
+      // Si espande solo se le prime 45 fixture non contengono un numero
+      // adeguato di candidate realmente simulabili. Mai oltre 75 preliminari.
+      if (start >= initialBudget && preliminary.length >= desiredDeep) break;
       final end = math.min(start + _batchSize, preliminaryFixtures.length);
       final batch = preliminaryFixtures.sublist(start, end);
       final estimates = await Future.wait(
         batch.map((match) async {
-          AnalysisResult? base;
           try {
-            base = await _analysisCache.read(match.fixtureId);
+            var base = await _analysisCache.read(match.fixtureId);
             base ??= await SmartCore.analyze(match);
-          } catch (error) {
-            debugPrint('P21U preliminare ${match.fixtureId}: $error');
-          }
-          double? probability;
-          final quality = base == null || base.dataConfidence <= 0
-              ? null
-              : (base.dataConfidence / 100).clamp(0.0, 1.0).toDouble();
-          if (base != null) {
+            // Entrambe le ricerche X Premium e Multimercato usano un
+            // simulatore con xG: non selezionare fixture che ne sono prive.
+            if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
+              return null;
+            }
+            final quality = base.dataConfidence > 0 &&
+                    base.dataConfidence <= 100
+                ? base.dataConfidence / 100.0
+                : null;
+            double? probability;
             if (drawOnly) {
               final estimate = base.drawProbability;
-              if (estimate > 0 && estimate <= 100) probability = estimate / 100;
-            } else {
-              try {
-                final preliminaryRank = _multiMarketRanker.rank(
-                  selectedMatches: [
-                    SmartBetMultiMarketFixture(
-                      fixtureId: match.fixtureId,
-                      analysis: base,
-                    ),
-                  ],
-                  families: _multiMarketFamilies.toList(growable: false),
-                );
-                probability = preliminaryRank.single.selection?.probability;
-              } catch (error) {
-                debugPrint(
-                  'P21U ranking preliminare ${match.fixtureId}: $error',
-                );
+              if (estimate > 0 && estimate <= 100) {
+                probability = estimate / 100.0;
               }
+            } else {
+              final ranked = _multiMarketRanker.rank(
+                selectedMatches: [
+                  SmartBetMultiMarketFixture(
+                    fixtureId: match.fixtureId,
+                    analysis: base,
+                  ),
+                ],
+                families: _multiMarketFamilies.toList(growable: false),
+              );
+              probability = ranked.single.selection?.probability;
             }
+            if (probability == null || !probability.isFinite ||
+                probability <= 0 || probability > 1) {
+              return null;
+            }
+            return SmartBetAutomaticFixtureEstimate(
+              fixtureId: match.fixtureId,
+              probability: probability,
+              dataQuality: quality,
+            );
+          } catch (error) {
+            debugPrint('P21U preliminare ${match.fixtureId}: $error');
+            return null;
           }
-          return SmartBetAutomaticFixtureEstimate(
-            fixtureId: match.fixtureId,
-            probability: probability,
-            dataQuality: quality,
-          );
         }),
       );
-      preliminary.addAll(estimates);
-      _autoExaminedCount = preliminary.length;
+      for (var index = 0; index < batch.length; index++) {
+        final estimate = estimates[index];
+        if (estimate == null) continue;
+        preliminary.add(estimate);
+        byId[batch[index].fixtureId] = batch[index];
+      }
+      _autoExaminedCount = end;
+      _autoRejectedNoSimulation = end - preliminary.length;
       if (!mounted) return const <MatchModel>[];
       setState(() {
         _processed = _autoExaminedCount;
         _total = preliminaryFixtures.length;
       });
     }
-    for (final match in preliminaryFixtures) {
-      byId[match.fixtureId] = match;
+    if (preliminary.isEmpty) {
+      _autoDeepCount = 0;
+      return const <MatchModel>[];
     }
-    final shortlist = const SmartBetAutoFixtureSelectionService().shortlist(
+    final shortlist = selector.shortlist(
       candidates: preliminary,
       requestedCount: _topCount,
       maxDeepAnalyses: maxDeep,
@@ -1335,8 +1359,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       if (!mounted) return;
       if (matches.isEmpty) {
         setState(
-          () => _errorMessage =
-              'Nessuna partita futura disponibile nei filtri scelti.',
+          () => _errorMessage = _autoAvailableCount == 0
+              ? 'Nessuna partita futura disponibile nei filtri scelti.'
+              : 'Tra le $_autoExaminedCount partite esaminate, nessuna '
+                  'dispone dei dati necessari per una simulazione attendibile. '
+                  'Prova un periodo più ampio o altri campionati.',
         );
         return;
       }
@@ -1422,12 +1449,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final sorted = _xPremiumService.rank(
         resultByFixture.values.map((item) => item.assessment),
       );
+      final simulable = sorted.where((entry) =>
+          entry.hasSimulation).toList(growable: false);
       if (!mounted) return;
       setState(() {
         _xPremiumResults
           ..clear()
           ..addAll(
-            sorted
+            simulable
                 .take(_topCount)
                 .map((entry) => resultByFixture[entry.fixtureId]!),
           );
@@ -1720,8 +1749,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       if (!mounted) return;
       if (matches.isEmpty) {
         setState(
-          () => _errorMessage =
-              'Nessuna partita futura disponibile nei filtri scelti.',
+          () => _errorMessage = _autoAvailableCount == 0
+              ? 'Nessuna partita futura disponibile nei filtri scelti.'
+              : 'Tra le $_autoExaminedCount partite esaminate, nessuna '
+                  'dispone dei dati necessari per una simulazione attendibile. '
+                  'Prova un periodo più ampio o altri campionati.',
         );
         return;
       }
@@ -1826,12 +1858,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           debugPrint('P21K shadow registration ${match.fixtureId}: $error');
         }
       }
+      // Una partita senza xG non deve mai consumare uno dei posti richiesti.
+      // Le scartate restano nel conteggio diagnostico, non nella classifica.
+      final simulable = ranked.where((item) => item.selection != null)
+          .toList(growable: false);
+      _autoRejectedNoSimulation += ranked.length - simulable.length;
       if (!mounted) return;
       setState(() {
         _multiMarketResults
           ..clear()
           ..addAll(
-            ranked
+            simulable
                 .take(_topCount)
                 .map(
                   (item) => _MultiMarketDisplayItem(
