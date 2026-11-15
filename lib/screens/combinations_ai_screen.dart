@@ -1265,8 +1265,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             }
             // Entrambe le ricerche X Premium e Multimercato usano un
             // simulatore con xG: non selezionare fixture che ne sono prive.
-            if (base == null ||
-                !SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
+            if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
               return null;
             }
             final quality = base.dataConfidence > 0 &&
