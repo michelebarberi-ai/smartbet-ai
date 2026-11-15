@@ -82,13 +82,18 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
   const GoalVdLinePublicLearningCard({
     super.key,
     required this.records,
+    this.asOf,
   });
 
   final List<SmartBetAnalysisRecord> records;
+  /// Injectable cutoff for deterministic tests, defaults to current time.
+  final DateTime? asOf;
 
   @override
   Widget build(BuildContext context) {
-    final summary = GoalVdLinePublicLearningSummary.fromRecords(records);
+    final summary = GoalVdLinePublicLearningSummary.fromRecords(
+      records, asOf: asOf,
+    );
     final hasSample = summary.verifiedPredictions > 0;
     return Card(
       key: const Key('b57-public-learning-card'),
