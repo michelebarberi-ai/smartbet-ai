@@ -73,7 +73,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final DashboardStore _dashboard = DashboardStore.instance;
 
   final SmartBetAnalysisHistoryStore _analysisHistory =
@@ -98,7 +98,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     _dashboard.initialize();
+    WidgetsBinding.instance.addObserver(this);
     _refreshAnalysisHistory();
+  }
+
+  // B57: automatic foreground-only resolution. This does not schedule work
+  // on locked iOS devices, upload user data or activate a paid worker.
+  DateTime? _lastAutomaticResolve;
+  static const Duration _automaticResolveInterval = Duration(minutes: 30);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    _refreshAnalysisHistory();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<SmartBetAnalysisResultResolutionSummary>? _historyUpdate;
@@ -120,6 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshAnalysisHistory() async {
+    final now = DateTime.now();
+    if (_lastAutomaticResolve != null &&
+        now.difference(_lastAutomaticResolve!) < _automaticResolveInterval) {
+      return;
+    }
+    _lastAutomaticResolve = now;
     try {
       await _updateResults();
     } catch (error) {
