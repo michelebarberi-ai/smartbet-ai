@@ -10,6 +10,7 @@
 // are implemented. Feature flag is OFF by default.
 
 const crypto = require('node:crypto');
+const {createOwnerRecoverySender} = require('./owner_recovery_sender');
 
 const WINDOW_MS = 15 * 60 * 1000;
 const SESSION_MS = 15 * 60 * 1000;
@@ -242,8 +243,9 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
   };
 }
 
-function registerOwnerMfaStagingRoutes(app, {env = process.env, clock} = {}) {
-  const auth = createOwnerMfa({env, clock});
+function registerOwnerMfaStagingRoutes(app, {env = process.env, clock, emailSender} = {}) {
+  const recoverySender = emailSender || createOwnerRecoverySender({env});
+  const auth = createOwnerMfa({env, clock, emailSender:recoverySender});
   const readBearer = req => {
     const header = typeof req.get === 'function' ? req.get('authorization') : null;
     const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(header || '');
@@ -266,6 +268,55 @@ function registerOwnerMfaStagingRoutes(app, {env = process.env, clock} = {}) {
     return res.status(200).json({
       success:true, token:outcome.token, expiresInSeconds:outcome.expiresInSeconds,
       // Not a server-side admin role grant.
+      scope:'owner-staging-login-only',
+    });
+  });
+
+  // B59: Password plus an email code is a FALLBACK only. Email address is
+  // fixed and verified out-of-band on server; never supplied by the client.
+  // Disabled unless all provider secrets and flags are configured.
+  app.post('/owner/v1/recovery/request', async (req, res) => {
+    if (!auth.recoveryEnabled) {
+      return res.status(503).json({
+        success:false, error:'Recupero email non configurato.',
+      });
+    }
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).join(',') !== 'password' ||
+        typeof body.password !== 'string' || body.password.length > 256) {
+      return res.status(400).json({success:false,error:'Richiesta non valida.'});
+    }
+    const result = await auth.requestEmailRecovery(body.password);
+    // Never reveal whether password matched or email was delivered.
+    return res.status(result.status).json({
+      success:result.status===202,
+      message:result.status===202
+        ? 'Se le credenziali sono corrette, il codice è stato richiesto.'
+        : 'Recupero momentaneamente non disponibile.',
+    });
+  });
+
+  app.post('/owner/v1/recovery/verify', (req, res) => {
+    if (!auth.recoveryEnabled) {
+      return res.status(503).json({
+        success:false, error:'Recupero email non configurato.',
+      });
+    }
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).sort().join(',') !== 'code,password') {
+      return res.status(400).json({success:false,error:'Richiesta non valida.'});
+    }
+    const outcome = auth.authenticateEmailRecovery(body.password, body.code);
+    if (outcome.status!==200) {
+      return res.status(outcome.status).json({
+        success:false, error:'Credenziali di recupero non valide.',
+      });
+    }
+    return res.status(200).json({
+      success:true, token:outcome.token,
+      expiresInSeconds:outcome.expiresInSeconds,
       scope:'owner-staging-login-only',
     });
   });
