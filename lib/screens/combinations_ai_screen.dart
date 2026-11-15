@@ -1451,8 +1451,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       );
       final simulable = sorted.where((entry) =>
           entry.hasSimulation).toList(growable: false);
+      _autoRejectedNoSimulation += sorted.length - simulable.length;
       if (!mounted) return;
       setState(() {
+        if (simulable.isEmpty) {
+          _errorMessage =
+              'Non sono disponibili simulazioni X valide nelle partite '
+              'analizzate: mancano dati necessari, non verranno create '
+              'probabilità artificiali.';
+        }
         _xPremiumResults
           ..clear()
           ..addAll(
@@ -1659,7 +1666,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       children: [
         const SizedBox(height: 23),
         Text(
-          'X PREMIUM: ${_xPremiumResults.length} partite richieste',
+          'X PREMIUM: ${_xPremiumResults.length} simulate su $_topCount richieste',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 19,
@@ -1669,7 +1676,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         const SizedBox(height: 6),
         Text(
           'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
-          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount '
+          '• non simulabili: $_autoRejectedNoSimulation',
           style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const SizedBox(height: 6),
@@ -1865,6 +1873,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _autoRejectedNoSimulation += ranked.length - simulable.length;
       if (!mounted) return;
       setState(() {
+        if (simulable.isEmpty) {
+          _errorMessage =
+              'Nessuna simulazione multimercato valida tra le partite '
+              'approfondite. Le fixture senza xG sono escluse, '
+              'non conteggiate come pronostici.';
+        }
         _multiMarketResults
           ..clear()
           ..addAll(
@@ -2067,7 +2081,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       children: [
         const SizedBox(height: 20),
         Text(
-          'MULTIMERCATO: ${_multiMarketResults.length} partite richieste',
+          'MULTIMERCATO: ${_multiMarketResults.length} simulate su $_topCount richieste',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -2076,7 +2090,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         ),
         Text(
           'Candidate disponibili: $_autoAvailableCount • preliminari esaminate: '
-          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount',
+          '$_autoExaminedCount • analisi approfondite: $_autoDeepCount '
+          '• non simulabili: $_autoRejectedNoSimulation',
           style: const TextStyle(color: Colors.white54, fontSize: 10),
         ),
         const Text(
