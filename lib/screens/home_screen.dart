@@ -6,6 +6,8 @@ import '../services/smartbet_analysis_comparison_store.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
 import '../services/smartbet_learning_coordinator.dart';
+import '../services/goalvdline_ui_edition.dart';
+import '../widgets/goalvdline_public_learning_card.dart';
 import '../widgets/ai_card.dart';
 import '../widgets/goalvdline_daily_matches_card.dart';
 import 'create_ai_coupon_screen.dart';
@@ -526,6 +528,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
 
+                  if (!GoalVdLineUiEdition.internalDiagnostics)
+                    GoalVdLinePublicLearningCard(
+                      records: analysisHistory.records,
+                    ),
+                  if (GoalVdLineUiEdition.internalDiagnostics)
                   ExpansionTile(
                     initiallyExpanded: false,
                     backgroundColor: const Color(0xFF1F2937),
