@@ -52,6 +52,9 @@ class ItalyScheduleFilter {
         'serie a',
         'serie b',
         'serie c',
+        // La Serie D e' una competizione senior e non va scartata
+        // quando il provider include i suoi gironi nel calendario.
+        'serie d',
         'coppa italia',
         'supercoppa',
       ]);
