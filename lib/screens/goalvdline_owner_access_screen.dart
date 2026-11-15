@@ -29,6 +29,7 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
   bool _working = false;
   bool _loggedIn = false;
   bool _showPassword = false;
+  bool _emailRecovery = false;
   String? _message;
 
   @override
@@ -69,10 +70,13 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
   Future<void> _login() async {
     if (_working || _checking) return;
     setState(() { _working = true; _message = null; });
-    final outcome = await _client.login(
-      password: _password.text,
-      code: _totp.text.trim(),
-    );
+    final outcome = _emailRecovery
+        ? await _client.loginByEmailRecovery(
+            password: _password.text, code: _totp.text.trim(),
+          )
+        : await _client.login(
+            password: _password.text, code: _totp.text.trim(),
+          );
     _password.clear();
     _totp.clear();
     if (!mounted) return;
@@ -80,6 +84,19 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
       _working = false;
       _loggedIn = outcome.success;
       _message = outcome.success ? null : outcome.message;
+    });
+  }
+
+  Future<void> _requestRecovery() async {
+    if (_working || _checking) return;
+    setState(() { _working = true; _message = null; });
+    final outcome = await _client.requestEmailRecovery(
+      password: _password.text,
+    );
+    if (!mounted) return;
+    setState(() {
+      _working = false;
+      _message = outcome.message;
     });
   }
 
@@ -147,10 +164,13 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
             color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 8),
-      const Text(
-        'La password resta personale. Inserisci il codice di 6 cifre '
-        'generato dal tuo Authenticator: cambia ogni 30 secondi.',
-        style: TextStyle(color: Colors.white70, height: 1.5),
+      Text(
+        _emailRecovery
+          ? 'Recupero: inserisci password e codice di 8 cifre '
+            'ricevuto sulla casella email verificata del proprietario.'
+          : 'La password resta personale. Inserisci il codice di 6 cifre '
+            'generato dal tuo Authenticator: cambia ogni 30 secondi.',
+        style: const TextStyle(color: Colors.white70, height: 1.5),
       ),
       const SizedBox(height: 22),
       TextField(
@@ -177,10 +197,12 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
         key: const Key('b59-owner-totp'),
         enabled: !_working,
         keyboardType: TextInputType.number,
-        maxLength: 6,
+        maxLength: _emailRecovery ? 8 : 6,
         autofillHints: const [AutofillHints.oneTimeCode],
         decoration: const InputDecoration(
-          labelText: 'Codice Authenticator',
+          labelText: _emailRecovery
+              ? 'Codice ricevuto via email'
+              : 'Codice Authenticator',
           prefixIcon: Icon(Icons.pin_outlined),
           counterText: '',
         ),
@@ -191,8 +213,31 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
         key: const Key('b59-owner-submit'),
         onPressed: _working ? null : _login,
         icon: const Icon(Icons.verified_user_outlined),
-        label: const Text('Verifica accesso'),
+        label: Text(_emailRecovery
+          ? 'Verifica codice email'
+          : 'Verifica accesso'),
       ),
+      const SizedBox(height: 9),
+      TextButton.icon(
+        key: const Key('b59-owner-recovery-toggle'),
+        onPressed: _working ? null : () => setState(() {
+          _emailRecovery = !_emailRecovery;
+          _totp.clear();
+          _message = null;
+        }),
+        icon: Icon(_emailRecovery
+            ? Icons.app_shortcut : Icons.mark_email_read_outlined),
+        label: Text(_emailRecovery
+          ? 'Usa invece Authenticator'
+          : 'Non ho Authenticator: recupero via email'),
+      ),
+      if (_emailRecovery)
+        OutlinedButton.icon(
+          key: const Key('b59-owner-recovery-request'),
+          onPressed: _working ? null : _requestRecovery,
+          icon: const Icon(Icons.mail_outline),
+          label: const Text('Richiedi codice via email'),
+        ),
       if (_working) const LinearProgressIndicator(),
       if (_message != null)
         Padding(
@@ -205,9 +250,10 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
         ),
       const SizedBox(height: 20),
       const Text(
-        'Il recupero tramite email sarà disponibile soltanto dopo '
-        'la configurazione e verifica della tua casella sul server. '
-        'Nessuna password o codice viene inserito nel codice dell’app.',
+        'La casella proprietario e l’invio email devono essere '
+        'configurati e verificati sul server. Il recupero resta '
+        'disabilitato finché non lo saranno. '
+        'Nessun codice o password è preimpostato nell’app.',
         style: TextStyle(color: Colors.white54, fontSize: 12),
       ),
     ],
