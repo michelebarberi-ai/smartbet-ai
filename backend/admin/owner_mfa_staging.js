@@ -54,7 +54,8 @@ function totpForStep(secret, step) {
 }
 
 function findTotpStep(secret, code, millis, lastUsedStep = -1) {
-  if (!/^\d{6}$/.test(code) || !Number.isFinite(millis)) return null;
+  if (typeof code !== 'string' || !/^\d{6}$/.test(code) ||
+      !Number.isFinite(millis) || millis < 0) return null;
   const current = Math.floor(millis / 30000);
   // One step of skew, but each time step may be used only ONCE.
   for (let d = -1; d <= 1; d++) {
