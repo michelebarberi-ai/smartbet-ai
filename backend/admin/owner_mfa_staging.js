@@ -115,7 +115,7 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
   const recoveryEnabled = enabled &&
     env.GOALVDLINE_OWNER_RECOVERY_ENABLED === 'true' &&
     typeof env.GOALVDLINE_OWNER_RECOVERY_EMAIL === 'string' &&
-    /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(env.GOALVDLINE_OWNER_RECOVERY_EMAIL) &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.GOALVDLINE_OWNER_RECOVERY_EMAIL) &&
     typeof env.GOALVDLINE_OWNER_RECOVERY_HMAC_KEY === 'string' &&
     env.GOALVDLINE_OWNER_RECOVERY_HMAC_KEY.length >= 32 &&
     typeof emailSender === 'function';
@@ -170,7 +170,7 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
     const now = clock();
     if (now < lockUntil) return {status:429};
     const request = recovery;
-    const isCode = typeof code === 'string' && /^\\d{8}$/.test(code);
+    const isCode = typeof code === 'string' && /^\d{8}$/.test(code);
     const goodCode = request !== null && now < request.expiry &&
       request.attempts < 5 && isCode &&
       crypto.timingSafeEqual(request.digest, recoveryDigest(code));
