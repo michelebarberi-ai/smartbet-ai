@@ -12,6 +12,7 @@ on:
       - release/b47-testflight
       - release/b48-testflight
       - release/b49-testflight
+      - release/b59-testflight
 
 jobs:
   build-ios:
@@ -22,11 +23,13 @@ jobs:
       (github.ref != 'refs/heads/release/b45-testflight' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
-       github.ref != 'refs/heads/release/b49-testflight') ||
+       github.ref != 'refs/heads/release/b49-testflight' &&
+       github.ref != 'refs/heads/release/b59-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
-       github.ref != 'refs/heads/release/b49-testflight') ||
+       github.ref != 'refs/heads/release/b49-testflight' &&
+       github.ref != 'refs/heads/release/b59-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -35,7 +38,9 @@ jobs:
         (github.ref == 'refs/heads/release/b48-testflight' &&
          github.event.head_commit.message == 'release(build48): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b49-testflight' &&
-         github.event.head_commit.message == 'release(build49): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build49): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b59-testflight' &&
+         github.event.head_commit.message == 'release(build59): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -106,6 +111,16 @@ jobs:
             test/services/goalvdline_three_coupon_system_test.dart \
             test/services/goalvdline_official_coupon_contract_test.dart \
             test/widgets/goalvdline_requested_coupon_ready_screen_test.dart
+
+      - name: B59 owner login, QuoteLab, public UI and simulation regression
+        if: github.ref == 'refs/heads/release/b59-testflight'
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_owner_session_client_test.dart \
+            test/services/goalvdline_b57_public_private_consensus_test.dart \
+            test/services/quotelab_historical_service_test.dart \
+            test/services/goalvdline_minute_replay_service_test.dart
 
       - name: Prepare App Store Connect API key
         env:
@@ -265,6 +280,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="49"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b59-testflight" ]]; then
+            grep -qx 'version: 1.2.5+59' pubspec.yaml || {
+              echo "ERROR: Build 59 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="59"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
