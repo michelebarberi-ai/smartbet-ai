@@ -5,6 +5,7 @@
 require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
+const {registerOwnerMfaStagingRoutes} = require('./admin/owner_mfa_staging');
 const {Pool} = require('pg');
 const {createOfficialEngineAdapter,officialEngineConfiguration,PROTOCOL} = require('./auto_coupon/official_engine_client');
 const {LearningRepository} = require('./learning/learning_repository');
@@ -184,6 +185,8 @@ app.get('/health/database', async (_req, res) => {
 
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
+  // Owner MFA stage is independent of old admin header. It grants no data access.
+  registerOwnerMfaStagingRoutes(app, {env});
   registerLearningRoutes(app, {
     env, generateOfficialCoupon: officialEngine, onDemandWorkerRunning,
     verifyExternalWorker,wakeExternalWorker,
