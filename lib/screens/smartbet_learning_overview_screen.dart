@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
+import '../services/quotelab_historical_service.dart';
+import '../widgets/quotelab_historical_panel.dart';
 import '../services/smartbet_device_learning_preferences.dart';
 import '../services/smartbet_learning_overview_service.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
@@ -25,6 +27,7 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLearningOverview? _summary;
   SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
+  QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
   String? _error;
@@ -57,9 +60,15 @@ class _SmartBetLearningOverviewScreenState
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       final shadowReport = const SmartBetLeagueMarketShadowService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
+      // B56: purely read-only historical quoted-pick audit.
+      final quoteLabReport = const QuoteLabHistoricalService().evaluate(
+        history: markets.records,
+        asOf: DateTime.now().toUtc(),
+      );
       if (!mounted) return;
       setState(() {
         _shadowMarketReport = shadowReport;
+        _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
         _leagueMarketReport = leagueReport;
@@ -194,6 +203,8 @@ class _SmartBetLearningOverviewScreenState
                     report: _leagueMarketReport!,
                     shadowReport: _shadowMarketReport,
                   ),
+                if (_quoteLabReport != null)
+                  QuoteLabHistoricalPanel(report: _quoteLabReport!),
                 _panel('Esportazione diagnostica', [
                   const SmartBetDiagnosticExportButton(),
                 ]),
