@@ -14,6 +14,37 @@ class SmartBetAutomaticFixtureEstimate {
 class SmartBetAutoFixtureSelectionService {
   const SmartBetAutoFixtureSelectionService();
 
+  /// Distribuisce il budget preliminare tra competizioni distinte, mantenendo
+  /// l'ordine originale (normalmente cronologico) entro ogni competizione.
+  /// Impedisce che decine di incontri di una stessa serie occupino tutti
+  /// i posti prima di campionati che giocano più tardi.
+  List<T> diversifiedPreliminary<T>({
+    required List<T> candidates,
+    required String Function(T) competitionKeyOf,
+    required int limit,
+  }) {
+    if (limit < 0) throw ArgumentError.value(limit, 'limit');
+    final groups = <String, List<T>>{};
+    for (final candidate in candidates) {
+      final key = competitionKeyOf(candidate).trim().toLowerCase();
+      groups.putIfAbsent(key, () => <T>[]).add(candidate);
+    }
+    final selection = <T>[];
+    var round = 0;
+    while (selection.length < limit) {
+      var added = false;
+      for (final group in groups.values) {
+        if (round >= group.length) continue;
+        selection.add(group[round]);
+        added = true;
+        if (selection.length >= limit) break;
+      }
+      if (!added) break;
+      round++;
+    }
+    return List<T>.unmodifiable(selection);
+  }
+
   /// Ritorna un massimo di 30 fixture per l'analisi avanzata,
   /// ma non meno del numero richiesto se disponibili. Non elimina
   /// fixture per un'affidabilita' insufficiente: le mette in fondo.
