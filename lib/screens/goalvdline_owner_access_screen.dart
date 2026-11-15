@@ -199,11 +199,11 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
         keyboardType: TextInputType.number,
         maxLength: _emailRecovery ? 8 : 6,
         autofillHints: const [AutofillHints.oneTimeCode],
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: _emailRecovery
               ? 'Codice ricevuto via email'
               : 'Codice Authenticator',
-          prefixIcon: Icon(Icons.pin_outlined),
+          prefixIcon: const Icon(Icons.pin_outlined),
           counterText: '',
         ),
         onSubmitted: (_) => _login(),
