@@ -76,15 +76,70 @@ class GoalVdLineOwnerSessionClient {
   Future<GoalVdLineOwnerLoginOutcome> login({
     required String password,
     required String code,
+  }) => _submitVerifiedLogin(
+    path: '/owner/v1/login', password: password, code: code,
+    codeDigits: 6,
+  );
+
+  /// A password is still required. Mail is a secondary factor only when
+  /// the owner's verified mailbox and sender are enabled on the backend.
+  Future<GoalVdLineOwnerLoginOutcome> requestEmailRecovery({
+    required String password,
   }) async {
-    if (password.length < 16 || password.length > 256 ||
-        !RegExp(r'^\d{6}$').hasMatch(code)) {
+    if (password.length < 16 || password.length > 256) {
       return const GoalVdLineOwnerLoginOutcome(
-        false, 'Inserisci password e codice Authenticator valido di 6 cifre.',
+        false, 'Inserisci la tua password prima di richiedere il codice.',
       );
     }
     try {
-      final request = http.Request('POST', _endpoint('/owner/v1/login'))
+      final request = http.Request('POST', _endpoint('/owner/v1/recovery/request'))
+        ..followRedirects = false;
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      });
+      request.body = jsonEncode({'password':password});
+      final stream = await _client.send(request).timeout(_timeout);
+      final response = await http.Response.fromStream(stream).timeout(_timeout);
+      if (response.statusCode == 202) {
+        return const GoalVdLineOwnerLoginOutcome(true,
+          'Se la password è corretta, riceverai un codice via email. '
+          'Controlla anche lo spam; scade dopo 10 minuti.');
+      }
+      return GoalVdLineOwnerLoginOutcome(false,
+        response.statusCode == 503
+          ? 'Recupero via email non ancora configurato sul server.'
+          : response.statusCode == 429
+            ? 'Limite richieste raggiunto. Riprova più tardi.'
+            : 'Impossibile richiedere il codice di recupero.');
+    } catch (_) {
+      return const GoalVdLineOwnerLoginOutcome(false,
+        'Server non raggiungibile per il recupero via email.');
+    }
+  }
+
+  Future<GoalVdLineOwnerLoginOutcome> loginByEmailRecovery({
+    required String password,
+    required String code,
+  }) => _submitVerifiedLogin(
+    path: '/owner/v1/recovery/verify', password: password, code: code,
+    codeDigits: 8,
+  );
+
+  Future<GoalVdLineOwnerLoginOutcome> _submitVerifiedLogin({
+    required String path,
+    required String password,
+    required String code,
+    required int codeDigits,
+  }) async {
+    if (password.length < 16 || password.length > 256 ||
+        !RegExp('^\\d{$codeDigits}\\$').hasMatch(code)) {
+      return GoalVdLineOwnerLoginOutcome(
+        false, 'Inserisci password e codice valido di $codeDigits cifre.',
+      );
+    }
+    try {
+      final request = http.Request('POST', _endpoint(path))
         ..followRedirects = false;
       request.headers.addAll({
         'Content-Type': 'application/json',
@@ -96,7 +151,7 @@ class GoalVdLineOwnerSessionClient {
       if (response.statusCode != 200) {
         return GoalVdLineOwnerLoginOutcome(false,
           response.statusCode == 503
-            ? 'Account proprietario non ancora configurato sul server.'
+            ? 'Account proprietario o recupero non ancora configurato sul server.'
             : response.statusCode == 429
               ? 'Troppi tentativi: riprova dopo il blocco di sicurezza.'
               : 'Accesso non autorizzato.');
