@@ -223,6 +223,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _errors = 0;
   int _oddsProcessed = 0;
   int _oddsTotal = 0;
+  // Diagnostica read-only dei filtri della generazione automatica.
+  int _couponFixtureCount = 0;
+  int _couponPreliminaryCount = 0;
+  int _couponDeepCount = 0;
+  int _couponQuotedCount = 0;
+  int _couponAuditRejected = 0;
 
   String? _error;
   String? _notice;
@@ -1172,6 +1178,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _results.clear();
       _portfolioResults.clear();
       _selectedPortfolioIndex = 0;
+      _couponFixtureCount = 0;
+      _couponPreliminaryCount = 0;
+      _couponDeepCount = 0;
+      _couponQuotedCount = 0;
+      _couponAuditRejected = 0;
     });
 
     try {
@@ -1190,6 +1201,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           )
           .toList();
 
+      _couponFixtureCount = matches.length;
       if (!mounted) return;
 
       if (matches.isEmpty) {
@@ -1249,6 +1261,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         });
       }
 
+      _couponPreliminaryCount = preliminary.length;
       preliminary.sort((a, b) {
         final rank = _preliminaryRankScore(
           b,
@@ -1405,6 +1418,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         });
       }
 
+      _couponDeepCount = audited.length;
       audited.sort((a, b) {
         final probability = b.bestProbability.compareTo(a.bestProbability);
         if (probability != 0) return probability;
@@ -1631,6 +1645,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
       }
 
+      _couponQuotedCount = qualified.length;
       // v1.2.1 — Ranking sportivo Reliability-first.
       //
       // Nessuna quota, edge o EV entra in questo ordinamento.
@@ -2080,6 +2095,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         _loading = false;
         _phase = '';
+        _couponAuditRejected = auditRejected;
 
         if (_results.isEmpty) {
           _error = _aiService.aiServiceUnavailable
@@ -4504,6 +4520,25 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
               ),
             ],
+          ],
+          if (_mode == _CouponMode.automatic &&
+              !_loading &&
+              _couponFixtureCount > 0 &&
+              _results.length < _count) ...[
+            const SizedBox(height: 12),
+            Text(
+              'DIAGNOSTICA RICERCA • '
+              'Partite: $_couponFixtureCount • '
+              'Pre-analisi valide: $_couponPreliminaryCount • '
+              'Analisi avanzate: $_couponDeepCount • '
+              'Selezioni con quota idonea prima dei recuperi: '
+              '$_couponQuotedCount • '
+              'Blocchi Auditor: $_couponAuditRejected',
+              key: const Key('b52-coupon-search-diagnostics'),
+              style: const TextStyle(
+                color: Colors.white54, fontSize: 11, height: 1.4,
+              ),
+            ),
           ],
           if (_mode == _CouponMode.automatic &&
               !_loading &&
