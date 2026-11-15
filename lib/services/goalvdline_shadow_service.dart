@@ -6,6 +6,7 @@ import '../models/match_dossier.dart';
 import '../models/match_model.dart';
 
 import 'goalvdline_comparison_store.dart';
+import 'goalvdline_minute_replay_service.dart';
 
 class GoalVdLineShadowSnapshot {
   final int fixtureId;
@@ -32,6 +33,8 @@ class GoalVdLineShadowSnapshot {
   final int predictionConfidence;
 
   final int simulations;
+  /// Replay sperimentale read-only: mai usato per le scelte di schedina.
+  final GoalVdLineMinuteReplayReport? minuteReplay;
 
   final DateTime capturedAt;
 
@@ -52,6 +55,7 @@ class GoalVdLineShadowSnapshot {
     required this.dataConfidence,
     required this.predictionConfidence,
     required this.simulations,
+    this.minuteReplay,
     required this.capturedAt,
   });
 
@@ -78,6 +82,7 @@ class GoalVdLineShadowSnapshot {
       'dataConfidence': dataConfidence,
       'predictionConfidence': predictionConfidence,
       'simulations': simulations,
+      if (minuteReplay != null) 'minuteReplay': minuteReplay!.toJson(),
       'capturedAt': capturedAt.toIso8601String(),
     };
   }
@@ -143,6 +148,20 @@ class GoalVdLineShadowService {
 
         final engine = GoalVdLineMatchEngine.simulate(input);
 
+        // B53: cronologia dei gol campionata sui 90 minuti con gli stessi
+        // xG dell'engine ufficialmente osservato in SHADOW.
+        // Best-effort: se fallisce, il vecchio snapshot rimane disponibile.
+        GoalVdLineMinuteReplayReport? minuteReplay;
+        try {
+          minuteReplay = const GoalVdLineMinuteReplayService().simulate(
+            fixtureId: match.fixtureId,
+            expectedHomeGoals: engine.expectedHomeGoals,
+            expectedAwayGoals: engine.expectedAwayGoals,
+          );
+        } catch (error) {
+          print('GOALVDLINE B53 MINUTE REPLAY NON DISPONIBILE: $error');
+        }
+
         final prediction = _prediction(
           home: engine.homeWinPercent,
           draw: engine.drawPercent,
@@ -166,6 +185,7 @@ class GoalVdLineShadowService {
           dataConfidence: engine.dataConfidence,
           predictionConfidence: engine.predictionConfidence,
           simulations: engine.simulations,
+          minuteReplay: minuteReplay,
           capturedAt: DateTime.now(),
         );
 
