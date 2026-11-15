@@ -31,5 +31,7 @@ jobs:
             test/services/goalvdline_minute_replay_service_test.dart \
             test/services/goalvdline_replay_validation_service_test.dart \
             test/widgets/smartbet_simulation_learning_panel_test.dart
+      - name: Historic archive exploratory audit (not prospective evidence)
+        run: dart run tool/goalvdline_replay_retrospective_audit.dart
       - name: All Flutter regression tests
         run: flutter test --no-pub --reporter compact
