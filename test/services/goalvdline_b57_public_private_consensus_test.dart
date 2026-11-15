@@ -70,6 +70,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: GoalVdLinePublicLearningCard(
         records: [record()],
+        asOf: cutoff,
       )),
     ));
     expect(find.textContaining('1 partite concluse'), findsOneWidget);
