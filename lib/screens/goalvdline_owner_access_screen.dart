@@ -9,7 +9,11 @@ import 'smartbet_learning_overview_screen.dart';
 /// not trust a compile-time flag or a saved client token. The server must
 /// validate the owner's password + 30-second Authenticator code.
 class GoalVdLineOwnerAccessScreen extends StatefulWidget {
-  const GoalVdLineOwnerAccessScreen({super.key});
+  const GoalVdLineOwnerAccessScreen({super.key, this.client});
+
+  /// Test-only or higher-level dependency injection.
+  /// Production always creates a network client that verifies server sessions.
+  final GoalVdLineOwnerSessionClient? client;
 
   @override
   State<GoalVdLineOwnerAccessScreen> createState() =>
@@ -20,7 +24,7 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
     with WidgetsBindingObserver {
   final _password = TextEditingController();
   final _totp = TextEditingController();
-  final _client = GoalVdLineOwnerSessionClient();
+  late final GoalVdLineOwnerSessionClient _client;
   bool _checking = true;
   bool _working = false;
   bool _loggedIn = false;
@@ -30,6 +34,7 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
   @override
   void initState() {
     super.initState();
+    _client = widget.client ?? GoalVdLineOwnerSessionClient();
     WidgetsBinding.instance.addObserver(this);
     _checkSession();
   }
