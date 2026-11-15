@@ -1,0 +1,31 @@
+name: GoalVdLine B53 90-minute replay shadow QA
+
+# Isolated read-only CI: no signing, deployment, TestFlight or paid services.
+on:
+  push:
+    branches:
+      - feature/b53-minute-replay-shadow
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-b53-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Flutter
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Static analyzer
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: B53 minute replay tests
+        run: flutter test --no-pub --reporter compact test/services/goalvdline_minute_replay_service_test.dart
+      - name: Complete Flutter regression
+        run: flutter test --no-pub --reporter compact
