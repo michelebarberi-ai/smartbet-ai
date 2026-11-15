@@ -38,6 +38,7 @@ jobs:
             test/services/smartbet_local_auditor_threshold_test.dart \
             test/services/smartbet_league_market_reliability_service_test.dart \
             test/services/goalvdline_competition_order_test.dart \
+            test/services/italy_schedule_filter_test.dart \
             test/services/goalvdline_coupon_ready_notifier_test.dart \
             test/widgets/goalvdline_three_coupon_viewer_test.dart
 
