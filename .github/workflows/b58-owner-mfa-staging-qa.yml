@@ -1,0 +1,36 @@
+name: GoalVdLine B58 owner MFA staging QA
+
+# Isolated backend-only verification. No deployment, credentials, mail, SMS,
+# database migrations, secrets provisioning or TestFlight release.
+on:
+  push:
+    branches:
+      - feature/b58-owner-mfa-staging
+
+permissions:
+  contents: read
+
+jobs:
+  owner-mfa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+      - name: Check syntax
+        run: |
+          node --check backend/admin/owner_mfa_staging.js
+          node --check backend/learning_only_server.js
+          node --check backend/test/owner_mfa_staging.test.js
+      - name: Dedicated owner MFA tests
+        run: node --test backend/test/owner_mfa_staging.test.js
+      - name: Complete backend regression
+        working-directory: backend
+        run: npm test
