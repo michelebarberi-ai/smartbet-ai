@@ -6,6 +6,7 @@ import '../services/settings_store.dart';
 import '../services/smartbet_ai_service.dart';
 import '../widgets/smartbet_learning_settings_card.dart';
 import '../services/goalvdline_ui_edition.dart';
+import 'goalvdline_owner_access_screen.dart';
 import '../widgets/goalvdline_public_participation_card.dart';
 import '../widgets/goalvdline_auto_coupon_settings_card.dart';
 import '../widgets/goalvdline_coupon_ready_notification_card.dart';
@@ -256,6 +257,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _sectionTitle('Privacy e apprendimento'),
                 const GoalVdLinePublicParticipationCard(),
               ],
+
+              const SizedBox(height: 20),
+              _settingsCard(children: [
+                ListTile(
+                  key: const Key('b59-owner-entry'),
+                  leading: const Icon(Icons.admin_panel_settings_outlined,
+                    color: Colors.lightGreenAccent),
+                  title: const Text('Area proprietario'),
+                  subtitle: const Text(
+                    'Accesso riservato con password e Authenticator'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const GoalVdLineOwnerAccessScreen(),
+                    ),
+                  ),
+                ),
+              ]),
 
               const SizedBox(height: 24),
 
