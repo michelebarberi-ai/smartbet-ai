@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
+import '../services/goalvdline_replay_validation_service.dart';
 import '../services/smartbet_simulation_learning_validation_service.dart';
 import '../services/smartbet_simulation_shadow_store.dart';
 import '../services/smartbet_simulation_shadow_policy_service.dart';
@@ -20,6 +21,9 @@ class SmartBetSimulationLearningPanel extends StatefulWidget {
 class _SmartBetSimulationLearningPanelState
     extends State<SmartBetSimulationLearningPanel> {
   bool _running = false;
+  bool _replayRunning = false;
+  GoalVdLineReplayValidationReport? _replayReport;
+  String? _replayError;
   String? _error;
   SmartBetSimulationLearningReport? _report;
   bool _policyBusy = false;
@@ -170,6 +174,24 @@ class _SmartBetSimulationLearningPanelState
     }
   }
 
+  Future<void> _runReplayValidation() async {
+    if (_replayRunning || _running) return;
+    setState(() {
+      _replayRunning = true;
+      _replayError = null;
+    });
+    try {
+      final report = await const GoalVdLineReplayValidationService()
+          .evaluateStored();
+      if (!mounted) return;
+      setState(() => _replayReport = report);
+    } catch (error) {
+      if (mounted) setState(() => _replayError = error.toString());
+    } finally {
+      if (mounted) setState(() => _replayRunning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -204,6 +226,73 @@ class _SmartBetSimulationLearningPanelState
                   : 'Aggiorna validazione locale',
             ),
           ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const Text(
+            'B54 • Verifica replay dei 90 minuti',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Confronto sulle stesse partite tra modello originale, '
+            'simulatore Poisson esistente e replay dei gol minuto per minuto. '
+            'Solo snapshot salvati prima del calcio d’inizio e risultati '
+            'realmente risolti. Non modifica pronostici o schedine.',
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('b54_replay_validation'),
+            onPressed: (_replayRunning || _running)
+                ? null : _runReplayValidation,
+            icon: const Icon(Icons.stacked_line_chart_outlined),
+            label: Text(_replayRunning
+                ? 'Verifica replay in corso...'
+                : 'Confronta replay con risultati reali'),
+          ),
+          if (_replayRunning) const LinearProgressIndicator(),
+          if (_replayError != null)
+            Text(
+              'Verifica replay non disponibile: $_replayError',
+              key: const ValueKey('b54_replay_error'),
+            ),
+          if (_replayReport != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Snapshot: ${_replayReport!.sourceSnapshots} • '
+              'validi: ${_replayReport!.eligibleSnapshots} • '
+              'risultati mancanti: ${_replayReport!.pendingResults} • '
+              'qualità insufficiente: ${_replayReport!.insufficientQuality} • '
+              'conflitti: ${_replayReport!.contradictoryResults}',
+              key: const ValueKey('b54_replay_counts'),
+            ),
+            if (_replayReport!.metrics.isEmpty)
+              const Text(
+                'Ancora nessun confronto attendibile: servono snapshot '
+                'prepartita con xG, esiti conclusi e dati sufficienti.',
+              )
+            else ...[
+              for (final metric in _replayReport!.metrics.take(6))
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '${metric.engine} ${metric.market} • '
+                    '${metric.fixtures} partite / ${metric.matchDays} giorni • '
+                    'Brier originale ${metric.originalBrier.toStringAsFixed(4)}; '
+                    'Poisson ${metric.priorSimulatorBrier.toStringAsFixed(4)}; '
+                    'replay ${metric.minuteReplayBrier.toStringAsFixed(4)} '
+                    '${metric.enoughObservations ? "(campione minimo raggiunto)" : "(campione insufficiente)"}',
+                  ),
+                ),
+            ],
+            const SizedBox(height: 6),
+            const Text(
+              'Brier più basso = errore minore. I risultati sono '
+              'esplorativi: la simulazione B54 NON viene applicata '
+              'alle schedine, anche se mostra un miglioramento.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 10),
           if (_running) const LinearProgressIndicator(),
           if (_error != null)
             Padding(

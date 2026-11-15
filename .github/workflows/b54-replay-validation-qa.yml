@@ -1,0 +1,37 @@
+name: GoalVdLine B54 retrospective paired replay validation QA
+
+# Read-only CI. No deployment, App Store upload, new server, or paid APIs.
+on:
+  push:
+    branches:
+      - feature/b54-replay-prospective-validation
+
+permissions:
+  contents: read
+
+jobs:
+  b54-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Flutter
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Replay validation tests
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_minute_replay_service_test.dart \
+            test/services/goalvdline_replay_validation_service_test.dart \
+            test/widgets/smartbet_simulation_learning_panel_test.dart
+      - name: Historic archive exploratory audit (not prospective evidence)
+        run: dart run tool/goalvdline_replay_retrospective_audit.dart
+      - name: All Flutter regression tests
+        run: flutter test --no-pub --reporter compact
