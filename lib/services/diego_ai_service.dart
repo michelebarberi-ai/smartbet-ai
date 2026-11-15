@@ -305,10 +305,23 @@ class DiegoAiService {
     // Le quote arrivano DOPO la simulazione.
     // ==========================================================
 
-    final fixtureOdds = await _oddsService.getFixtureMarketOdds(
-      fixtureId: match.fixtureId,
-      bookmakerName: 'Sisal',
-    );
+    // B55: nessun vincolo a un bookmaker. Le quote restano un dato
+    // accessorio, ottenuto *dopo* che il Match Engine ha deciso tutte
+    // le probabilita sportive.
+    //
+    // Un errore del feed quote non deve far sparire l'analisi Diego:
+    // in quel caso mostriamo il forecast, senza prezzi inventati.
+    FixtureMarketOdds? fixtureOdds;
+    try {
+      fixtureOdds = await _oddsService.getFixtureMarketOdds(
+        fixtureId: match.fixtureId,
+      );
+    } catch (error) {
+      debugPrint(
+        'DIEGOAI: quote non disponibili per ${match.fixtureId}; '
+        'pronostico sportivo conservato: $error',
+      );
+    }
 
     final odds = fixtureOdds?.matchWinner;
 
