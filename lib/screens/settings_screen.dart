@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/settings_store.dart';
 import '../services/smartbet_ai_service.dart';
 import '../widgets/smartbet_learning_settings_card.dart';
+import '../services/goalvdline_ui_edition.dart';
+import '../widgets/goalvdline_public_participation_card.dart';
 import '../widgets/goalvdline_auto_coupon_settings_card.dart';
 import '../widgets/goalvdline_coupon_ready_notification_card.dart';
 
@@ -247,8 +249,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 24),
 
-              _sectionTitle('Intelligenza e apprendimento'),
-              const SmartBetLearningSettingsCard(),
+              if (GoalVdLineUiEdition.internalDiagnostics) ...[
+                _sectionTitle('Intelligenza e apprendimento · strumenti interni'),
+                const SmartBetLearningSettingsCard(),
+              ] else ...[
+                _sectionTitle('Privacy e apprendimento'),
+                const GoalVdLinePublicParticipationCard(),
+              ],
 
               const SizedBox(height: 24),
 
