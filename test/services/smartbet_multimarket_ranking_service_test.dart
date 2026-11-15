@@ -191,4 +191,14 @@ void main() {
     );
     expect(ranked.single.selection!.expectedValueMargin, isNull);
   });
+
+  test('B52: xG absent must not take up a simulated selection', () {
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(null), isFalse);
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(analysis(h: 0)), isFalse);
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(analysis(a: 0)), isFalse);
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(analysis(h: double.nan)), isFalse);
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(analysis(h: 6.1)), isFalse);
+    expect(SmartBetMultiMarketRankingService.hasSimulationInputs(analysis()), isTrue);
+  });
+
 }
