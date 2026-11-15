@@ -99,7 +99,7 @@ function checkScryptPassword(password, serialized) {
   return crypto.timingSafeEqual(got, parsed.digest);
 }
 
-function createOwnerMfa({env = process.env, clock = () => Date.now(), randomBytes = crypto.randomBytes} = {}) {
+function createOwnerMfa({env = process.env, clock = () => Date.now(), randomBytes = crypto.randomBytes, emailSender = null} = {}) {
   const secret = decodeBase32(env.GOALVDLINE_OWNER_TOTP_SECRET_BASE32);
   const passwordHash = env.GOALVDLINE_OWNER_PASSWORD_SCRYPT;
   const enabled = env.GOALVDLINE_OWNER_MFA_STAGING_ENABLED === 'true' &&
@@ -109,6 +109,88 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
   let attempts = 0;
   let lockUntil = 0;
   const sessions = new Map(); // sha256(token) => expiry (per-process only).
+  // Optional recovery, disabled unless a VERIFIED owner mailbox and provider
+  // credentials are installed. In-memory ONLY, not production ready.
+  const recoveryEnabled = enabled &&
+    env.GOALVDLINE_OWNER_RECOVERY_ENABLED === 'true' &&
+    typeof env.GOALVDLINE_OWNER_RECOVERY_EMAIL === 'string' &&
+    /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(env.GOALVDLINE_OWNER_RECOVERY_EMAIL) &&
+    typeof env.GOALVDLINE_OWNER_RECOVERY_HMAC_KEY === 'string' &&
+    env.GOALVDLINE_OWNER_RECOVERY_HMAC_KEY.length >= 32 &&
+    typeof emailSender === 'function';
+  let recovery = null; // hashed 8-digit email OTP, expiry and attempt counter.
+  let recoveryWindowUntil = 0;
+  let recoveryRequests = 0;
+
+  function createSession(now) {
+    const token = randomBytes(32).toString('base64url');
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    sessions.set(hash, now + SESSION_MS);
+    while (sessions.size > MAX_SESSIONS) {
+      sessions.delete(sessions.keys().next().value);
+    }
+    return {status: 200, token, expiresInSeconds: SESSION_MS / 1000};
+  }
+
+  function recoveryDigest(code) {
+    return crypto.createHmac('sha256', env.GOALVDLINE_OWNER_RECOVERY_HMAC_KEY)
+      .update('owner-recovery-v1:' + code).digest();
+  }
+
+  async function requestEmailRecovery(password) {
+    if (!recoveryEnabled) return {status:503};
+    const now = clock();
+    if (now < lockUntil) return {status:429};
+    if (now >= recoveryWindowUntil) {
+      recoveryWindowUntil = now + 60 * 60 * 1000;
+      recoveryRequests = 0;
+    }
+    if (recoveryRequests >= 3) return {status:429};
+    recoveryRequests++;
+    // Generic accepted response: no login-name/password enumeration.
+    if (!checkScryptPassword(password, passwordHash)) return {status:202};
+    const code = String(crypto.randomInt(100000000)).padStart(8, '0');
+    recovery = {digest: recoveryDigest(code), expiry: now + 10 * 60 * 1000,
+      attempts:0};
+    try {
+      await emailSender({
+        to: env.GOALVDLINE_OWNER_RECOVERY_EMAIL,
+        code,
+        expiresInMinutes:10,
+      });
+    } catch (_) {
+      recovery = null;
+    }
+    return {status:202};
+  }
+
+  function authenticateEmailRecovery(password, code) {
+    if (!recoveryEnabled) return {status:503};
+    const now = clock();
+    if (now < lockUntil) return {status:429};
+    const request = recovery;
+    const isCode = typeof code === 'string' && /^\\d{8}$/.test(code);
+    const goodCode = request !== null && now < request.expiry &&
+      request.attempts < 5 && isCode &&
+      crypto.timingSafeEqual(request.digest, recoveryDigest(code));
+    const goodPassword = checkScryptPassword(password, passwordHash);
+    if (!goodCode || !goodPassword) {
+      if (request !== null) {
+        request.attempts++;
+        if (request.attempts >= 5) recovery = null;
+      }
+      attempts++;
+      if (attempts >= MAX_ATTEMPTS) {
+        attempts = 0;
+        lockUntil = now + WINDOW_MS;
+        return {status:429};
+      }
+      return {status:401};
+    }
+    recovery = null; // Consume email code BEFORE issuing any session.
+    attempts = 0;
+    return createSession(now);
+  }
 
   function authenticate(password, code) {
     if (!enabled) return {status: 503, error: 'Accesso amministratore non configurato.'};
@@ -131,13 +213,8 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
     lockUntil = 0;
     lastUsedStep = step;
 
-    // Ephemeral random bearer token. Only SHA-256 digest retained on server;
-    // do NOT place it in URLs, query strings, logs or a global admin header.
-    const token = randomBytes(32).toString('base64url');
-    const hash = crypto.createHash('sha256').update(token).digest('hex');
-    sessions.set(hash, now + SESSION_MS);
-    while (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value);
-    return {status: 200, token, expiresInSeconds: SESSION_MS / 1000};
+    // Ephemeral random bearer session shared with verified email backup.
+    return createSession(now);
   }
 
   function verifySession(token) {
@@ -160,7 +237,8 @@ function createOwnerMfa({env = process.env, clock = () => Date.now(), randomByte
   }
 
   return {
-    enabled, authenticate, verifySession, revoke,
+    enabled, recoveryEnabled, authenticate, requestEmailRecovery,
+    authenticateEmailRecovery, verifySession, revoke,
   };
 }
 
