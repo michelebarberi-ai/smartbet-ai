@@ -1257,7 +1257,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         batch.map((match) async {
           try {
             var base = await _analysisCache.read(match.fixtureId);
-            base ??= await SmartCore.analyze(match);
+            // Una cache storica priva di xG non deve bloccare per sempre
+            // una partita: la pre-analisi tenta dati aggiornati una volta.
+            if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
+              base = await SmartCore.analyze(match);
+            }
             // Entrambe le ricerche X Premium e Multimercato usano un
             // simulatore con xG: non selezionare fixture che ne sono prive.
             if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
@@ -1396,7 +1400,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               // L'utente ha premuto AVVIA: cache, oppure una sola analisi
               // avanzata per partita. Niente richieste quote o Diego.
               var result = await _analysisCache.read(match.fixtureId);
-              if (result == null) {
+              if (!SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
                 result = await _aiService.analyzeMatch(
                   match,
                   runAudit: false,
@@ -1788,7 +1792,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             }
             try {
               var result = await _analysisCache.read(match.fixtureId);
-              if (result == null) {
+              if (!SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
                 result = await _aiService.analyzeMatch(
                   match,
                   runAudit: false,
