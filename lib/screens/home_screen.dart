@@ -137,9 +137,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return summary;
   }
 
-  Future<void> _refreshAnalysisHistory() async {
+  Future<void> _refreshAnalysisHistory({bool force = false}) async {
     final now = DateTime.now();
-    if (_lastAutomaticResolve != null &&
+    if (!force && _lastAutomaticResolve != null &&
         now.difference(_lastAutomaticResolve!) < _automaticResolveInterval) {
       return;
     }
@@ -152,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshHome() async {
-    await Future.wait([_dashboard.refresh(), _refreshAnalysisHistory()]);
+    await Future.wait([_dashboard.refresh(), _refreshAnalysisHistory(force: true)]);
   }
 
   // ============================================================
