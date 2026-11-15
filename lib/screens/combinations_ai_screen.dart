@@ -173,6 +173,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   int _autoExaminedCount = 0;
   int _autoDeepCount = 0;
   int _autoRejectedNoSimulation = 0;
+  // Diagnostica locale della ricerca quote: nessuna chiamata aggiuntiva.
+  int _combinationFixtureCount = 0;
+  int _combinationSportsCount = 0;
+  int _combinationDeepCount = 0;
+  int _combinationQuotedCount = 0;
+  int _combinationAuditRejected = 0;
   bool _xPremiumChoosing = false;
   final Map<int, MatchModel> _xPremiumSelectedMatches = <int, MatchModel>{};
   final List<_XPremiumDisplayItem> _xPremiumResults = <_XPremiumDisplayItem>[];
@@ -2162,6 +2168,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _sportsOnlyPreview.clear();
       _systemResults.clear();
       _selectedSystemIndex = 0;
+      _combinationFixtureCount = 0;
+      _combinationSportsCount = 0;
+      _combinationDeepCount = 0;
+      _combinationQuotedCount = 0;
+      _combinationAuditRejected = 0;
     });
 
     try {
@@ -2192,6 +2203,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       setState(() {
         _total = matches.length;
+        _combinationFixtureCount = matches.length;
       });
 
       final allCandidates = <_CombinationCandidate>[];
@@ -2299,6 +2311,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         return b.analysis.smartScore.compareTo(a.analysis.smartScore);
       });
 
+      _combinationSportsCount = allCandidates.length;
       final candidatesForOdds = <_CombinationCandidate>[];
 
       if (_selectedMarket == 'COMBO CHANCE') {
@@ -2436,6 +2449,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         candidatesForOdds.sort(_combinationSportsCompare);
       }
 
+      _combinationDeepCount = candidatesForOdds.length;
       if (candidatesForOdds.isEmpty) {
         if (!mounted) {
           return;
@@ -2711,6 +2725,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       validCandidates.removeWhere(
         (item) => !_acceptsMarketProbability(item.probability),
       );
+      _combinationQuotedCount = validCandidates.length;
       if (validCandidates.isEmpty) {
         await _enrichUnquotedPreviewWithDiego();
         if (!mounted) return;
@@ -2789,6 +2804,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           checked.addAll(auditedBatch.whereType<_CombinationCandidate>());
         }
 
+        _combinationAuditRejected = validCandidates.length - checked.length;
         validCandidates
           ..clear()
           ..addAll(checked.take(auditTargetCount));
@@ -4966,6 +4982,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   icon: const Icon(Icons.ios_share_outlined),
                   label: const Text('CONDIVIDI SCHEDINA'),
                 ),
+              ),
+            ),
+          ],
+
+          if (!_xPremiumEnabled &&
+              !_multiMarketRankingEnabled &&
+              !_loading &&
+              _combinationFixtureCount > 0 &&
+              _outputMode == _CombinationOutputMode.single &&
+              _results.length < _topCount) ...[
+            const SizedBox(height: 12),
+            Text(
+              'DIAGNOSTICA RICERCA • '
+              'Partite: $_combinationFixtureCount • '
+              'Previsioni sportive: $_combinationSportsCount • '
+              'Analisi avanzate valide: $_combinationDeepCount • '
+              'Selezioni con quota e soglia idonee: $_combinationQuotedCount • '
+              'Bloccate dall’Auditor: $_combinationAuditRejected',
+              key: const Key('b52-combinations-search-diagnostics'),
+              style: const TextStyle(
+                color: Colors.white54, fontSize: 11, height: 1.4,
               ),
             ),
           ],
