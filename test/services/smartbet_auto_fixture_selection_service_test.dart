@@ -58,4 +58,50 @@ void main() {
     final pool = [make(1, .4, .8), make(2, .3, .8)];
     expect(selector.shortlist(candidates: pool, requestedCount: 3), [1, 2]);
   });
+
+  test('B52: first 45 do not monopolize selection from a single league', () {
+    final fixtures = <({int id, String league})>[
+      for (var i = 0; i < 80; i++) (id: i + 1, league: 'Serie D'),
+      (id: 81, league: 'Serie A'),
+      (id: 82, league: 'Serie B'),
+      (id: 83, league: 'Premier League'),
+    ];
+    final covered = selector.diversifiedPreliminary(
+      candidates: fixtures,
+      competitionKeyOf: (item) => item.league,
+      limit: 6,
+    );
+    expect(covered.map((item) => item.id), [1, 81, 82, 83, 2, 3]);
+  });
+
+  test('B52: previews retain chronological order inside competitions', () {
+    final fixtures = <({int id, String league})>[
+      (id: 1, league: 'C'),
+      (id: 2, league: 'C'),
+      (id: 3, league: 'A'),
+      (id: 4, league: 'B'),
+      (id: 5, league: 'A'),
+    ];
+    final covered = selector.diversifiedPreliminary(
+      candidates: fixtures,
+      competitionKeyOf: (item) => item.league,
+      limit: 5,
+    );
+    expect(covered.map((item) => item.id), [1, 3, 4, 2, 5]);
+  });
+
+  test('B52: preliminary search enforces its budget without fake results', () {
+    final results = selector.diversifiedPreliminary(
+      candidates: <int>[1, 2, 3],
+      competitionKeyOf: (_) => 'A',
+      limit: 2,
+    );
+    expect(results, [1, 2]);
+    expect(() => selector.diversifiedPreliminary(
+      candidates: <int>[],
+      competitionKeyOf: (_) => 'A',
+      limit: -1,
+    ), throwsArgumentError);
+  });
+
 }
