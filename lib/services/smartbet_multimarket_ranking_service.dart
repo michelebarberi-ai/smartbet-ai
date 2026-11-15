@@ -146,8 +146,8 @@ class SmartBetMultiMarketRankingService {
       }
       final sim = simulator.simulate(
         SmartBetMatchSimulationInput(
-          expectedHomeGoals: h,
-          expectedAwayGoals: a,
+          expectedHomeGoals: h!,
+          expectedAwayGoals: a!,
           dataQuality: quality ?? 0,
         ),
       );
