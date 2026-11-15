@@ -1,0 +1,29 @@
+name: GoalVdLine B56 QuoteLab historical QA
+
+# Read-only checks; no TestFlight upload or database migration.
+on:
+  push:
+    branches:
+      - feature/b56-quotelab-historical-audit
+
+permissions:
+  contents: read
+
+jobs:
+  b56-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter stable
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: QuoteLab unit tests
+        run: flutter test --no-pub --reporter compact test/services/quotelab_historical_service_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
