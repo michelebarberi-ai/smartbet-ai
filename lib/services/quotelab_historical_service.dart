@@ -156,6 +156,21 @@ class QuoteLabHistoricalService {
         excluded++;
         continue;
       }
+      // Re-derive the outcome from the final score: never trust a stale
+      // correct/wrong flag, and exclude non-settleable market definitions.
+      final verified = SmartBetAnalysisMarketSettlement.evaluate(
+        market: market,
+        homeGoals: record.actualHomeGoals!,
+        awayGoals: record.actualAwayGoals!,
+      );
+      if (verified == SmartBetAnalysisSettlement.unsupported ||
+          (record.status == SmartBetAnalysisStatus.correct &&
+              verified != SmartBetAnalysisSettlement.correct) ||
+          (record.status == SmartBetAnalysisStatus.wrong &&
+              verified != SmartBetAnalysisSettlement.wrong)) {
+        excluded++;
+        continue;
+      }
       // Never count the same fixture/market twice for the same engine.
       final key = '${record.engine.name}|${record.fixtureId}|$market';
       if (conflicts.contains(key)) continue;
@@ -274,8 +289,8 @@ class _QuoteLabBucket {
       successes: wins,
       matchDays: days.length,
       hitRatePercent: 100 * p,
-      wilsonLower95Percent: 100 * (center - margin).clamp(0.0, 1.0),
-      wilsonUpper95Percent: 100 * (center + margin).clamp(0.0, 1.0),
+      wilsonLower95Percent: 100 * (center - margin).clamp(0.0, 1.0).toDouble(),
+      wilsonUpper95Percent: 100 * (center + margin).clamp(0.0, 1.0).toDouble(),
       averagePrice: sumPrices / n,
       averageGrossImpliedPercent: 100 * sumGrossImplied / n,
       averageSmartBetOrDiegoPercent: predictionN == 0
