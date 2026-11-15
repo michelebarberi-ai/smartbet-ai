@@ -1259,12 +1259,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             var base = await _analysisCache.read(match.fixtureId);
             // Una cache storica priva di xG non deve bloccare per sempre
             // una partita: la pre-analisi tenta dati aggiornati una volta.
-            if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
+            if (base == null ||
+                !SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
               base = await SmartCore.analyze(match);
             }
             // Entrambe le ricerche X Premium e Multimercato usano un
             // simulatore con xG: non selezionare fixture che ne sono prive.
-            if (!SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
+            if (base == null ||
+                !SmartBetMultiMarketRankingService.hasSimulationInputs(base)) {
               return null;
             }
             final quality = base.dataConfidence > 0 &&
@@ -1400,7 +1402,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               // L'utente ha premuto AVVIA: cache, oppure una sola analisi
               // avanzata per partita. Niente richieste quote o Diego.
               var result = await _analysisCache.read(match.fixtureId);
-              if (!SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
+              if (result == null ||
+                  !SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
                 result = await _aiService.analyzeMatch(
                   match,
                   runAudit: false,
@@ -1792,7 +1795,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             }
             try {
               var result = await _analysisCache.read(match.fixtureId);
-              if (!SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
+              if (result == null ||
+                  !SmartBetMultiMarketRankingService.hasSimulationInputs(result)) {
                 result = await _aiService.analyzeMatch(
                   match,
                   runAudit: false,
