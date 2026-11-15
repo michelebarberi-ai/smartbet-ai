@@ -62,6 +62,21 @@ class SmartBetMultiMarketRankingService {
     this.simulator = const SmartBetMatchSimulationService(),
   });
 
+  /// Una fixture può occupare un posto nella ricerca di simulazioni
+  /// solo se il modello ha realmente prodotto entrambi i gol attesi.
+  /// Zero è il valore sentinella per dati assenti nel modello attuale.
+  static bool hasSimulationInputs(AnalysisResult? analysis) {
+    if (analysis == null) return false;
+    final home = analysis.expectedHomeGoals;
+    final away = analysis.expectedAwayGoals;
+    return home.isFinite &&
+        away.isFinite &&
+        home > 0 &&
+        away > 0 &&
+        home <= 6 &&
+        away <= 6;
+  }
+
   static const Map<String, List<String>> allowedGroups = {
     '1X2': ['1', 'X', '2'],
     'DOPPIA CHANCE': ['1X', 'X2', '12'],
@@ -116,14 +131,7 @@ class SmartBetMultiMarketRankingService {
               analysis.dataConfidence > 100
           ? null
           : analysis.dataConfidence / 100.0;
-      if (h == null ||
-          a == null ||
-          !h.isFinite ||
-          !a.isFinite ||
-          h <= 0 ||
-          a <= 0 ||
-          h > 6 ||
-          a > 6) {
+      if (!hasSimulationInputs(analysis)) {
         results.add(
           SmartBetRankedMultiMarketFixture(
             fixtureId: fixture.fixtureId,
@@ -138,8 +146,8 @@ class SmartBetMultiMarketRankingService {
       }
       final sim = simulator.simulate(
         SmartBetMatchSimulationInput(
-          expectedHomeGoals: h,
-          expectedAwayGoals: a,
+          expectedHomeGoals: h!,
+          expectedAwayGoals: a!,
           dataQuality: quality ?? 0,
         ),
       );

@@ -223,6 +223,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _errors = 0;
   int _oddsProcessed = 0;
   int _oddsTotal = 0;
+  // Diagnostica read-only dei filtri della generazione automatica.
+  int _couponFixtureCount = 0;
+  int _couponPreliminaryCount = 0;
+  int _couponDeepCount = 0;
+  int _couponQuotedCount = 0;
+  int _couponAuditRejected = 0;
 
   String? _error;
   String? _notice;
@@ -1172,6 +1178,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _results.clear();
       _portfolioResults.clear();
       _selectedPortfolioIndex = 0;
+      _couponFixtureCount = 0;
+      _couponPreliminaryCount = 0;
+      _couponDeepCount = 0;
+      _couponQuotedCount = 0;
+      _couponAuditRejected = 0;
     });
 
     try {
@@ -1190,6 +1201,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           )
           .toList();
 
+      _couponFixtureCount = matches.length;
       if (!mounted) return;
 
       if (matches.isEmpty) {
@@ -1249,6 +1261,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         });
       }
 
+      _couponPreliminaryCount = preliminary.length;
       preliminary.sort((a, b) {
         final rank = _preliminaryRankScore(
           b,
@@ -1405,6 +1418,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         });
       }
 
+      _couponDeepCount = audited.length;
       audited.sort((a, b) {
         final probability = b.bestProbability.compareTo(a.bestProbability);
         if (probability != 0) return probability;
@@ -1431,7 +1445,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       setState(() {
         _sportsOnlyPreview
           ..clear()
-          ..addAll(preview.take(_count));
+          ..addAll(preview.take(_advancedShortlistSize(preview.length)));
       });
 
       // Fase 4: quote soltanto DOPO l'analisi avanzata.
@@ -1631,6 +1645,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
       }
 
+      _couponQuotedCount = qualified.length;
       // v1.2.1 — Ranking sportivo Reliability-first.
       //
       // Nessuna quota, edge o EV entra in questo ordinamento.
@@ -2080,6 +2095,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
         _loading = false;
         _phase = '';
+        _couponAuditRejected = auditRejected;
 
         if (_results.isEmpty) {
           _error = _aiService.aiServiceUnavailable
@@ -4422,52 +4438,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ),
           ],
-          if (_mode == _CouponMode.automatic &&
-              !_loading &&
-              _results.isEmpty &&
-              _sportsOnlyPreview.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            const Text(
-              'PRONOSTICI AI — SOLO ANALISI, NON SCHEDINA',
-              style: TextStyle(color: Colors.orangeAccent,
-                  fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Queste sono previsioni sportive senza una selezione '
-              'giocabile con quota verificata. Non mostrano quote '
-              'inventate e non costituiscono un sistema di gioco.',
-              style: TextStyle(color: Colors.white60, fontSize: 11),
-            ),
-            const SizedBox(height: 10),
-            ..._sportsOnlyPreview.map((forecast) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F2937),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${forecast.match.homeTeam} - '
-                      '${forecast.match.awayTeam}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('${forecast.market} · '
-                      'stima ${forecast.probability}% · '
-                      'selezione quotata non disponibile'
-                      '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
-                    style: const TextStyle(color: Colors.orangeAccent,
-                      fontSize: 11)),
-                  if (forecast.dualAnalysis != null) ...[
-                    const SizedBox(height: 10),
-                    DualEngineSummary(analysis: forecast.dualAnalysis!),
-                  ],
-                ],
-              ),
-            )),
-          ],
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 28),
             Text(
@@ -4492,6 +4462,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   color: Colors.white54,
                   fontSize: 11,
                   height: 1.35,
+                ),
+              ),
+            ],
+            if (_mode == _CouponMode.automatic &&
+                !_loading &&
+                _results.length < _count) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${_results.length} selezioni confermate su $_count richieste. '
+                'Le altre stime sportive sono elencate separatamente.',
+                key: const Key('b51-coupon-partial-count'),
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 12,
+                  height: 1.3,
                 ),
               ),
             ],
@@ -4535,6 +4520,79 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 ),
               ),
             ],
+          ],
+          if (_mode == _CouponMode.automatic &&
+              !_loading &&
+              _couponFixtureCount > 0 &&
+              _results.length < _count) ...[
+            const SizedBox(height: 12),
+            Text(
+              'DIAGNOSTICA RICERCA • '
+              'Partite: $_couponFixtureCount • '
+              'Pre-analisi valide: $_couponPreliminaryCount • '
+              'Analisi avanzate: $_couponDeepCount • '
+              'Selezioni con quota idonea prima dei recuperi: '
+              '$_couponQuotedCount • '
+              'Blocchi Auditor: $_couponAuditRejected',
+              key: const Key('b52-coupon-search-diagnostics'),
+              style: const TextStyle(
+                color: Colors.white54, fontSize: 11, height: 1.4,
+              ),
+            ),
+          ],
+          if (_mode == _CouponMode.automatic &&
+              !_loading &&
+              _results.length < _count &&
+              _sportsOnlyPreview.any((forecast) => !_results.any(
+                    (pick) => pick.match.fixtureId == forecast.match.fixtureId,
+                  ))) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'ALTRE STIME AI — NON CONFERMATE PER LA SCHEDINA',
+              style: TextStyle(color: Colors.orangeAccent,
+                  fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Queste stime sportive non sono state confermate come giocabili '
+              'per la schedina attuale. Quote mancanti, sotto 1,20 '
+              'o controlli non superati possono limitarne l’utilizzo. '
+              'Non vengono inventate quote.',
+              style: TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            ..._sportsOnlyPreview
+                .where((forecast) => !_results.any(
+                      (pick) => pick.match.fixtureId == forecast.match.fixtureId,
+                    ))
+                .take(math.max(0, _count - _results.length))
+                .map((forecast) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2937),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${forecast.match.homeTeam} - '
+                      '${forecast.match.awayTeam}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${forecast.market} · '
+                      'stima ${forecast.probability}% · '
+                      'selezione non confermata'
+                      '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
+                    style: const TextStyle(color: Colors.orangeAccent,
+                      fontSize: 11)),
+                  if (forecast.dualAnalysis != null) ...[
+                    const SizedBox(height: 10),
+                    DualEngineSummary(analysis: forecast.dualAnalysis!),
+                  ],
+                ],
+              ),
+            )),
           ],
           if (!_loading && _errors > 0) ...[
             const SizedBox(height: 12),
