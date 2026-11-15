@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/models/match_dossier.dart';
 import 'package:smartbet_ai_new/models/match_model.dart';
 import 'package:smartbet_ai_new/services/diego_ai_service.dart';
+import 'package:smartbet_ai_new/services/european_league_strength_service.dart';
 import 'package:smartbet_ai_new/services/match_dossier_builder.dart';
 import 'package:smartbet_ai_new/services/odds_service.dart';
 
@@ -75,6 +76,8 @@ const _dossier = MatchDossier(
   preMatchOnly: true,
 );
 
+class _UnusedLeagueStrength extends Fake implements EuropeanLeagueStrengthService {}
+
 class _StaticDossier extends Fake implements MatchDossierBuilder {
   @override
   Future<MatchDossier?> build(
@@ -124,6 +127,7 @@ void main() {
     final odds = _QuotesStub(throwError: true);
     final engine = DiegoAiService(
       dossierBuilder: _StaticDossier(),
+      leagueStrengthService: _UnusedLeagueStrength(),
       oddsService: odds,
     );
     final result = await engine.analyze(_match, simulations: 1000);
@@ -144,10 +148,12 @@ void main() {
     final high = _QuotesStub(odds: _quoted(4.50));
     final first = await DiegoAiService(
       dossierBuilder: _StaticDossier(),
+      leagueStrengthService: _UnusedLeagueStrength(),
       oddsService: low,
     ).analyze(_match, simulations: 1000);
     final second = await DiegoAiService(
       dossierBuilder: _StaticDossier(),
+      leagueStrengthService: _UnusedLeagueStrength(),
       oddsService: high,
     ).analyze(_match, simulations: 1000);
     expect(first, isNotNull);
