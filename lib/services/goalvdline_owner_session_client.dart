@@ -132,8 +132,9 @@ class GoalVdLineOwnerSessionClient {
     required String code,
     required int codeDigits,
   }) async {
-    if (password.length < 16 || password.length > 256 ||
-        !RegExp('^\\d{$codeDigits}\\$').hasMatch(code)) {
+    final codeValid = code.length == codeDigits &&
+        code.codeUnits.every((v) => v >= 48 && v <= 57);
+    if (password.length < 16 || password.length > 256 || !codeValid) {
       return GoalVdLineOwnerLoginOutcome(
         false, 'Inserisci password e codice valido di $codeDigits cifre.',
       );
