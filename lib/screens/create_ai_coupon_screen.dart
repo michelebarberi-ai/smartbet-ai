@@ -2137,9 +2137,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               : 'GoalVdLine non ha trovato selezioni con quota disponibile '
                     'di almeno 1.20 che abbiano superato i controlli di qualità.';
         } else if (incompletePortfolios > 0) {
+          final prefix = incompletePortfolios == 1
+              ? 'Una schedina del portfolio contiene'
+              : '$incompletePortfolios schedine del portfolio contengono';
           _notice =
-              '$incompletePortfolios schedine del portfolio contengono meno '
-              'di $_count eventi: GoalVdLine non forza selezioni deboli.'
+              '$prefix meno di $_count eventi: GoalVdLine non forza '
+              'selezioni deboli.'
               '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
         } else if (adaptiveCount > 0 || auditRejected > 0) {
           final parts = <String>[];
