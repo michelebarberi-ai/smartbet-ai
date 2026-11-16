@@ -2953,7 +2953,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // Manteniamo i dati originali del motore. Solo mercati con
       // probabilità sufficiente e quota reale diventano alternative.
       for (final base in originalPicks) {
-        if (base.probability >= 80) continue;
+        // Gli handicap ampi meritano alternative anche quando il modello
+        // assegna loro una probabilità elevata.
+        if (base.probability >= 80 &&
+            !SmartBetHighHandicapAlternativeService.needsAlternative(
+                base.market)) {
+          continue;
+        }
         final odds = await _oddsService.getFixtureMarketOdds(
           fixtureId: base.match.fixtureId,
         );
