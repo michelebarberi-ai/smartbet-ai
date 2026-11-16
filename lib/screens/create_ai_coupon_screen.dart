@@ -989,6 +989,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final analyzed = <_CouponPick>[];
+      var insufficientStatistics = 0;
+      var unavailableMarkets = 0;
+      var temporaryFailures = 0;
 
       // SmartBet viene eseguito a piccoli batch.
       // DiegoAI viene poi aggiunto in sequenza.
@@ -1031,6 +1034,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               }
 
               if (smartBet.smartScore <= 0) {
+                insufficientStatistics++;
                 return null;
               }
 
@@ -1051,11 +1055,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               );
 
               if (pick == null) {
+                unavailableMarkets++;
                 return null;
               }
 
               return _manualAuditedPick(pick);
             } catch (e) {
+              temporaryFailures++;
               debugPrint(
                 'SMARTBET MANUAL COUPON ERROR '
                 '${match.fixtureId}: $e',
@@ -1141,7 +1147,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _phase = '';
 
         if (_results.isEmpty) {
-          _error = 'Non è stato possibile analizzare le partite selezionate.';
+          _error =
+              'Nessuna delle ${matches.length} partite selezionate '
+              'ha prodotto un pronostico utilizzabile. '
+              'Dati statistici insufficienti: $insufficientStatistics. '
+              'Mercati non calcolabili: $unavailableMarkets. '
+              'Errori temporanei: $temporaryFailures. '
+              'Non vengono inventate probabilità per colmare i dati mancanti.';
           return;
         }
 
@@ -2929,8 +2941,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _loading ||
         _threeSystemLoading ||
         _results.length < 3 ||
-        _results.length > 15 ||
-        _results.length != _count) {
+        _results.length > 15) {
       return;
     }
 
@@ -4522,8 +4533,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed:
-                    _loading || _threeSystemLoading || _results.length != _count
-                    ? null
+                    _loading || _threeSystemLoading ||
+                            _results.length < 3 || _results.length > 15
+                        ? null
                     : _createSameMatchesSystem,
                 icon: const Icon(Icons.account_tree_outlined),
                 label: Text(
@@ -4535,9 +4547,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text(
-                  'Modalità aggiuntiva: da 3 a 15 partite, '
-                  'tre schedine con le stesse squadre e mercati alternativi '
-                  'solo quando attendibili.',
+                  'Modalità aggiuntiva: da 3 a 15 partite confermate, '
+                  'anche se ne erano state richieste di più. '
+                  'Le tre varianti usano le stesse squadre e solo '
+                  'alternative effettivamente quotate e verificate.',
                   style: TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ),
