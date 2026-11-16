@@ -713,6 +713,63 @@ class TeamDataResolver {
     return null;
   }
 
+  /// National sides often have no domestic league: for a verified
+  /// competitive international fixture, check its EXACT competition ID.
+  /// Only ended fixtures strictly before the match are counted.
+  /// Cap confidence because national-team rosters change over time.
+  Future<ResolvedTeamData?> _resolveCompetitionFallback({
+    required int teamId,
+    required String teamName,
+    required DateTime referenceDate,
+    required int competitionId,
+    required String competitionName,
+  }) async {
+    if (competitionId <= 0) return null;
+    final year = referenceDate.year;
+    // Two controlled attempts: current season and last biennial edition.
+    for (final season in <int>{year, year - 2}) {
+      final history = await _historicalService.getHistoricalData(
+        teamId: teamId,
+        teamName: teamName,
+        season: season,
+        leagueId: competitionId,
+        leagueName: competitionName,
+        referenceDate: referenceDate,
+      );
+      // No weak two-match extrapolations or artificial average goals.
+      if (history == null || history.matchesPlayed < 5) continue;
+      return ResolvedTeamData(
+        teamId: teamId,
+        teamName: teamName,
+        sourceTeamId: history.originalTeamId,
+        sourceTeamName: history.originalTeamName,
+        dataSource: 'Verified same-competition national results (limited)',
+        currentLeagueId: competitionId,
+        currentLeagueName: competitionName,
+        currentLeagueSeason: year,
+        season: history.season,
+        leagueId: competitionId,
+        leagueName: competitionName,
+        matchesPlayed: history.matchesPlayed,
+        wins: history.wins,
+        draws: history.draws,
+        losses: history.losses,
+        goalsFor: history.goalsFor,
+        goalsAgainst: history.goalsAgainst,
+        homeMatches: history.homeMatches,
+        homeWins: history.homeWins,
+        homeDraws: history.homeDraws,
+        homeLosses: history.homeLosses,
+        awayMatches: history.awayMatches,
+        awayWins: history.awayWins,
+        awayDraws: history.awayDraws,
+        awayLosses: history.awayLosses,
+        confidence: history.matchesPlayed >= 8 ? 0.55 : 0.45,
+      );
+    }
+    return null;
+  }
+
   // ============================================================
   // CONTROLLO CAMPIONATO PRINCIPALE
   // ============================================================
