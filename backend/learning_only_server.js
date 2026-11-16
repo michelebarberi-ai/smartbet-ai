@@ -5,6 +5,7 @@
 require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
+const {registerOwnerAccessV2} = require('./admin/owner_access_v2');
 const {Pool} = require('pg');
 const {createOfficialEngineAdapter,officialEngineConfiguration,PROTOCOL} = require('./auto_coupon/official_engine_client');
 const {LearningRepository} = require('./learning/learning_repository');
@@ -184,6 +185,12 @@ app.get('/health/database', async (_req, res) => {
 
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
+  // B61 opt-in only: live learning/coupon routes remain unchanged.
+  // No public owner access until verified email, Neon schema and server
+  // encryption keys have been prepared; the flag is OFF by default.
+  if (env.GOALVDLINE_OWNER_ACCESS_V2_ENABLED === 'true') {
+    registerOwnerAccessV2(app, {env, poolFactory});
+  }
   registerLearningRoutes(app, {
     env, generateOfficialCoupon: officialEngine, onDemandWorkerRunning,
     verifyExternalWorker,wakeExternalWorker,

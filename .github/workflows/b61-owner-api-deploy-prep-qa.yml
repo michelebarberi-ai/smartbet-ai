@@ -1,0 +1,60 @@
+name: GoalVdLine B61 isolated Render backend QA
+
+# Strictly prepare a PR. This branch does NOT auto-deploy to Render.
+on:
+  push:
+    branches:
+      - feature/b61-owner-api-deploy-prep
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owner-b61-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-b61:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: goalvdline_owner_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+      - name: Syntax checks
+        run: |
+          node --check backend/learning_only_server.js
+          node --check backend/admin/owner_access_v2.js
+          node --check backend/admin/owner_mfa_staging.js
+          node --check backend/admin/owner_recovery_sender.js
+      - name: Existing backend regressions
+        working-directory: backend
+        run: npm test
+      - name: Isolated B61 security tests
+        run: |
+          node --test backend/test/owner_first_activation_v2.test.js
+          node --test backend/test/owner_mfa_staging.test.js
+      - name: B61 PostgreSQL state persistence and restart test
+        env:
+          B61_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/goalvdline_owner_test
+        run: node --test backend/test/owner_postgres_activation.integration.test.js
