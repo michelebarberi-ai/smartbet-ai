@@ -30,13 +30,13 @@ void main() {
     const teamId = 918331;
     var fixtureRequests = 0;
     final client = MockClient((req) async {
-      if (req.path.endsWith('/leagues')) {
+      if (req.url.path.endsWith('/leagues')) {
         return http.Response(jsonEncode({'response': [
           {'league': {'id': 97231, 'name': 'Under 21 League',
             'type': 'League'}}
         ]}), 200);
       }
-      if (req.path.endsWith('/fixtures')) {
+      if (req.url.path.endsWith('/fixtures')) {
         fixtureRequests++;
         return http.Response(jsonEncode({
           'response': historicalFixtures(teamId, 6),
@@ -75,10 +75,10 @@ void main() {
     const cup=77733;
     var fixtureRequests=0;
     final client=MockClient((req) async {
-      if (req.path.endsWith('/leagues')) {
+      if (req.url.path.endsWith('/leagues')) {
         return http.Response('{"response":[]}',200);
       }
-      if (req.path.endsWith('/fixtures')) {
+      if (req.url.path.endsWith('/fixtures')) {
         fixtureRequests++;
         expect(req.url.queryParameters['league'], cup.toString());
         expect(req.url.queryParameters['season'], '2026');
@@ -113,10 +113,10 @@ void main() {
     TeamDataResolver.clearCache();
     const teamId=918333;
     final client=MockClient((req) async {
-      if (req.path.endsWith('/leagues')) {
+      if (req.url.path.endsWith('/leagues')) {
         return http.Response('{"response":[]}',200);
       }
-      if (req.path.endsWith('/fixtures')) {
+      if (req.url.path.endsWith('/fixtures')) {
         final fixtures=historicalFixtures(teamId,3);
         fixtures.add({
           'fixture': {
