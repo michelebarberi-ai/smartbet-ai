@@ -291,6 +291,27 @@ class DualEngineSummary extends StatelessWidget {
             ),
           ),
 
+          if (diego == null && analysis.diegoUnavailableReason != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              key: const Key('b60-diego-data-readiness'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                'DIEGO AI · MOTIVO N/D: '
+                '${analysis.diegoUnavailableReason!} '
+                'La quota bookmaker non determina questa disponibilita.',
+                style: const TextStyle(
+                  color: Colors.orangeAccent, fontSize: 10, height: 1.3,
+                ),
+              ),
+            ),
+          ],
+
           if (diegoMeta.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
