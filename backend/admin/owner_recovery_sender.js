@@ -45,6 +45,8 @@ function createOwnerRecoverySender({env = process.env, fetchImpl = fetch} = {}) 
       signal: AbortSignal.timeout(7000),
     });
     if (response.status !== 200 && response.status !== 201) {
+      // Log only the status, never response body, recipient, OTP or API key.
+      console.warn('GoalVdLine owner mail provider HTTP status:', response.status);
       throw new Error('Owner recovery provider unavailable');
     }
   };
