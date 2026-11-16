@@ -222,10 +222,8 @@ class SmartBetAiService {
     bool runAudit = false,
     bool automaticMode = false,
   }) async {
-    if (aiServiceUnavailable) {
-      return _errorResult(aiServiceUnavailableMessage);
-    }
-
+    // Anche in caso di indisponibilita del provider si tenta prima SmartCore
+    // locale; l'errore cloud non deve falsare a zero una stima valida.
     print('');
     print('========================================');
     print('SMARTBET AI - ANALISI PARTITA');
@@ -272,6 +270,10 @@ class SmartBetAiService {
     // ==========================================================
 
     final baseResult = await SmartCore.analyze(match);
+
+    if (aiServiceUnavailable) {
+      return _localFallbackOrError(baseResult, aiServiceUnavailableMessage);
+    }
 
     print('');
     print('========================================');
@@ -387,23 +389,8 @@ class SmartBetAiService {
 
     print('========================================');
 
-    // ==========================================================
-    // ODDS
-    // ==========================================================
-
-    final odds = await _oddsService.getMatchWinnerOdds(
-      fixtureId: match.fixtureId,
-      bookmakerName: 'Sisal',
-    );
-
-    if (odds == null) {
-      print('');
-      print(
-        'SMARTBET: quote 1X2 '
-        'non disponibili.',
-      );
-    }
-
+    // Le quote non si richiedono qui: il backend riceve solo il dossier
+    // sportivo. Le quote si consultano a valle dell'analisi completata.
     // ==========================================================
     // BACKEND
     // ==========================================================
@@ -454,10 +441,7 @@ class SmartBetAiService {
         '${dossier.dataConfidence}%',
       );
 
-      print(
-        'Quote disponibili: '
-        '${odds != null}',
-      );
+      print('Quote: consultate soltanto dopo la previsione sportiva.');
 
       print(
         'Payload length: '
@@ -519,10 +503,10 @@ class SmartBetAiService {
                 : const Duration(minutes: 2),
           );
 
-          return _errorResult(friendly);
+          return _localFallbackOrError(baseResult, friendly);
         }
 
-        return _errorResult(message);
+        return _localFallbackOrError(baseResult, message);
       }
 
       _markAiAvailable();
@@ -534,10 +518,8 @@ class SmartBetAiService {
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        return _errorResult(
-          'Risposta backend '
-          'non valida.',
-        );
+        return _localFallbackOrError(baseResult,
+          'Risposta backend non valida.');
       }
 
       if (decoded['success'] != true) {
@@ -548,19 +530,17 @@ class SmartBetAiService {
           const friendly =
               'Servizio GoalVdLine AI temporaneamente non disponibile.';
           _markAiUnavailable(friendly);
-          return _errorResult(friendly);
+          return _localFallbackOrError(baseResult, friendly);
         }
 
-        return _errorResult(message);
+        return _localFallbackOrError(baseResult, message);
       }
 
       final analysis = decoded['analysis'];
 
       if (analysis is! Map<String, dynamic>) {
-        return _errorResult(
-          'Analisi AI '
-          'non presente.',
-        );
+        return _localFallbackOrError(baseResult,
+          'Analisi AI non presente.');
       }
 
       // ========================================================
@@ -607,6 +587,18 @@ class SmartBetAiService {
         );
       }
 
+      // Le quote vengono chieste solo DOPO previsione e auditor.
+      // Il loro feed non deve cancellare una previsione sportiva valida.
+      MatchOdds? odds;
+      try {
+        odds = await _oddsService.getMatchWinnerOdds(
+          fixtureId: match.fixtureId,
+          bookmakerName: 'Sisal',
+        );
+      } catch (error) {
+        print('SMARTBET: quote non disponibili, analisi conservata: $error');
+      }
+
       final official = _parseAnalysisResult(
         analysis: analysis,
         match: match,
@@ -632,10 +624,8 @@ class SmartBetAiService {
 
       print(e);
 
-      return _errorResult(
-        'Errore di connessione '
-        'al backend AI: $e',
-      );
+      return _localFallbackOrError(
+        baseResult, 'Errore di connessione al backend AI: $e');
     }
   }
 
@@ -1373,6 +1363,49 @@ $finalVerdict
   // ============================================================
   // ERROR
   // ============================================================
+
+  AnalysisResult _localFallbackOrError(
+    AnalysisResult baseResult,
+    String reason,
+  ) {
+    final valid = baseResult.smartScore > 0 &&
+        (baseResult.homeProbability > 0 ||
+            baseResult.drawProbability > 0 ||
+            baseResult.awayProbability > 0 ||
+            baseResult.over15Probability > 0 ||
+            baseResult.under15Probability > 0 ||
+            baseResult.over25Probability > 0 ||
+            baseResult.under25Probability > 0);
+    if (!valid) return _errorResult(reason);
+
+    return AnalysisResult(
+      smartScore: baseResult.smartScore,
+      predictionConfidence: baseResult.predictionConfidence,
+      dataConfidence: baseResult.dataConfidence,
+      sportsAuditStatus: 'NOT_RUN',
+      sportsAuditBlockedMarkets: baseResult.sportsAuditBlockedMarkets,
+      homeProbability: baseResult.homeProbability,
+      drawProbability: baseResult.drawProbability,
+      awayProbability: baseResult.awayProbability,
+      over15Probability: baseResult.over15Probability,
+      under15Probability: baseResult.under15Probability,
+      over25Probability: baseResult.over25Probability,
+      under25Probability: baseResult.under25Probability,
+      goalProbability: baseResult.goalProbability,
+      noGoalProbability: baseResult.noGoalProbability,
+      expectedHomeGoals: baseResult.expectedHomeGoals,
+      expectedAwayGoals: baseResult.expectedAwayGoals,
+      prediction: baseResult.prediction,
+      valueBet: 'N/D',
+      risk: 'Pre-analisi locale: non verificata dal backend',
+      shouldBet: false,
+      stakeRecommendation: 'Nessuna puntata automatica.',
+      explanation:
+          'SMARTBET AI — PRE-ANALISI LOCALE\\n'
+          'Previsione sportiva preliminare, non validata dal backend.\\n'
+          'Motivo: $reason',
+    );
+  }
 
   AnalysisResult _errorResult(String reason) {
     return AnalysisResult(
