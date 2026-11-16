@@ -142,7 +142,12 @@ void main() {
     await tester.enterText(find.byKey(const Key('b61-confirm-password')),
       'A password chosen only by the owner');
     await tester.enterText(find.byKey(const Key('b61-first-totp')), '123456');
-    await tester.ensureVisible(find.byKey(const Key('b61-finish-activation')));
+    await tester.testTextInput.hide();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('b61-finish-activation')),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('b61-finish-activation')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('b61-back-to-login')), findsOneWidget);
