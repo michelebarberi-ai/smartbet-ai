@@ -180,7 +180,12 @@ class TeamDataResolver {
   // CACHE
   // ============================================================
 
-  static final Map<String, ResolvedTeamData?> _cache = {};
+  static final Map<String, ResolvedTeamData> _cache = {};
+  // B60: Do not keep a failed lookup forever. Short-lived negative cache
+  // avoids repeatedly hammering the upstream on an unsupported competition,
+  // while letting transient provider outages recover on the next refresh.
+  static final Map<String, DateTime> _negativeCache = {};
+  static const Duration _negativeCacheDuration = Duration(minutes: 3);
 
   static final Map<String, ResolvedTeamLeague?> _leagueOnlyCache = {};
 
@@ -200,6 +205,15 @@ class TeamDataResolver {
     final cacheKey =
         '$teamId|${teamName.toLowerCase()}|$referenceKey'
         '|minCurrent=$minCurrentSeasonMatches';
+
+    final now = DateTime.now().toUtc();
+    final missedAt = _negativeCache[cacheKey];
+    if (missedAt != null) {
+      if (now.difference(missedAt) < _negativeCacheDuration) {
+        return null;
+      }
+      _negativeCache.remove(cacheKey);
+    }
 
     if (_cache.containsKey(cacheKey)) {
       print('');
@@ -227,7 +241,12 @@ class TeamDataResolver {
       minCurrentSeasonMatches: minCurrentSeasonMatches,
     );
 
-    _cache[cacheKey] = resolved;
+    if (resolved == null) {
+      _negativeCache[cacheKey] = DateTime.now().toUtc();
+    } else {
+      _negativeCache.remove(cacheKey);
+      _cache[cacheKey] = resolved;
+    }
 
     return resolved;
   }
