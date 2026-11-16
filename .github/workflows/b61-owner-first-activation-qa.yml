@@ -1,0 +1,75 @@
+name: GoalVdLine B61 owner-first-activation QA
+
+# This branch is NOT a deployment trigger. No Neon migrations or provider activation.
+on:
+  push:
+    branches:
+      - feature/b61-owner-first-activation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b61-owner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-owner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: goalvdline_owner_b61_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+      - name: Check owner module syntax
+        run: |
+          node --check backend/admin/owner_access_v2.js
+          node --check backend/learning_only_server.js
+          node --check backend/test/owner_first_activation_v2.test.js
+      - name: Dedicated B61 security tests
+        run: node --test backend/test/owner_first_activation_v2.test.js
+      - name: Temporary PostgreSQL activation/restart integration
+        env:
+          B61_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/goalvdline_owner_b61_test
+        run: node --test backend/test/owner_postgres_activation.integration.test.js
+      - name: Full backend regression
+        working-directory: backend
+        run: npm test
+
+  flutter-owner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter stable
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Setup-screen integration tests
+        run: flutter test --no-pub --reporter compact test/services/goalvdline_b61_owner_setup_test.dart
+      - name: All Flutter tests
+        run: flutter test --no-pub --reporter compact

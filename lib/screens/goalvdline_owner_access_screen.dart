@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/goalvdline_owner_session_client.dart';
+import 'goalvdline_owner_setup_screen.dart';
 import '../widgets/goalvdline_central_learning_consent_card.dart';
 import 'smartbet_learning_monitor_screen.dart';
 import 'smartbet_learning_overview_screen.dart';
@@ -238,6 +239,17 @@ class _GoalVdLineOwnerAccessScreenState extends State<GoalVdLineOwnerAccessScree
           icon: const Icon(Icons.mail_outline),
           label: const Text('Richiedi codice via email'),
         ),
+      const SizedBox(height: 8),
+      TextButton.icon(
+        key: const Key('b61-first-activation-link'),
+        icon: const Icon(Icons.person_add_alt_1_outlined),
+        label: const Text('Prima attivazione: scegli la password'),
+        onPressed: _working ? null : () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const GoalVdLineOwnerSetupScreen(),
+          ),
+        ),
+      ),
       if (_working) const LinearProgressIndicator(),
       if (_message != null)
         Padding(

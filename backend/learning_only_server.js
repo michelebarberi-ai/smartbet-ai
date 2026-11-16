@@ -6,6 +6,7 @@ require('dotenv').config();
 const express = require('express');
 const {registerLearningRoutes} = require('./learning/learning_routes');
 const {registerOwnerMfaStagingRoutes} = require('./admin/owner_mfa_staging');
+const {registerOwnerAccessV2} = require('./admin/owner_access_v2');
 const {Pool} = require('pg');
 const {createOfficialEngineAdapter,officialEngineConfiguration,PROTOCOL} = require('./auto_coupon/official_engine_client');
 const {LearningRepository} = require('./learning/learning_repository');
@@ -185,8 +186,13 @@ app.get('/health/database', async (_req, res) => {
 
   const officialEngine = typeof generateOfficialCoupon === 'function'
     ? generateOfficialCoupon : createOfficialEngineAdapter({env, fetchImpl});
-  // Owner MFA stage is independent of old admin header. It grants no data access.
-  registerOwnerMfaStagingRoutes(app, {env});
+  // B61 owner activation has an independent, opt-in, persistent auth store.
+  // Does not grant LEARNING_ADMIN_TOKEN rights or change existing learning API.
+  if (env.GOALVDLINE_OWNER_ACCESS_V2_ENABLED === 'true') {
+    registerOwnerAccessV2(app, {env, poolFactory});
+  } else {
+    registerOwnerMfaStagingRoutes(app, {env});
+  }
   registerLearningRoutes(app, {
     env, generateOfficialCoupon: officialEngine, onDemandWorkerRunning,
     verifyExternalWorker,wakeExternalWorker,
