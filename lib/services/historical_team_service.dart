@@ -311,7 +311,12 @@ class HistoricalTeamService {
         referenceDate: referenceDate,
       );
 
-      _cache[cacheKey] = data;
+      if (data == null) {
+        _negativeCache[cacheKey] = DateTime.now().toUtc();
+      } else {
+        _negativeCache.remove(cacheKey);
+        _cache[cacheKey] = data;
+      }
 
       return data;
     } catch (e) {
