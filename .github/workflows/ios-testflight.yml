@@ -14,6 +14,7 @@ on:
       - release/b49-testflight
       - release/b59-testflight
       - release/b60-testflight
+      - release/b61-testflight
 
 jobs:
   build-ios:
@@ -26,13 +27,15 @@ jobs:
        github.ref != 'refs/heads/release/b48-testflight' &&
        github.ref != 'refs/heads/release/b49-testflight' &&
        github.ref != 'refs/heads/release/b59-testflight' &&
-       github.ref != 'refs/heads/release/b60-testflight') ||
+       github.ref != 'refs/heads/release/b60-testflight' &&
+       github.ref != 'refs/heads/release/b61-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
        github.ref != 'refs/heads/release/b49-testflight' &&
        github.ref != 'refs/heads/release/b59-testflight' &&
-       github.ref != 'refs/heads/release/b60-testflight') ||
+       github.ref != 'refs/heads/release/b60-testflight' &&
+       github.ref != 'refs/heads/release/b61-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -45,7 +48,9 @@ jobs:
         (github.ref == 'refs/heads/release/b59-testflight' &&
          github.event.head_commit.message == 'release(build59): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b60-testflight' &&
-         github.event.head_commit.message == 'release(build60): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build60): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b61-testflight' &&
+         github.event.head_commit.message == 'release(build61): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -136,6 +141,15 @@ jobs:
             test/services/goalvdline_b60_data_source_coverage_test.dart \
             test/services/diego_ai_odds_blind_test.dart \
             test/services/dual_engine_summary_preview_test.dart
+
+      - name: B61 owner enrollment privacy, email and TOTP tests
+        if: github.ref == 'refs/heads/release/b61-testflight'
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_b61_owner_setup_test.dart \
+            test/services/goalvdline_owner_session_client_test.dart \
+            test/services/goalvdline_b57_public_private_consensus_test.dart
 
       - name: Prepare App Store Connect API key
         env:
@@ -307,6 +321,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="60"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b61-testflight" ]]; then
+            grep -qx 'version: 1.2.5+61' pubspec.yaml || {
+              echo "ERROR: Build 61 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="61"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
