@@ -2906,7 +2906,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       return 'Medio-Alto';
     }
 
-    if (_results.length >= 5 || totalOdd >= 5.0 || combined < 0.30) {
+    if (_results.length >= 5 || totalOdd >= 5.0 || combined < 0.65) {
       return 'Medio';
     }
 
@@ -4715,10 +4715,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             _averageSmartScore.toStringAsFixed(1),
           ),
           _summaryRow(
-            'Probabilità combinata',
+            'Combinata teorica',
             '${(_combinedProbability * 100).toStringAsFixed(2)}%',
           ),
-          _summaryRow('Rischio', _riskLabel),
+          _summaryRow('Rischio indicativo', _riskLabel),
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'La combinata moltiplica le probabilità stimate e assume '
+              'indipendenza tra gli eventi. Non è una probabilità '
+              'certificata né garantisce il risultato.',
+              style: TextStyle(color: Colors.white54, fontSize: 10.5),
+            ),
+          ),
         ],
       ),
     );
