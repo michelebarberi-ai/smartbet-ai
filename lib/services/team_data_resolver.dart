@@ -939,6 +939,10 @@ class TeamDataResolver {
   // ============================================================
 
   bool _looksLikeYouthCompetition(String name) {
+    if (RegExp(r'\\bunder[\\s-]?(?:17|18|19|20|21|23)\\b')
+        .hasMatch(name)) {
+      return true;
+    }
     return name.contains('u17') ||
         name.contains('u18') ||
         name.contains('u19') ||
