@@ -35,3 +35,7 @@ adding secure first-time owner enrollment to the existing password + Authenticat
   quote-blind sports AI and existing coupon behavior.
 - No Neon migrations, new paid plans, or new data transmission are
   triggered by this iPhone release.
+
+## B61 Resend delivery verification
+
+A first one-time activation email smoke returned HTTP 503 on 2026-11-16. The backend was updated to log only the Resend provider HTTP response status, without OTP, recipient, API key or response body. A second controlled delivery test is authorized only after this sanitized diagnostic build is Live. No password or owner account is created by the test.
