@@ -33,5 +33,7 @@ jobs:
         run: flutter test --no-pub --reporter compact test/services/goalvdline_b61_owner_setup_test.dart
       - name: High handicap alternatives with real quoted prices
         run: flutter test --no-pub --reporter compact test/services/smartbet_high_handicap_alternative_service_test.dart
+      - name: League reliability ranking read-only UI
+        run: flutter test --no-pub --reporter compact test/widgets/smartbet_league_reliability_ranking_panel_test.dart
       - name: Full Flutter regression
         run: flutter test --no-pub --reporter compact
