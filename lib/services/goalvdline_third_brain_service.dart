@@ -94,7 +94,10 @@ class GoalVdLineThirdBrainService {
     // Sensibilità: +/-15% sulla stima di entrambi gli attacchi.
     // Non è un intervallo statistico di confidenza.
     final lower = simulate(h * 0.85, a * 0.85);
-    final upper = simulate(h * 1.15, a * 1.15);
+    final upper = simulate(
+      (h * 1.15).clamp(0.0, 6.0).toDouble(),
+      (a * 1.15).clamp(0.0, 6.0).toDouble(),
+    );
 
     // Mercati ordinati solo dalle probabilità sportive calcolate.
     // Non trasformare una probabilità alta in una selezione automatica.
