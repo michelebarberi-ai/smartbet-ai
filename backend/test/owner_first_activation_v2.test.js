@@ -202,3 +202,37 @@ test('B61: setup routes are fail-closed and never accept a client email field',
     await new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
   }
 });
+
+
+test('B61: email recovery requires BOTH the owner password and fresh 8-digit code',
+    async () => {
+  let now=1800000000000;
+  const sent=[];
+  const auth=createOwnerAccessV2({
+    env,store:new FakeOwnerStore(),clock:()=>now,
+    emailSender:async data=>sent.push(data),
+  });
+  assert.equal((await auth.requestEmail()).status,202);
+  const ticket=(await auth.verifyEmail(sent[0].code)).ticket;
+  const pair=await auth.startTotp(ticket);
+  const seed=decodeBase32(pair.manualKey);
+  const code=totpForStep(seed,Math.floor(now/30000));
+  assert.equal((await auth.finishEnrollment(ticket,password,code)).status,200);
+
+  assert.equal((await auth.requestRecovery('wrong password')).status,202);
+  assert.equal(sent.length,1);
+  // Global per-account 1-minute cooldown prevents email flooding.
+  assert.equal((await auth.requestRecovery(password)).status,429);
+  now+=61000;
+  assert.equal((await auth.requestRecovery(password)).status,202);
+  assert.equal(sent.length,2);
+  assert.equal(sent[1].purpose,'recovery');
+  assert.equal(sent[1].to,ownerEmail);
+  assert.match(sent[1].code,/^\d{8}$/);
+  assert.equal((await auth.loginByRecovery('wrong password',sent[1].code)).status,401);
+  const logged=await auth.loginByRecovery(password,sent[1].code);
+  assert.equal(logged.status,200);
+  assert.equal(logged.scope,'owner-staging-login-only');
+  assert.equal((await auth.session(logged.token)),true);
+  assert.equal((await auth.loginByRecovery(password,sent[1].code)).status,401);
+});
