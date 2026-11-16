@@ -64,11 +64,26 @@ class MatchDossierBuilder {
         ? backtestCurrentSeasonMinMatches
         : 3;
 
+    // B60: youth teams have their own youth leagues; filtering those out
+    // previously made Diego unavailable for U21/U19 fixtures.
+    final youthLabel = RegExp(r'\\bU(?:17|18|19|20|21|23)\\b',
+      caseSensitive: false);
+    final youthFixture = match.leagueType.toLowerCase() == 'youth' ||
+        (youthLabel.hasMatch(match.homeTeam) &&
+            youthLabel.hasMatch(match.awayTeam));
+    // National teams do not play domestic league seasons. Only their same
+    // official competition may provide an alternative pre-match sample.
+    final nationalCompetitionId =
+        match.isNational && !match.isFriendly ? match.leagueId : 0;
+
     final homeFuture = _resolver.resolveTeam(
       teamId: match.homeTeamId,
       teamName: match.homeTeam,
       referenceDate: referenceDate,
       minCurrentSeasonMatches: resolverMinCurrentSeasonMatches,
+      allowYouthLeagues: youthFixture,
+      fallbackCompetitionId: nationalCompetitionId,
+      fallbackCompetitionName: match.league,
     );
 
     final awayFuture = _resolver.resolveTeam(
@@ -76,6 +91,9 @@ class MatchDossierBuilder {
       teamName: match.awayTeam,
       referenceDate: referenceDate,
       minCurrentSeasonMatches: resolverMinCurrentSeasonMatches,
+      allowYouthLeagues: youthFixture,
+      fallbackCompetitionId: nationalCompetitionId,
+      fallbackCompetitionName: match.league,
     );
 
     final home = await homeFuture;
