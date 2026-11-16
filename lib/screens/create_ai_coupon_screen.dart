@@ -15,6 +15,7 @@ import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
 import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
+import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_reliability_service.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
@@ -74,6 +75,7 @@ class _CouponPick {
   final bool adaptive;
   final String auditorStatus;
   final DualEngineAnalysis? dualAnalysis;
+  final SmartBetHighHandicapAlternative? highHandicapAlternative;
 
   const _CouponPick({
     required this.match,
@@ -89,6 +91,7 @@ class _CouponPick {
     required this.adaptive,
     this.auditorStatus = 'NON VERIFICATO',
     this.dualAnalysis,
+    this.highHandicapAlternative,
   });
 
   int get originalProbability => rawProbability ?? probability;
@@ -117,6 +120,7 @@ class _CouponPick {
       adaptive: adaptive,
       auditorStatus: auditorStatus,
       dualAnalysis: value,
+      highHandicapAlternative: highHandicapAlternative,
     );
   }
 }
@@ -561,6 +565,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         expectedValue: expectedValue,
         rankScore: _rankScore(probability: probability, smartScore: smartScore),
         adaptive: adaptive,
+        highHandicapAlternative: SmartBetHighHandicapAlternativeService.find(
+          primaryMarket: market,
+          analysis: preliminary.analysis,
+          odds: odds,
+          minimumProbability: math.max(65, _minimumCouponProbability),
+          minimumOdd: _minimumOdd,
+        ),
       );
     }
 
@@ -643,6 +654,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       ),
       adaptive: false,
       auditorStatus: 'NON VERIFICATO',
+      highHandicapAlternative: SmartBetHighHandicapAlternativeService.find(
+        primaryMarket: market,
+        analysis: analysis,
+        odds: odds,
+        minimumProbability: math.max(65, _minimumCouponProbability),
+        minimumOdd: _minimumOdd,
+      ),
     );
   }
 
@@ -674,6 +692,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       market: pick.market,
       probability: pick.probability,
       rawProbability: pick.rawProbability,
+      highHandicapAlternative: pick.highHandicapAlternative,
       odd: pick.odd,
       bookmaker: pick.bookmaker,
       edge: pick.edge,
@@ -1713,6 +1732,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               market: pick.market,
               probability: pick.probability,
               rawProbability: pick.rawProbability,
+      highHandicapAlternative: pick.highHandicapAlternative,
               odd: pick.odd,
               bookmaker: pick.bookmaker,
               edge: pick.edge,
@@ -1763,6 +1783,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               market: pick.market,
               probability: pick.probability,
               rawProbability: pick.rawProbability,
+      highHandicapAlternative: pick.highHandicapAlternative,
               odd: pick.odd,
               bookmaker: pick.bookmaker,
               edge: pick.edge,
@@ -1888,6 +1909,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   market: pick.market,
                   probability: pick.probability,
                   rawProbability: pick.rawProbability,
+      highHandicapAlternative: pick.highHandicapAlternative,
                   odd: pick.odd,
                   bookmaker: pick.bookmaker,
                   edge: pick.edge,
@@ -4885,6 +4907,56 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ],
             ),
           ),
+          if (SmartBetHighHandicapAlternativeService.needsAlternative(
+            item.market,
+          )) ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('b62-high-handicap-alternative-coupon'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'HANDICAP ELEVATO · SECONDA SCELTA',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  if (item.highHandicapAlternative != null)
+                    Text(
+                      '${item.highHandicapAlternative!.market} · '
+                      '${item.highHandicapAlternative!.probability}% · '
+                      'quota ${item.highHandicapAlternative!.odd.toStringAsFixed(2)} · '
+                      '${item.highHandicapAlternative!.bookmaker}'
+                      '${item.highHandicapAlternative!.withReservation ? ' · CON RISERVA' : ''}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      'Nessun altro mercato con quota reale >1,20, '
+                      'probabilità sufficiente e Auditor superato.',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Alternativa informativa: non sostituisce automaticamente '
+                    'la selezione della schedina.',
+                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (item.dualAnalysis != null) ...[
             const SizedBox(height: 12),
             DualEngineSummary(analysis: item.dualAnalysis!),
