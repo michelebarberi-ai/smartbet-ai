@@ -16,9 +16,10 @@ function createOwnerRecoverySender({env = process.env, fetchImpl = fetch} = {}) 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(from) ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return null;
 
-  return async ({to: recipient, code, expiresInMinutes}) => {
+  return async ({to: recipient, code, expiresInMinutes, purpose = 'recovery'}) => {
     if (recipient !== to || !/^\d{8}$/.test(code) ||
-        expiresInMinutes !== 10) {
+        expiresInMinutes !== 10 ||
+        !['activation', 'recovery'].includes(purpose)) {
       throw new Error('Invalid owner recovery dispatch');
     }
     const response = await fetchImpl('https://api.resend.com/emails', {
@@ -31,11 +32,15 @@ function createOwnerRecoverySender({env = process.env, fetchImpl = fetch} = {}) 
       },
       body: JSON.stringify({
         from, to: [recipient],
-        subject: 'GoalVdLine: codice di recupero accesso',
-        text: 'Hai richiesto un accesso di emergenza a GoalVdLine. ' +
+        subject: purpose === 'activation'
+          ? 'GoalVdLine: verifica la prima attivazione'
+          : 'GoalVdLine: codice di recupero accesso',
+        text: (purpose === 'activation'
+          ? 'Hai richiesto la prima attivazione proprietario GoalVdLine. '
+          : 'Hai richiesto un accesso di emergenza a GoalVdLine. ') +
           'Il codice monouso è: ' + code + '\n' +
           'Scade tra 10 minuti. Se non hai richiesto questo codice, ' +
-          'ignora questa email. La tua password non cambia.',
+          'ignora questa email.',
       }),
       signal: AbortSignal.timeout(7000),
     });
