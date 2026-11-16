@@ -103,10 +103,10 @@ class GoalVdLineThirdBrainService {
         GoalVdLineThirdBrainMarket(
           market: entry.key,
           probability: entry.value,
-          lowerScenario: math.min(
-            lower.probabilityFor(entry.key), upper.probabilityFor(entry.key)),
-          upperScenario: math.max(
-            lower.probabilityFor(entry.key), upper.probabilityFor(entry.key)),
+          lowerScenario: math.min(entry.value, math.min(
+            lower.probabilityFor(entry.key), upper.probabilityFor(entry.key))),
+          upperScenario: math.max(entry.value, math.max(
+            lower.probabilityFor(entry.key), upper.probabilityFor(entry.key))),
         ),
     ]..sort((x, y) {
         final p = y.probability.compareTo(x.probability);
