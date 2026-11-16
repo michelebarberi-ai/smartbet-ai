@@ -82,6 +82,14 @@ void main() {
     expect(report.dataConfidence, 72);
   });
 
+  test('B63: high expected goals keep sensitivity within valid limits', () {
+    final report = service.evaluate(
+      smartBet: _smart(score: 90, home: 5.9, away: 5.9, confidence: 65),
+    );
+    expect(report, isNotNull);
+    expect(report!.forMarket('UNDER 5.5'), isNotNull);
+  });
+
   test('B63: invalid expected goals are rejected rather than estimated', () {
     final report = service.evaluate(
       smartBet: _smart(score: 90, home: double.nan, away: 2),
