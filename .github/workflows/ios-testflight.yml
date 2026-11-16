@@ -15,6 +15,7 @@ on:
       - release/b59-testflight
       - release/b60-testflight
       - release/b61-testflight
+      - release/b62-testflight
 
 jobs:
   build-ios:
@@ -28,14 +29,16 @@ jobs:
        github.ref != 'refs/heads/release/b49-testflight' &&
        github.ref != 'refs/heads/release/b59-testflight' &&
        github.ref != 'refs/heads/release/b60-testflight' &&
-       github.ref != 'refs/heads/release/b61-testflight') ||
+       github.ref != 'refs/heads/release/b61-testflight' &&
+       github.ref != 'refs/heads/release/b62-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
        github.ref != 'refs/heads/release/b49-testflight' &&
        github.ref != 'refs/heads/release/b59-testflight' &&
        github.ref != 'refs/heads/release/b60-testflight' &&
-       github.ref != 'refs/heads/release/b61-testflight') ||
+       github.ref != 'refs/heads/release/b61-testflight' &&
+       github.ref != 'refs/heads/release/b62-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -50,7 +53,9 @@ jobs:
         (github.ref == 'refs/heads/release/b60-testflight' &&
          github.event.head_commit.message == 'release(build60): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b61-testflight' &&
-         github.event.head_commit.message == 'release(build61): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build61): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b62-testflight' &&
+         github.event.head_commit.message == 'release(build62): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -150,6 +155,13 @@ jobs:
             test/services/goalvdline_b61_owner_setup_test.dart \
             test/services/goalvdline_owner_session_client_test.dart \
             test/services/goalvdline_b57_public_private_consensus_test.dart
+
+      # B62: run full regression before preparing signing credentials.
+      - name: B62 full Flutter regression before signing
+        if: github.ref == 'refs/heads/release/b62-testflight'
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter test --no-pub --reporter compact
 
       - name: Prepare App Store Connect API key
         env:
@@ -327,6 +339,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="61"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b62-testflight" ]]; then
+            grep -qx 'version: 1.2.5+62' pubspec.yaml || {
+              echo "ERROR: Build 62 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="62"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
