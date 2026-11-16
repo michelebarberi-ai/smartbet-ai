@@ -24,6 +24,7 @@ import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/goalvdline_three_brains_expansion.dart';
 import '../widgets/goalvdline_on_demand_coupon_panel.dart';
 import '../widgets/goalvdline_three_coupon_viewer.dart';
 import '../services/goalvdline_market_relation_service.dart';
@@ -5024,6 +5025,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ),
           ],
+
+          const SizedBox(height: 12),
+          GoalVdLineThreeBrainsExpansion(
+            key: ValueKey('coupon-three-brains-${item.match.fixtureId}'),
+            fixtureId: item.match.fixtureId,
+            smartBet: item.analysis,
+            dual: item.dualAnalysis,
+            selectedMarket: item.market,
+            selectedProbability: item.probability,
+          ),
 
           TeamStatsExpansion(match: item.match),
 
