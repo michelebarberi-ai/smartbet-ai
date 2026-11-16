@@ -593,7 +593,6 @@ class SmartBetAiService {
       try {
         odds = await _oddsService.getMatchWinnerOdds(
           fixtureId: match.fixtureId,
-          bookmakerName: 'Sisal',
         );
       } catch (error) {
         print('SMARTBET: quote non disponibili, analisi conservata: $error');
@@ -1401,8 +1400,8 @@ $finalVerdict
       shouldBet: false,
       stakeRecommendation: 'Nessuna puntata automatica.',
       explanation:
-          'SMARTBET AI — PRE-ANALISI LOCALE\\n'
-          'Previsione sportiva preliminare, non validata dal backend.\\n'
+          'SMARTBET AI — PRE-ANALISI LOCALE\n'
+          'Previsione sportiva preliminare, non validata dal backend.\n'
           'Motivo: $reason',
     );
   }
