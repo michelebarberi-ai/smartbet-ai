@@ -1,0 +1,37 @@
+name: GoalVdLine B60 Diego data-readiness QA
+
+on:
+  push:
+    branches:
+      - fix/b60-diego-diagnostics-retry
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b60-diego-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  b60-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter stable
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Diego data readiness regression
+        run: |
+          flutter test --no-pub --reporter compact test/services/goalvdline_b60_diego_data_readiness_test.dart
+          flutter test --no-pub --reporter compact test/services/goalvdline_b60_data_source_coverage_test.dart
+          flutter test --no-pub --reporter compact test/services/diego_ai_odds_blind_test.dart
+          flutter test --no-pub --reporter compact test/services/dual_engine_sports_comparison_test.dart
+          flutter test --no-pub --reporter compact test/services/dual_engine_summary_preview_test.dart
+      - name: Complete Flutter regression
+        run: flutter test --no-pub --reporter compact

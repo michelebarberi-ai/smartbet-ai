@@ -124,11 +124,14 @@ class DualEngineAnalysis {
   final AnalysisResult smartBet;
   final DiegoAiAnalysis? diego;
   final DualEngineComparison comparison;
+  /// Explains why Diego has no statistical forecast; never fakes a probability.
+  final String? diegoUnavailableReason;
 
   const DualEngineAnalysis({
     required this.smartBet,
     required this.diego,
     required this.comparison,
+    this.diegoUnavailableReason,
   });
 }
 
@@ -157,6 +160,12 @@ class _EngineMarketChoice {
 /// Il confronto avviene soltanto dopo le due scelte.
 ///
 /// Nessun motore modifica probabilità o decisioni dell'altro.
+class _DiegoAttempt {
+  final DiegoAiAnalysis? analysis;
+  final String? unavailableReason;
+  const _DiegoAttempt(this.analysis, this.unavailableReason);
+}
+
 class DualEngineAnalysisService {
   final SmartBetAiService _smartBetService;
   final DiegoAiService _diegoService;
@@ -184,9 +193,13 @@ class DualEngineAnalysisService {
 
     final smartBet = values[0] as AnalysisResult;
 
-    final diego = values[1] as DiegoAiAnalysis?;
+    final attempt = values[1] as _DiegoAttempt;
 
-    return _build(smartBet: smartBet, diego: diego);
+    return _build(
+      smartBet: smartBet,
+      diego: attempt.analysis,
+      diegoUnavailableReason: attempt.unavailableReason,
+    );
   }
 
   /// Da usare quando SmartBet è già stato calcolato
@@ -203,11 +216,12 @@ class DualEngineAnalysisService {
     int? smartBetProbability,
     double? smartBetOdd,
   }) async {
-    final diego = await _safeDiego(match);
+    final attempt = await _safeDiego(match);
 
     return _build(
       smartBet: smartBet,
-      diego: diego,
+      diego: attempt.analysis,
+      diegoUnavailableReason: attempt.unavailableReason,
       smartBetMarketOverride: smartBetMarket,
       smartBetProbabilityPercent: smartBetProbability,
       smartBetOddOverride: smartBetOdd,
@@ -232,21 +246,45 @@ class DualEngineAnalysisService {
     );
   }
 
-  Future<DiegoAiAnalysis?> _safeDiego(MatchModel match) async {
+  Future<_DiegoAttempt> _safeDiego(MatchModel match) async {
+    if (match.fixtureId <= 0 || !match.hasTeamIds) {
+      return const _DiegoAttempt(
+        null,
+        'Mancano gli identificativi delle squadre o della partita. '
+        'Diego non puo elaborare un dossier.',
+      );
+    }
+    if (DateTime.tryParse(match.date) == null) {
+      return const _DiegoAttempt(
+        null,
+        'Data della partita non valida: dossier Diego non disponibile.',
+      );
+    }
     try {
-      return await _diegoService.analyze(match);
+      final analysis = await _diegoService.analyze(match);
+      if (analysis == null) {
+        return const _DiegoAttempt(
+          null,
+          'Dati storici di una o entrambe le squadre insufficienti '
+          'o non disponibili dal provider. Diego non inventa probabilita.',
+        );
+      }
+      return _DiegoAttempt(analysis, null);
     } catch (error, stackTrace) {
       debugPrint('DIEGOAI ANALYSIS ERROR: $error');
-
       debugPrintStack(stackTrace: stackTrace);
-
-      return null;
+      return const _DiegoAttempt(
+        null,
+        'Errore temporaneo del servizio dati o della simulazione Diego. '
+        'Riprova aggiornando i risultati.',
+      );
     }
   }
 
   DualEngineAnalysis _build({
     required AnalysisResult smartBet,
     required DiegoAiAnalysis? diego,
+    String? diegoUnavailableReason,
     String? smartBetMarketOverride,
     int? smartBetProbabilityPercent,
     double? smartBetOddOverride,
@@ -313,6 +351,8 @@ class DualEngineAnalysisService {
           diegoMarket: 'N/D',
           smartBetProbability: smartChoice.probability,
         ),
+        diegoUnavailableReason: diegoUnavailableReason ??
+          'Diego non ha fornito un dossier statistico confrontabile.',
       );
     }
 

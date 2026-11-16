@@ -180,7 +180,12 @@ class TeamDataResolver {
   // CACHE
   // ============================================================
 
-  static final Map<String, ResolvedTeamData?> _cache = {};
+  static final Map<String, ResolvedTeamData> _cache = {};
+  // B60: Do not keep a failed lookup forever. Short-lived negative cache
+  // avoids repeatedly hammering the upstream on an unsupported competition,
+  // while letting transient provider outages recover on the next refresh.
+  static final Map<String, DateTime> _negativeCache = {};
+  static const Duration _negativeCacheDuration = Duration(minutes: 3);
 
   static final Map<String, ResolvedTeamLeague?> _leagueOnlyCache = {};
 
@@ -193,13 +198,26 @@ class TeamDataResolver {
     required String teamName,
     required DateTime referenceDate,
     int minCurrentSeasonMatches = 3,
+    bool allowYouthLeagues = false,
+    int fallbackCompetitionId = 0,
+    String fallbackCompetitionName = '',
   }) async {
     final referenceYear = referenceDate.year;
     final referenceKey = referenceDate.toUtc().toIso8601String();
 
     final cacheKey =
         '$teamId|${teamName.toLowerCase()}|$referenceKey'
-        '|minCurrent=$minCurrentSeasonMatches';
+        '|minCurrent=$minCurrentSeasonMatches'
+        '|youth=$allowYouthLeagues|fallback=$fallbackCompetitionId';
+
+    final now = DateTime.now().toUtc();
+    final missedAt = _negativeCache[cacheKey];
+    if (missedAt != null) {
+      if (now.difference(missedAt) < _negativeCacheDuration) {
+        return null;
+      }
+      _negativeCache.remove(cacheKey);
+    }
 
     if (_cache.containsKey(cacheKey)) {
       print('');
@@ -225,11 +243,31 @@ class TeamDataResolver {
       referenceYear: referenceYear,
       referenceDate: referenceDate,
       minCurrentSeasonMatches: minCurrentSeasonMatches,
+      allowYouthLeagues: allowYouthLeagues,
     );
 
-    _cache[cacheKey] = resolved;
+    // Only verified pre-kickoff results from the SAME named international
+    // tournament, never friendly or unrelated club fixtures. Insufficient
+    // coverage still returns null; no fabricated probabilities.
+    final finalResult = resolved ??
+        (fallbackCompetitionId > 0
+            ? await _resolveCompetitionFallback(
+                teamId: teamId,
+                teamName: teamName,
+                referenceDate: referenceDate,
+                competitionId: fallbackCompetitionId,
+                competitionName: fallbackCompetitionName,
+              )
+            : null);
 
-    return resolved;
+    if (finalResult == null) {
+      _negativeCache[cacheKey] = DateTime.now().toUtc();
+    } else {
+      _negativeCache.remove(cacheKey);
+      _cache[cacheKey] = finalResult;
+    }
+
+    return finalResult;
   }
 
   // ============================================================
@@ -348,6 +386,7 @@ class TeamDataResolver {
     required int referenceYear,
     required DateTime referenceDate,
     required int minCurrentSeasonMatches,
+    bool allowYouthLeagues = false,
   }) async {
     final seasons = [referenceYear, referenceYear - 1];
 
@@ -388,7 +427,11 @@ class TeamDataResolver {
           continue;
         }
 
-        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+        if (!_isMainLeague(
+          leagueName: leagueName,
+          leagueType: leagueType,
+          allowYouthLeagues: allowYouthLeagues,
+        )) {
           continue;
         }
 
@@ -454,7 +497,11 @@ class TeamDataResolver {
           continue;
         }
 
-        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+        if (!_isMainLeague(
+          leagueName: leagueName,
+          leagueType: leagueType,
+          allowYouthLeagues: allowYouthLeagues,
+        )) {
           print('');
           print('COMPETIZIONE IGNORATA PER STATISTICHE');
           print('League: $leagueName');
@@ -666,11 +713,72 @@ class TeamDataResolver {
     return null;
   }
 
+  /// National sides often have no domestic league: for a verified
+  /// competitive international fixture, check its EXACT competition ID.
+  /// Only ended fixtures strictly before the match are counted.
+  /// Cap confidence because national-team rosters change over time.
+  Future<ResolvedTeamData?> _resolveCompetitionFallback({
+    required int teamId,
+    required String teamName,
+    required DateTime referenceDate,
+    required int competitionId,
+    required String competitionName,
+  }) async {
+    if (competitionId <= 0) return null;
+    final year = referenceDate.year;
+    // Two controlled attempts: current season and last biennial edition.
+    for (final season in <int>{year, year - 2}) {
+      final history = await _historicalService.getHistoricalData(
+        teamId: teamId,
+        teamName: teamName,
+        season: season,
+        leagueId: competitionId,
+        leagueName: competitionName,
+        referenceDate: referenceDate,
+      );
+      // No weak two-match extrapolations or artificial average goals.
+      if (history == null || history.matchesPlayed < 5) continue;
+      return ResolvedTeamData(
+        teamId: teamId,
+        teamName: teamName,
+        sourceTeamId: history.originalTeamId,
+        sourceTeamName: history.originalTeamName,
+        dataSource: 'Verified same-competition national results (limited)',
+        currentLeagueId: competitionId,
+        currentLeagueName: competitionName,
+        currentLeagueSeason: year,
+        season: history.season,
+        leagueId: competitionId,
+        leagueName: competitionName,
+        matchesPlayed: history.matchesPlayed,
+        wins: history.wins,
+        draws: history.draws,
+        losses: history.losses,
+        goalsFor: history.goalsFor,
+        goalsAgainst: history.goalsAgainst,
+        homeMatches: history.homeMatches,
+        homeWins: history.homeWins,
+        homeDraws: history.homeDraws,
+        homeLosses: history.homeLosses,
+        awayMatches: history.awayMatches,
+        awayWins: history.awayWins,
+        awayDraws: history.awayDraws,
+        awayLosses: history.awayLosses,
+        confidence: history.matchesPlayed >= 8 ? 0.55 : 0.45,
+      );
+    }
+    return null;
+  }
+
   // ============================================================
   // CONTROLLO CAMPIONATO PRINCIPALE
   // ============================================================
 
-  bool _isMainLeague({required String leagueName, required String leagueType}) {
+  bool _isMainLeague({
+    required String leagueName,
+    required String leagueType,
+    bool allowYouthLeagues = false,
+  }) {
     final type = leagueType.toLowerCase().trim();
 
     final name = leagueName.toLowerCase().trim();
@@ -683,7 +791,7 @@ class TeamDataResolver {
       return false;
     }
 
-    if (_looksLikeYouthCompetition(name)) {
+    if (_looksLikeYouthCompetition(name) && !allowYouthLeagues) {
       return false;
     }
 
@@ -920,6 +1028,7 @@ class TeamDataResolver {
 
   static void clearCache() {
     _cache.clear();
+    _negativeCache.clear();
     _leagueOnlyCache.clear();
 
     HistoricalTeamService.clearCache();
