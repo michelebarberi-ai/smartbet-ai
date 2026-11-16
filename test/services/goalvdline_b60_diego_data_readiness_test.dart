@@ -13,8 +13,9 @@ import 'package:smartbet_ai_new/widgets/dual_engine_summary.dart';
 class _NoDossierDiego extends Fake implements DiegoAiService {
   @override
   Future<DiegoAiAnalysis?> analyze(
-    MatchModel match, {int simulations = 20000},
-  ) async => null;
+    MatchModel match, {
+    int simulations = 20000,
+  }) async => null;
 }
 
 class _UnusedSmartBet extends Fake implements SmartBetAiService {}
