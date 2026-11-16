@@ -43,6 +43,33 @@ void main() {
     expect(result.expectedValue, 0);
   });
 
+  test('B62: quotazioni 1.21-1.24 usano soglia condivisa anche nel learning', () {
+    for (final odd in [1.21, 1.24, 1.25]) {
+      final result = SmartBetDailyLearningChoiceService.evaluate(
+        session: _emptyGate,
+        market: 'GOAL',
+        fixtureId: 123,
+        originalPercent: 75,
+        odd: odd,
+      );
+      expect(result.percent, 75); // Gate non validato: nessuna correzione.
+      expect(result.edge, closeTo(0.75 - 1.0 / odd, 0.000001));
+      expect(result.expectedValue, closeTo(0.75 * odd - 1.0, 0.000001));
+    }
+    for (final odd in [1.19, 1.20, double.nan, double.infinity]) {
+      final result = SmartBetDailyLearningChoiceService.evaluate(
+        session: _emptyGate,
+        market: 'GOAL',
+        fixtureId: 123,
+        originalPercent: 75,
+        odd: odd,
+      );
+      expect(result.edge, 0.0);
+      expect(result.expectedValue, 0.0);
+      expect(result.applied, isFalse);
+    }
+  });
+
   test('mercati rimborsabili non calibrati', () {
     final result = SmartBetDailyLearningChoiceService.evaluate(
       session: _emptyGate, market: 'DNB CASA', fixtureId: 123,
