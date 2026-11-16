@@ -198,13 +198,17 @@ class TeamDataResolver {
     required String teamName,
     required DateTime referenceDate,
     int minCurrentSeasonMatches = 3,
+    bool allowYouthLeagues = false,
+    int fallbackCompetitionId = 0,
+    String fallbackCompetitionName = '',
   }) async {
     final referenceYear = referenceDate.year;
     final referenceKey = referenceDate.toUtc().toIso8601String();
 
     final cacheKey =
         '$teamId|${teamName.toLowerCase()}|$referenceKey'
-        '|minCurrent=$minCurrentSeasonMatches';
+        '|minCurrent=$minCurrentSeasonMatches'
+        '|youth=$allowYouthLeagues|fallback=$fallbackCompetitionId';
 
     final now = DateTime.now().toUtc();
     final missedAt = _negativeCache[cacheKey];
@@ -239,16 +243,31 @@ class TeamDataResolver {
       referenceYear: referenceYear,
       referenceDate: referenceDate,
       minCurrentSeasonMatches: minCurrentSeasonMatches,
+      allowYouthLeagues: allowYouthLeagues,
     );
 
-    if (resolved == null) {
+    // Only verified pre-kickoff results from the SAME named international
+    // tournament, never friendly or unrelated club fixtures. Insufficient
+    // coverage still returns null; no fabricated probabilities.
+    final finalResult = resolved ??
+        (fallbackCompetitionId > 0
+            ? await _resolveCompetitionFallback(
+                teamId: teamId,
+                teamName: teamName,
+                referenceDate: referenceDate,
+                competitionId: fallbackCompetitionId,
+                competitionName: fallbackCompetitionName,
+              )
+            : null);
+
+    if (finalResult == null) {
       _negativeCache[cacheKey] = DateTime.now().toUtc();
     } else {
       _negativeCache.remove(cacheKey);
-      _cache[cacheKey] = resolved;
+      _cache[cacheKey] = finalResult;
     }
 
-    return resolved;
+    return finalResult;
   }
 
   // ============================================================
@@ -367,6 +386,7 @@ class TeamDataResolver {
     required int referenceYear,
     required DateTime referenceDate,
     required int minCurrentSeasonMatches,
+    bool allowYouthLeagues = false,
   }) async {
     final seasons = [referenceYear, referenceYear - 1];
 
@@ -407,7 +427,11 @@ class TeamDataResolver {
           continue;
         }
 
-        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+        if (!_isMainLeague(
+          leagueName: leagueName,
+          leagueType: leagueType,
+          allowYouthLeagues: allowYouthLeagues,
+        )) {
           continue;
         }
 
@@ -473,7 +497,11 @@ class TeamDataResolver {
           continue;
         }
 
-        if (!_isMainLeague(leagueName: leagueName, leagueType: leagueType)) {
+        if (!_isMainLeague(
+          leagueName: leagueName,
+          leagueType: leagueType,
+          allowYouthLeagues: allowYouthLeagues,
+        )) {
           print('');
           print('COMPETIZIONE IGNORATA PER STATISTICHE');
           print('League: $leagueName');
@@ -689,7 +717,11 @@ class TeamDataResolver {
   // CONTROLLO CAMPIONATO PRINCIPALE
   // ============================================================
 
-  bool _isMainLeague({required String leagueName, required String leagueType}) {
+  bool _isMainLeague({
+    required String leagueName,
+    required String leagueType,
+    bool allowYouthLeagues = false,
+  }) {
     final type = leagueType.toLowerCase().trim();
 
     final name = leagueName.toLowerCase().trim();
@@ -702,7 +734,7 @@ class TeamDataResolver {
       return false;
     }
 
-    if (_looksLikeYouthCompetition(name)) {
+    if (_looksLikeYouthCompetition(name) && !allowYouthLeagues) {
       return false;
     }
 
