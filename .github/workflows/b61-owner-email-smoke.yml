@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   owner-email-smoke:
-    if: github.event.head_commit.message == 'test(b61): verify Resend owner email'
+    if: "${{ github.event.head_commit.message == 'test(b61): verify Resend owner email' }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
