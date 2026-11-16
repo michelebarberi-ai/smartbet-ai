@@ -69,6 +69,15 @@ class _GoalVdLineOwnerSetupScreenState
     });
   }
 
+  void _retryServerCheck() {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _message = 'Nuova verifica del server in corso...';
+    });
+    _check();
+  }
+
   Future<void> _request() async {
     if (_working) return;
     setState(() => _working = true);
@@ -169,7 +178,7 @@ class _GoalVdLineOwnerSetupScreenState
               style: const TextStyle(color: Colors.lightGreenAccent),
             ),
           ),
-          if (_stage == _OwnerSetupStage.unavailable)
+          if (_stage == _OwnerSetupStage.unavailable) ...[
             const Text(
               'Il server deve avere prima una casella verificata, '
               'il database protetto e le chiavi segrete configurate. '
@@ -178,6 +187,14 @@ class _GoalVdLineOwnerSetupScreenState
               key: Key('b61-setup-not-ready'),
               style: TextStyle(color: Colors.white60),
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('b62-retry-owner-status'),
+              onPressed: _working ? null : _retryServerCheck,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Riprova verifica server'),
+            ),
+          ],
           if (_stage == _OwnerSetupStage.requestEmail)
             FilledButton.icon(
               key: const Key('b61-send-email-code'),
