@@ -135,6 +135,18 @@ class _GoalVdLineThreeBrainsExpansionState
                   style: TextStyle(color: Colors.amberAccent, fontSize: 10),
                 ),
               ),
+            const SizedBox(height: 10),
+            Text(
+              '1X2: 1 ${_pct(simulation.forMarket('1')!.probability)}'
+              ' · X ${_pct(simulation.forMarket('X')!.probability)}'
+              ' · 2 ${_pct(simulation.forMarket('2')!.probability)}',
+              style: const TextStyle(color: Colors.white70, fontSize: 10.5),
+            ),
+            Text(
+              'Over 2.5 ${_pct(simulation.forMarket('OVER 2.5')!.probability)}'
+              ' · Goal ${_pct(simulation.forMarket('GOAL')!.probability)}',
+              style: const TextStyle(color: Colors.white70, fontSize: 10.5),
+            ),
             const SizedBox(height: 12),
             const Text('MERCATI ORDINATI PER PROBABILITÀ SPORTIVA',
               style: TextStyle(color: Colors.white70,
