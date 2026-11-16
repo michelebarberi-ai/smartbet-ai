@@ -10,6 +10,7 @@ import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/smartbet_market_probability_service.dart';
+import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
 import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_refundable_market_candidate_service.dart';
@@ -80,6 +81,7 @@ class _CombinationCandidate {
   final String auditorStatus;
   final List<_FamilyOptionDetail> familyOptions;
   final DualEngineAnalysis? dualAnalysis;
+  final SmartBetHighHandicapAlternative? highHandicapAlternative;
 
   const _CombinationCandidate({
     required this.match,
@@ -92,6 +94,7 @@ class _CombinationCandidate {
     this.auditorStatus = 'NON VERIFICATO',
     this.familyOptions = const [],
     this.dualAnalysis,
+    this.highHandicapAlternative,
   });
 
   int? get reliabilityScore => SmartBetReliabilityService.score(
@@ -112,6 +115,7 @@ class _CombinationCandidate {
       auditorStatus: auditorStatus,
       familyOptions: familyOptions,
       dualAnalysis: value,
+      highHandicapAlternative: highHandicapAlternative,
     );
   }
 }
@@ -497,6 +501,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       odd: selectedOdd,
       bookmaker: selectedBookmaker,
       familyOptions: familyOptions,
+      highHandicapAlternative: SmartBetHighHandicapAlternativeService.find(
+        primaryMarket: selectedMarket,
+        analysis: candidate.analysis,
+        odds: marketOdds is FixtureMarketOdds ? marketOdds : null,
+        minimumProbability: math.max(65, _minimumMarketProbability),
+        minimumOdd: _minimumOdd,
+      ),
     );
   }
 
@@ -2597,6 +2608,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 probability: multiPick.probability,
                 odd: multiPick.odd,
                 bookmaker: multiPick.bookmaker,
+                highHandicapAlternative: SmartBetHighHandicapAlternativeService.find(
+                  primaryMarket: multiPick.market,
+                  analysis: item.analysis,
+                  odds: marketOdds,
+                  minimumProbability: math.max(65, _minimumMarketProbability),
+                  minimumOdd: _minimumOdd,
+                ),
                 familyOptions: [
                   for (final option in multiPick.options)
                     _FamilyOptionDetail(
@@ -2660,6 +2678,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 odd: bestOdd.odd,
                 bookmaker: bestOdd.bookmakerName,
                 familyOptions: item.familyOptions,
+                highHandicapAlternative: item.highHandicapAlternative,
               ),
             );
           }
@@ -2711,6 +2730,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               bookmaker: pick.bookmaker,
               auditorStatus: pick.auditorStatus,
               familyOptions: pick.familyOptions,
+              highHandicapAlternative: pick.highHandicapAlternative,
               dualAnalysis: pick.dualAnalysis,
             ),
           );
@@ -2804,6 +2824,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 bookmaker: item.bookmaker,
                 auditorStatus: audit.isDoubt ? 'CON RISERVA' : 'CONFERMATA',
                 familyOptions: item.familyOptions,
+                highHandicapAlternative: item.highHandicapAlternative,
               );
             }),
           );
@@ -4314,6 +4335,59 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ],
 
           TeamStatsExpansion(match: item.match),
+
+          if (SmartBetHighHandicapAlternativeService.needsAlternative(
+            item.market,
+          )) ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('b62-high-handicap-alternative-combinations'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'HANDICAP ELEVATO · SECONDA SCELTA',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  if (item.highHandicapAlternative != null)
+                    Text(
+                      '${item.highHandicapAlternative!.market} · '
+                      '${item.highHandicapAlternative!.probability}% · '
+                      'quota ${item.highHandicapAlternative!.odd.toStringAsFixed(2)} · '
+                      '${item.highHandicapAlternative!.bookmaker}'
+                      '${item.highHandicapAlternative!.withReservation ? ' · CON RISERVA' : ''}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      'Nessun altro mercato con quota reale >1,20, '
+                      'probabilità sufficiente e Auditor superato.',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'La seconda scelta è informativa: non cambia il sistema '
+                    'o la schedina già composta.',
+                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           if (isComboChance) _comboChanceSection(result, match.fixtureId),
 

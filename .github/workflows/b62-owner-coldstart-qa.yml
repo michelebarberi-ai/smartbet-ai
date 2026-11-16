@@ -1,0 +1,39 @@
+name: GoalVdLine B62 owner cold-start QA
+
+# Isolated correction branch. No Render deploy, TestFlight upload,
+# database migration, outbound email or paid services.
+on:
+  push:
+    branches:
+      - fix/b62-owner-coldstart-readiness
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b62-coldstart-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-b62:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter stable
+        shell: bash
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Owner readiness and activation regression
+        run: flutter test --no-pub --reporter compact test/services/goalvdline_b61_owner_setup_test.dart
+      - name: High handicap alternatives with real quoted prices
+        run: flutter test --no-pub --reporter compact test/services/smartbet_high_handicap_alternative_service_test.dart
+      - name: League reliability ranking read-only UI
+        run: flutter test --no-pub --reporter compact test/widgets/smartbet_league_reliability_ranking_panel_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact

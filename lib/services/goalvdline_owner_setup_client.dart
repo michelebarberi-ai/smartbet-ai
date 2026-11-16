@@ -34,6 +34,9 @@ class GoalVdLineOwnerSetupClient {
         _origin = GoalVdLineCentralLearningMobileSync.serverOrigin(baseUrl);
 
   static const Duration _timeout = Duration(seconds: 12);
+  // The free Render service may need extra time to wake up.
+  // A read-only status request can be retried safely; enrollment POSTs cannot.
+  static const Duration _readinessTimeout = Duration(seconds: 35);
   final http.Client _client;
   final bool _ownsClient;
   final Uri _origin;
@@ -44,37 +47,52 @@ class GoalVdLineOwnerSetupClient {
   }
 
   Future<GoalVdLineOwnerSetupResponse> status() async {
-    try {
-      final request = http.Request('GET', _url('/owner/v1/setup/status'))
-        ..followRedirects = false;
-      final sent = await _client.send(request).timeout(_timeout);
-      final response = await http.Response.fromStream(sent).timeout(_timeout);
-      final data = _readMap(response);
-      if (response.statusCode != 200 || data['ready'] != true) {
-        return const GoalVdLineOwnerSetupResponse(
-          success: false,
-          message: 'Attivazione protetta non ancora configurata sul server.',
-        );
-      }
-      if (data['activated'] == true) {
+    // Status is GET-only: retry one transient transport failure without
+    // ever sending a duplicate activation email or changing owner state.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final request = http.Request('GET', _url('/owner/v1/setup/status'))
+          ..followRedirects = false;
+        final sent = await _client.send(request).timeout(_readinessTimeout);
+        final response = await http.Response.fromStream(sent)
+            .timeout(_readinessTimeout);
+        final data = _readMap(response);
+        if (response.statusCode != 200 || data['ready'] != true) {
+          return const GoalVdLineOwnerSetupResponse(
+            success: false,
+            message: 'Attivazione protetta non ancora configurata sul server.',
+          );
+        }
+        if (data['activated'] == true) {
+          return const GoalVdLineOwnerSetupResponse(
+            success: true,
+            ready: true,
+            activated: true,
+            message: 'L’account proprietario è già attivato: usa il login.',
+          );
+        }
         return const GoalVdLineOwnerSetupResponse(
           success: true,
           ready: true,
-          activated: true,
-          message: 'L’account proprietario è già attivato: usa il login.',
+          message: 'Puoi iniziare: il codice verrà inviato alla casella '
+              'proprietario già autorizzata sul server.',
         );
+      } catch (_) {
+        // Only a GET transport failure is retried. Never retry 503 (the
+        // backend may actually be disabled) or any enrollment POST.
+        if (attempt == 1) {
+          return const GoalVdLineOwnerSetupResponse(
+            success: false,
+            message: 'Il server non risponde ancora. Potrebbe riattivarsi '
+                'dopo un periodo di inattività: riprova la verifica.',
+          );
+        }
       }
-      return const GoalVdLineOwnerSetupResponse(
-        success: true,
-        ready: true,
-        message: 'Puoi iniziare: il codice verrà inviato alla casella '
-            'proprietario già autorizzata sul server.',
-      );
-    } catch (_) {
-      return const GoalVdLineOwnerSetupResponse(
-        success: false, message: 'Impossibile verificare lo stato del server.',
-      );
     }
+    return const GoalVdLineOwnerSetupResponse(
+      success: false,
+      message: 'Impossibile verificare lo stato del server.',
+    );
   }
 
   Future<GoalVdLineOwnerSetupResponse> requestCode() async {
@@ -84,6 +102,14 @@ class GoalVdLineOwnerSetupClient {
         success: true,
         message: 'Codice richiesto. Controlla la tua email: '
             'il codice di 8 cifre scade dopo 10 minuti.',
+      );
+    }
+    if (result.status == 0) {
+      return const GoalVdLineOwnerSetupResponse(
+        success: false,
+        message: 'Invio non confermato dal server. Controlla prima la '
+            'casella email: il codice potrebbe essere già stato inviato. '
+            'Non richiedere subito un altro codice.',
       );
     }
     return _failure(result.status);
@@ -173,8 +199,13 @@ class GoalVdLineOwnerSetupClient {
       req.headers['Accept'] = 'application/json';
       if (bearer != null) req.headers['Authorization'] = 'Bearer $bearer';
       req.body = jsonEncode(data);
-      final sent = await _client.send(req).timeout(_timeout);
-      final res = await http.Response.fromStream(sent).timeout(_timeout);
+      // Allow the initial email request to survive a server cold start.
+      // Do not auto-retry: the server may have already issued the OTP.
+      final timeout = path == '/owner/v1/setup/request'
+          ? _readinessTimeout
+          : _timeout;
+      final sent = await _client.send(req).timeout(timeout);
+      final res = await http.Response.fromStream(sent).timeout(timeout);
       return (status: res.statusCode, data: _readMap(res));
     } catch (_) {
       return (status: 0, data: <String, dynamic>{});

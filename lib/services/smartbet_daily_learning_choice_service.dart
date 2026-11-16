@@ -1,3 +1,4 @@
+import 'goalvdline_quote_policy.dart';
 import 'smartbet_live_calibration_service.dart';
 import 'smartbet_shared_local_learning_service.dart';
 
@@ -31,7 +32,9 @@ class SmartBetDailyLearningChoiceService {
     required int originalPercent,
     required double odd,
   }) {
-    final hasRealOdd = odd.isFinite && odd >= 1.25;
+    // Use the same strict >1.20 policy as coupon generation.
+    // A valid 1.21-1.24 quote must not silently disable learning/EV.
+    final hasRealOdd = GoalVdLineQuotePolicy.isPlayable(odd);
     final correction = SmartBetSharedLocalLearningService.evaluate(
       session: session,
       market: market,
