@@ -1,0 +1,43 @@
+name: B61 owner setup production readiness (read-only)
+
+on:
+  push:
+    branches:
+      - release/b61-testflight
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b61-setup-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  b61-setup-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Query current owner setup state (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENDPOINT='https://goalvdline-learning-api.onrender.com/owner/v1/setup/status'
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 35 --connect-timeout 10                 -H 'Accept: application/json' "${ENDPOINT}"                 -o /tmp/b61-owner-ready.json; then
+              break
+            fi
+            echo "Backend cold-start or not ready: attempt ${attempt}/6"
+            sleep 12
+          done
+          test -s /tmp/b61-owner-ready.json
+          node -e "
+            const fs=require('fs');
+            const response=JSON.parse(fs.readFileSync('/tmp/b61-owner-ready.json','utf8'));
+            console.log('Owner API ready:', response.ready===true);
+            console.log('Owner account already activated:', response.activated===true);
+            if (response.ready!==true || response.activated!==false) process.exit(1);
+          "
+      - name: Check legacy learning endpoint remains reachable
+        shell: bash
+        run: |
+          curl -sS --max-time 35 -o /dev/null             -w 'Legacy learning endpoint HTTP %{http_code}\n'             'https://goalvdline-learning-api.onrender.com/health'
