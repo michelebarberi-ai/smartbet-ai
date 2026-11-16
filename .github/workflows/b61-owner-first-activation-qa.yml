@@ -17,6 +17,20 @@ jobs:
   backend-owner:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: goalvdline_owner_b61_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +48,10 @@ jobs:
           node --check backend/test/owner_first_activation_v2.test.js
       - name: Dedicated B61 security tests
         run: node --test backend/test/owner_first_activation_v2.test.js
+      - name: Temporary PostgreSQL activation/restart integration
+        env:
+          B61_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/goalvdline_owner_b61_test
+        run: node --test backend/test/owner_postgres_activation.integration.test.js
       - name: Full backend regression
         working-directory: backend
         run: npm test
