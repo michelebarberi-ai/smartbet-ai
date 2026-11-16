@@ -1,0 +1,31 @@
+name: B61 safe email delivery diagnostics QA
+
+on:
+  push:
+    branches:
+      - fix/b61-resend-delivery-diagnostics
+
+permissions:
+  contents: read
+
+jobs:
+  email-diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install existing backend dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+      - name: Check safe diagnostics syntax
+        run: node --check backend/admin/owner_recovery_sender.js
+      - name: Test Resend status-only diagnostics
+        run: node --test backend/test/owner_recovery_sender_diag.test.js
+      - name: Full backend tests
+        working-directory: backend
+        run: npm test
