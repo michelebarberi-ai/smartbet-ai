@@ -159,7 +159,11 @@ class HistoricalTeamService {
   // CACHE
   // ============================================================
 
-  static final Map<String, HistoricalTeamData?> _cache = {};
+  static final Map<String, HistoricalTeamData> _cache = {};
+  // Do not cache provider failures or missing coverage for the whole app run.
+  // Recheck after three minutes without hammering an unsupported feed.
+  static final Map<String, DateTime> _negativeCache = {};
+  static const Duration _negativeCacheDuration = Duration(minutes: 3);
 
   // ============================================================
   // STATI CONSIDERATI CONCLUSI
@@ -197,6 +201,15 @@ class HistoricalTeamService {
     final referenceKey = referenceDate.toUtc().toIso8601String();
 
     final cacheKey = '$teamId-$season-$leagueId-$referenceKey';
+
+    final missedAt = _negativeCache[cacheKey];
+    if (missedAt != null) {
+      if (DateTime.now().toUtc().difference(missedAt) <
+          _negativeCacheDuration) {
+        return null;
+      }
+      _negativeCache.remove(cacheKey);
+    }
 
     if (_cache.containsKey(cacheKey)) {
       print('');
@@ -250,14 +263,14 @@ class HistoricalTeamService {
       );
 
       if (response.statusCode != 200) {
-        _cache[cacheKey] = null;
+        _negativeCache[cacheKey] = DateTime.now().toUtc();
         return null;
       }
 
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        _cache[cacheKey] = null;
+        _negativeCache[cacheKey] = DateTime.now().toUtc();
         return null;
       }
 
@@ -267,7 +280,7 @@ class HistoricalTeamService {
         print('HISTORICAL API ERROR:');
         print(errors);
 
-        _cache[cacheKey] = null;
+        _negativeCache[cacheKey] = DateTime.now().toUtc();
         return null;
       }
 
@@ -279,7 +292,7 @@ class HistoricalTeamService {
           'nessuna fixture trovata',
         );
 
-        _cache[cacheKey] = null;
+        _negativeCache[cacheKey] = DateTime.now().toUtc();
         return null;
       }
 
@@ -304,7 +317,7 @@ class HistoricalTeamService {
     } catch (e) {
       print('SMARTBET HISTORICAL EXCEPTION: $e');
 
-      _cache[cacheKey] = null;
+      _negativeCache[cacheKey] = DateTime.now().toUtc();
 
       return null;
     }
@@ -713,6 +726,7 @@ class HistoricalTeamService {
 
   static void clearCache() {
     _cache.clear();
+    _negativeCache.clear();
   }
 
   // ============================================================
