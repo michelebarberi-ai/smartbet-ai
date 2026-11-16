@@ -10,6 +10,7 @@ import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
+import '../widgets/smartbet_league_reliability_ranking_panel.dart';
 import 'smartbet_learning_monitor_screen.dart';
 
 /// Sola lettura degli archivi esistenti: niente resolver, richieste API
@@ -198,11 +199,15 @@ class _SmartBetLearningOverviewScreenState
                     ),
                   ]),
                 ],
-                if (_leagueMarketReport != null)
+                if (_leagueMarketReport != null) ...[
+                  SmartBetLeagueReliabilityRankingPanel(
+                    report: _leagueMarketReport!,
+                  ),
                   SmartBetLeagueMarketReliabilityPanel(
                     report: _leagueMarketReport!,
                     shadowReport: _shadowMarketReport,
                   ),
+                ],
                 if (_quoteLabReport != null)
                   QuoteLabHistoricalPanel(report: _quoteLabReport!),
                 _panel('Esportazione diagnostica', [
