@@ -297,6 +297,101 @@ function createOwnerAccessV2({
     } catch (_) { return fail(503); }
   }
 
+
+  async function createSession(client, now) {
+    const token = randomBytes(32).toString('base64url');
+    await client.query(
+      'INSERT INTO public.sb_owner_sessions_v1 (token_digest, expires_at) '+
+      'VALUES ($1, to_timestamp($2 / 1000.0))',
+      [sessionHash(token),now + SESSION_LIFETIME],
+    );
+    return {status:200, success:true, token, expiresInSeconds:900,
+      scope:'owner-staging-login-only'};
+  }
+
+  const recoveryHash = code => digest(hmacKey, 'owner-email-recovery', code);
+
+  async function requestRecovery(password) {
+    if (!enabled) return fail(503);
+    // Return the same success shape even if the password is wrong, to avoid
+    // revealing whether the email account has been configured.
+    if (typeof password !== 'string' || password.length > 256) return fail(400);
+    let emailCode;
+    try {
+      const result = await store.transact(async state => {
+        const now = clock();
+        if (state.activated !== true) return fail(503);
+        if (now < (state.loginLockUntil || 0)) return fail(429);
+        if (now >= (state.recoveryWindowUntil || 0)) {
+          state.recoveryWindowUntil = now + HOUR;
+          state.recoveryRequests = 0;
+        }
+        if ((state.recoveryRequests || 0) >= 3 ||
+            now - (state.recoveryRequestedAt || 0) < REQUEST_GAP) {
+          return fail(429);
+        }
+        state.recoveryRequests = (state.recoveryRequests || 0) + 1;
+        state.recoveryRequestedAt = now;
+        if (!checkScryptPassword(password,state.passwordHash)) {
+          return {status:202,success:true,delivery:false};
+        }
+        emailCode = String(crypto.randomInt(100000000)).padStart(8,'0');
+        state.recoveryDigest = recoveryHash(emailCode);
+        state.recoveryExpires = now + CODE_LIFETIME;
+        state.recoveryFailures = 0;
+        return {status:202,success:true,delivery:true};
+      });
+      if (result.status !== 202) return result;
+      if (result.delivery === true) {
+        try {
+          await sender({to:address,code:emailCode,
+            expiresInMinutes:10,purpose:'recovery'});
+        } catch (_) {
+          // The same accepted response is sent even for provider failures.
+        }
+      }
+      return {status:202,success:true};
+    } catch (_) { return fail(503); }
+    finally { emailCode = null; }
+  }
+
+  async function loginByRecovery(password, code) {
+    if (!enabled) return fail(503);
+    if (typeof password !== 'string' || password.length > 256 ||
+        typeof code !== 'string' || !/^\d{8}$/.test(code)) return fail(400);
+    try {
+      return await store.transact(async (state,client) => {
+        const now = clock();
+        if (state.activated !== true) return fail(503);
+        if (now < (state.loginLockUntil || 0)) return fail(429);
+        const passwordOk = checkScryptPassword(password,state.passwordHash);
+        const codeOk = now < (state.recoveryExpires || 0) &&
+          (state.recoveryFailures || 0) < 5 &&
+          secureEqualHex(state.recoveryDigest,recoveryHash(code));
+        if (!passwordOk || !codeOk) {
+          state.recoveryFailures = (state.recoveryFailures || 0) + 1;
+          state.loginFailures = (state.loginFailures || 0) + 1;
+          if (state.recoveryFailures >= 5) {
+            state.recoveryDigest = null;
+            state.recoveryExpires = 0;
+          }
+          if (state.loginFailures >= 5) {
+            state.loginFailures = 0;
+            state.loginLockUntil = now + LOCK_LIFETIME;
+            return fail(429);
+          }
+          return fail();
+        }
+        state.recoveryDigest = null; // Consume code atomically, once.
+        state.recoveryExpires = 0;
+        state.recoveryFailures = 0;
+        state.loginFailures = 0;
+        state.loginLockUntil = 0;
+        return createSession(client,now);
+      });
+    } catch (_) { return fail(503); }
+  }
+
   async function login(password, code) {
     if (!enabled) return fail(503);
     if (typeof password !== 'string' || password.length > 256 ||
@@ -324,14 +419,7 @@ function createOwnerAccessV2({
         state.lastTotpStep = step;
         state.loginFailures = 0;
         state.loginLockUntil = 0;
-        const token = randomBytes(32).toString('base64url');
-        await client.query(
-          'INSERT INTO public.sb_owner_sessions_v1 (token_digest, expires_at) '+
-          'VALUES ($1, to_timestamp($2 / 1000.0))',
-          [sessionHash(token),now + SESSION_LIFETIME],
-        );
-        return {status:200, success:true, token, expiresInSeconds:900,
-          scope:'owner-staging-login-only'};
+        return createSession(client,now);
       });
     } catch (_) { return fail(503); }
   }
@@ -356,7 +444,7 @@ function createOwnerAccessV2({
 
   return {
     enabled,status,requestEmail,verifyEmail,startTotp,finishEnrollment,
-    login,session,logout,
+    login,requestRecovery,loginByRecovery,session,logout,
   };
 }
 
@@ -417,6 +505,26 @@ function registerOwnerAccessV2(app, {env = process.env, store = null,
       return res.status(400).json({success:false});
     }
     send(res,await auth.login(b.password,b.code));
+  });
+
+  // Emergency recovery is PASSWORD + code delivered to the fixed email.
+  // It cannot reset a password or enroll a different TOTP device.
+  app.post('/owner/v1/recovery/request',async(req,res) => {
+    const b=req.body;
+    if (!b || typeof b !== 'object' || Array.isArray(b) ||
+        Object.keys(b).join(',')!=='password') {
+      return res.status(400).json({success:false});
+    }
+    send(res,await auth.requestRecovery(b.password));
+  });
+
+  app.post('/owner/v1/recovery/verify',async(req,res) => {
+    const b=req.body;
+    if (!b || typeof b !== 'object' || Array.isArray(b) ||
+        Object.keys(b).sort().join(',')!=='code,password') {
+      return res.status(400).json({success:false});
+    }
+    send(res,await auth.loginByRecovery(b.password,b.code));
   });
 
   app.get('/owner/v1/session',async(req,res) => {
