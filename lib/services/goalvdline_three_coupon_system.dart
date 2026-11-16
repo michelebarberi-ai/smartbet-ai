@@ -1,4 +1,5 @@
 import 'goalvdline_quote_policy.dart';
+import 'smartbet_high_handicap_alternative_service.dart';
 
 /// Tre schedine alternative che mantengono esattamente gli stessi incontri.
 /// Non è un sistema integrale di scommesse: è una proposta di tre varianti.
@@ -48,9 +49,12 @@ class GoalVdLineThreeCouponSystem {
 
     final options = <int, List<GoalVdLineSystemSelection>>{};
     for (final base in original) {
-      // Le selezioni più solide restano immutate. Diversifichiamo
-      // dove il mercato originale ha una probabilità inferiore all'80%.
-      if (base.probability >= 80) continue;
+      // Le selezioni solide restano immutate, a meno che il mercato
+      // utilizzi un handicap ampio: in quel caso un mercato ordinario
+      // verificato puo' essere piu' semplice da trovare/giocare.
+      final wideHandicap =
+          SmartBetHighHandicapAlternativeService.needsAlternative(base.market);
+      if (base.probability >= 80 && !wideHandicap) continue;
       final seen = <String>{};
       final valid =
           (alternatives[base.fixtureId] ?? const <GoalVdLineSystemSelection>[])
@@ -58,7 +62,8 @@ class GoalVdLineThreeCouponSystem {
                 (candidate) =>
                     candidate.fixtureId == base.fixtureId &&
                     candidate.market != base.market &&
-                    candidate.probability >= base.probability - 12 &&
+                    (wideHandicap ||
+                      candidate.probability >= base.probability - 12) &&
                     _valid(candidate, minimumProbability) &&
                     seen.add(candidate.market),
               )
