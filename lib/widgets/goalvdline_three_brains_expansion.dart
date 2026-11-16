@@ -168,7 +168,7 @@ class _GoalVdLineThreeBrainsExpansionState
                   const SizedBox(height: 3),
                   ClipRRect(borderRadius: BorderRadius.circular(5),
                     child: LinearProgressIndicator(
-                      value: item.probability.clamp(0.0, 1.0),
+                      value: item.probability.clamp(0.0, 1.0).toDouble(),
                       minHeight: 4,
                       backgroundColor: Colors.white12,
                       color: const Color(0xFF43A56D),
