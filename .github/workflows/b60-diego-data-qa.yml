@@ -29,6 +29,7 @@ jobs:
       - name: Diego data readiness regression
         run: |
           flutter test --no-pub --reporter compact test/services/goalvdline_b60_diego_data_readiness_test.dart
+          flutter test --no-pub --reporter compact test/services/goalvdline_b60_data_source_coverage_test.dart
           flutter test --no-pub --reporter compact test/services/diego_ai_odds_blind_test.dart
           flutter test --no-pub --reporter compact test/services/dual_engine_sports_comparison_test.dart
           flutter test --no-pub --reporter compact test/services/dual_engine_summary_preview_test.dart
