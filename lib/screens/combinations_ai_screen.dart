@@ -28,6 +28,7 @@ import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_auto_fixture_selection_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/goalvdline_three_brains_expansion.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 import '../services/goalvdline_competition_order.dart';
@@ -4333,6 +4334,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             const SizedBox(height: 12),
             DualEngineSummary(analysis: item.dualAnalysis!),
           ],
+
+          const SizedBox(height: 12),
+          GoalVdLineThreeBrainsExpansion(
+            key: ValueKey('combinations-three-brains-${item.match.fixtureId}'),
+            fixtureId: item.match.fixtureId,
+            smartBet: item.analysis,
+            dual: item.dualAnalysis,
+            selectedMarket: item.market,
+            selectedProbability: item.probability,
+          ),
 
           TeamStatsExpansion(match: item.match),
 
