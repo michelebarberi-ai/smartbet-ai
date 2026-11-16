@@ -939,6 +939,7 @@ class TeamDataResolver {
 
   static void clearCache() {
     _cache.clear();
+    _negativeCache.clear();
     _leagueOnlyCache.clear();
 
     HistoricalTeamService.clearCache();
