@@ -66,7 +66,7 @@ class MatchDossierBuilder {
 
     // B60: youth teams have their own youth leagues; filtering those out
     // previously made Diego unavailable for U21/U19 fixtures.
-    final youthLabel = RegExp(r'\\bU(?:17|18|19|20|21|23)\\b',
+    final youthLabel = RegExp(r'\bU(?:17|18|19|20|21|23)\b',
       caseSensitive: false);
     final youthFixture = match.leagueType.toLowerCase() == 'youth' ||
         (youthLabel.hasMatch(match.homeTeam) &&
