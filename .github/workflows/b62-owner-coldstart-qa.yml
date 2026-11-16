@@ -31,5 +31,7 @@ jobs:
         run: flutter analyze --no-pub --no-fatal-infos
       - name: Owner readiness and activation regression
         run: flutter test --no-pub --reporter compact test/services/goalvdline_b61_owner_setup_test.dart
+      - name: High handicap alternatives with real quoted prices
+        run: flutter test --no-pub --reporter compact test/services/smartbet_high_handicap_alternative_service_test.dart
       - name: Full Flutter regression
         run: flutter test --no-pub --reporter compact
