@@ -148,7 +148,7 @@ class AiCard extends StatelessWidget {
                 child: _Info(
                   icon: Icons.calendar_today,
                   value: _value(todayMatches),
-                  label: 'Compatibili',
+                  label: 'Analizzabili',
                 ),
               ),
               Expanded(
