@@ -4,6 +4,9 @@ class GoalVdLineQuotePolicy {
   const GoalVdLineQuotePolicy._();
   static const String bookmaker = 'Sisal';
   static const double minimumOdd = 1.20;
+  // Per impostazione predefinita usa il feed mondiale multi-bookmaker.
+  // Il filtro italiano resta una scelta esplicita dell'utente.
+  static const bool italianOnlyByDefault = false;
 
   static bool isSisal(String name) {
     final normalized = name.toLowerCase()
