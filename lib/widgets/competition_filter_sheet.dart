@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/match_model.dart';
+import '../services/football_competition_catalog_service.dart';
 import '../services/goalvdline_competition_order.dart';
 
 /// Selettore comune: le selezioni restano specifiche della singola schermata,
@@ -34,18 +35,46 @@ class CompetitionFilterSheet {
     required BuildContext context,
     required List<MatchModel> matches,
     required Set<String> selectedKeys,
-  }) => showLeagues(
-    context: context,
-    leagues: matches.map((m) => (m.country, m.league)),
-    selectedKeys: selectedKeys,
-  );
+    List<FootballCompetitionCatalogEntry> catalog = const [],
+  }) {
+    final catalogIds = catalog.map((e) => e.id).toSet();
+    final counts = <String, int>{};
+    for (final m in matches) {
+      final key = catalogIds.contains(m.leagueId)
+          ? 'id:${m.leagueId}'
+          : keyFor(m);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return showLeagues(
+      context: context,
+      leagues: matches
+          .where((m) => !catalogIds.contains(m.leagueId))
+          .map((m) => (m.country, m.league)),
+      catalog: catalog,
+      availabilityCounts: counts,
+      selectedKeys: selectedKeys,
+    );
+  }
 
   static Future<Set<String>?> showLeagues({
     required BuildContext context,
     required Iterable<(String, String)> leagues,
     required Set<String> selectedKeys,
+    Iterable<FootballCompetitionCatalogEntry> catalog = const [],
+    Map<String, int> availabilityCounts = const {},
   }) async {
     final byCountry = <String, Map<String, String>>{};
+    final catalogFavoriteKeys = <String, String>{};
+    for (final item in catalog) {
+      final country = GoalVdLineCompetitionOrder.displayCountry(
+          item.country, item.name);
+      byCountry.putIfAbsent(country, () => {})[item.selectionKey] = item.name;
+      catalogFavoriteKeys[item.selectionKey] =
+          '${GoalVdLineCompetitionOrder.country(item.country)}|||'
+          '${item.name.trim().toLowerCase()}';
+    }
+    String favoriteKeyFor(String key) =>
+        catalogFavoriteKeys[key] ?? _favoriteKey(key);
     for (final (area, name) in leagues) {
       final country = GoalVdLineCompetitionOrder.displayCountry(area, name);
       final league = name.trim().isEmpty ? 'Competizione' : name.trim();
@@ -81,7 +110,7 @@ class CompetitionFilterSheet {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final allSelected = selected.length == allKeys.length;
-            final favoriteAvailable = allKeys.where((key) => favoriteKeys.contains(_favoriteKey(key))).toSet();
+            final favoriteAvailable = allKeys.where((key) => favoriteKeys.contains(favoriteKeyFor(key))).toSet();
             final matchingCountries = <String, Map<String, String>>{};
             for (final country in countries) {
               final filtered = <String, String>{};
@@ -95,8 +124,24 @@ class CompetitionFilterSheet {
               if (filtered.isNotEmpty) matchingCountries[country] = filtered;
             }
 
+            final visibleItems = <Object>[];
+            if (favoriteAvailable.isNotEmpty && search.isEmpty) {
+              visibleItems.add('★ CAMPIONATI PREFERITI');
+              for (final country in countries) {
+                visibleItems.addAll(byCountry[country]!.entries.where(
+                  (entry) => favoriteAvailable.contains(entry.key)));
+              }
+            }
+            for (final group in matchingCountries.entries) {
+              visibleItems.add(group.key.toUpperCase());
+              visibleItems.addAll(group.value.entries.toList()
+                ..sort((a, b) => GoalVdLineCompetitionOrder.compareLeagues(
+                    a.value, b.value)));
+            }
+            if (visibleItems.isEmpty) visibleItems.add('__none__');
+
             Widget leagueRow(MapEntry<String, String> entry) {
-              final key = _favoriteKey(entry.key);
+              final key = favoriteKeyFor(entry.key);
               final starred = favoriteKeys.contains(key);
               return CheckboxListTile(
                 dense: true,
@@ -109,6 +154,14 @@ class CompetitionFilterSheet {
                     fontSize: 14,
                   ),
                 ),
+                subtitle: availabilityCounts.containsKey(entry.key)
+                    ? Text(
+                        '${availabilityCounts[entry.key]} partite future nel periodo',
+                        style: const TextStyle(
+                          color: Colors.greenAccent, fontSize: 10),
+                      )
+                    : const Text('Nessuna partita futura nel periodo selezionato',
+                        style: TextStyle(color: Colors.white38, fontSize: 10)),
                 secondary: IconButton(
                   tooltip: starred
                       ? 'Rimuovi dai preferiti'
@@ -215,14 +268,16 @@ class CompetitionFilterSheet {
                       value: allSelected,
                       activeColor: _accent,
                       title: const Text(
-                        'Tutti i campionati',
+                        'Tutte le competizioni del catalogo',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       subtitle: Text(
-                        '${allKeys.length} disponibili',
+                        '${allKeys.length} nel catalogo · '
+                        '${availabilityCounts.values.where((n) => n > 0).length} '
+                        'con partite future nel periodo',
                         style: const TextStyle(color: Colors.white38),
                       ),
                       onChanged: (value) {
@@ -267,61 +322,30 @@ class CompetitionFilterSheet {
                     ),
                     const Divider(color: Colors.white12, height: 1),
                     Expanded(
-                      child: ListView(
+                      child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                        children: [
-                          if (favoriteAvailable.isNotEmpty && search.isEmpty) ...[
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(8, 14, 8, 5),
-                              child: Text(
-                                '★ CAMPIONATI PREFERITI',
-                                style: TextStyle(
-                                  color: Colors.amberAccent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            for (final country in countries)
-                              for (final entry
-                                  in (byCountry[country]!.entries.where(
-                                    (entry) => favoriteAvailable.contains(entry.key),
-                                  ).toList()..sort((a, b) => GoalVdLineCompetitionOrder.compareLeagues(a.value, b.value))))
-                                leagueRow(entry),
-                            const Divider(color: Colors.white12),
-                          ],
-                          for (final countryEntry in matchingCountries.entries) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 14, 8, 5),
-                              child: Text(
-                                countryEntry.key.toUpperCase(),
-                                style: const TextStyle(
-                                  color: _accent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.7,
-                                ),
-                              ),
-                            ),
-                            for (final entry in (countryEntry.value.entries
-                                .toList()
-                              ..sort(
-                                (a, b) => a.value
-                                    .toLowerCase()
-                                    .compareTo(b.value.toLowerCase()),
-                              )))
-                              leagueRow(entry),
-                          ],
-                          if (matchingCountries.isEmpty)
-                            const Padding(
+                        itemCount: visibleItems.length,
+                        itemBuilder: (context, index) {
+                          final item = visibleItems[index];
+                          if (item is MapEntry<String, String>) {
+                            return leagueRow(item);
+                          }
+                          if (item == '__none__') {
+                            return const Padding(
                               padding: EdgeInsets.all(24),
-                              child: Text(
-                                'Nessun campionato trovato.',
+                              child: Text('Nessun campionato trovato.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white54),
-                              ),
-                            ),
-                        ],
+                                style: TextStyle(color: Colors.white54)),
+                            );
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 14, 8, 5),
+                            child: Text(item.toString(),
+                              style: const TextStyle(
+                                color: _accent, fontSize: 12,
+                                fontWeight: FontWeight.bold)),
+                          );
+                        },
                       ),
                     ),
                     Padding(
