@@ -98,9 +98,20 @@ class SmartCore {
     // PROBABILITÀ 1X2
     // ==========================================================
 
-    final probabilities = StatisticsEngine.calculateProbabilities(
-      homeTeam: homeAnalysis,
-      awayTeam: awayAnalysis,
+    // B65: la vecchia 1X2 a fasce assegnava lo stesso X2 all'85%
+    // a molti incontri diversi. Stimiamo invece gli esiti dai gol attesi
+    // delle due squadre, calcolati sui dati sportivi realmente disponibili.
+    final expectedGoals = StatisticsEngine.calculateExpectedGoals(
+      homeForm: homeForm,
+      awayForm: awayForm,
+    );
+    final expectedHomeGoals = expectedGoals['home'] ?? 0.0;
+    final expectedAwayGoals = expectedGoals['away'] ?? 0.0;
+    final expectedTotalGoals = expectedGoals['total'] ?? 0.0;
+
+    final probabilities = StatisticsEngine.probabilitiesFromExpectedGoals(
+      expectedHomeGoals: expectedHomeGoals,
+      expectedAwayGoals: expectedAwayGoals,
     );
 
     final homeProbability = probabilities['home'] ?? 0;
@@ -134,16 +145,7 @@ class SmartCore {
     // EXPECTED GOALS
     // ==========================================================
 
-    final expectedGoals = StatisticsEngine.calculateExpectedGoals(
-      homeForm: homeForm,
-      awayForm: awayForm,
-    );
-
-    final expectedHomeGoals = expectedGoals['home'] ?? 0.0;
-
-    final expectedAwayGoals = expectedGoals['away'] ?? 0.0;
-
-    final expectedTotalGoals = expectedGoals['total'] ?? 0.0;
+    // xG già calcolati sopra, prima del mercato 1X2.
 
     // ----------------------------------------------------------
     // PRONOSTICO 1X2
