@@ -6,16 +6,30 @@ import 'italy_schedule_filter.dart';
 class GoalVdLineDailyMatchCounter {
   const GoalVdLineDailyMatchCounter._();
 
+  /// Tutte le fixture non iniziate del giorno fornite dal provider, senza
+  /// filtro campionati; non sono pronostici verificati o quotati.
+  static int countAllForToday(
+    Iterable<MatchModel> matches, {
+    required DateTime now,
+  }) => _count(matches, now: now, italyScheduleOnly: false);
+
+  /// Le sole fixture compatibili con il filtro "Palinsesto Italia".
   static int countForToday(
     Iterable<MatchModel> matches, {
     required DateTime now,
+  }) => _count(matches, now: now, italyScheduleOnly: true);
+
+  static int _count(
+    Iterable<MatchModel> matches, {
+    required DateTime now,
+    required bool italyScheduleOnly,
   }) {
     final clock = now.toLocal();
     final seen = <int>{};
     for (final match in matches) {
       if (match.fixtureId <= 0 ||
           !match.hasTeamIds ||
-          !ItalyScheduleFilter.allows(match)) {
+          (italyScheduleOnly && !ItalyScheduleFilter.allows(match))) {
         continue;
       }
 
