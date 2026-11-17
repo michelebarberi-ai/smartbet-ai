@@ -17,6 +17,7 @@ on:
       - release/b61-testflight
       - release/b62-testflight
       - release/b63-testflight
+      - release/b64-testflight
 
 jobs:
   build-ios:
@@ -32,7 +33,8 @@ jobs:
        github.ref != 'refs/heads/release/b60-testflight' &&
        github.ref != 'refs/heads/release/b61-testflight' &&
        github.ref != 'refs/heads/release/b62-testflight' &&
-       github.ref != 'refs/heads/release/b63-testflight') ||
+       github.ref != 'refs/heads/release/b63-testflight' &&
+       github.ref != 'refs/heads/release/b64-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
@@ -41,7 +43,8 @@ jobs:
        github.ref != 'refs/heads/release/b60-testflight' &&
        github.ref != 'refs/heads/release/b61-testflight' &&
        github.ref != 'refs/heads/release/b62-testflight' &&
-       github.ref != 'refs/heads/release/b63-testflight') ||
+       github.ref != 'refs/heads/release/b63-testflight' &&
+       github.ref != 'refs/heads/release/b64-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -60,7 +63,9 @@ jobs:
         (github.ref == 'refs/heads/release/b62-testflight' &&
          github.event.head_commit.message == 'release(build62): authorize TestFlight upload') ||
          (github.ref == 'refs/heads/release/b63-testflight' &&
-          github.event.head_commit.message == 'release(build63): authorize TestFlight upload')))
+          github.event.head_commit.message == 'release(build63): authorize TestFlight upload') ||
+         (github.ref == 'refs/heads/release/b64-testflight' &&
+          github.event.head_commit.message == 'release(build64): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -112,11 +117,20 @@ jobs:
           pod install
           cd ..
 
-      - name: B63 backend syntax preflight
-        if: github.ref == 'refs/heads/release/b63-testflight'
+      - name: B63/B64 backend syntax preflight
+        if: >-
+          github.ref == 'refs/heads/release/b63-testflight' ||
+          github.ref == 'refs/heads/release/b64-testflight'
         run: |
           node --check backend/server.js
           node --check backend/auto_coupon/background_worker.js
+
+      # B64: run the backend regression before preparing signing assets.
+      - name: B64 full backend regression before signing
+        if: github.ref == 'refs/heads/release/b64-testflight'
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
 
       - name: Flutter analyze
         run: |
@@ -168,10 +182,11 @@ jobs:
             test/services/goalvdline_b57_public_private_consensus_test.dart
 
       # B62: run full regression before preparing signing credentials.
-      - name: B62/B63 full Flutter regression before signing
+      - name: B62/B63/B64 full Flutter regression before signing
         if: >-
           github.ref == 'refs/heads/release/b62-testflight' ||
-          github.ref == 'refs/heads/release/b63-testflight'
+          github.ref == 'refs/heads/release/b63-testflight' ||
+          github.ref == 'refs/heads/release/b64-testflight'
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter test --no-pub --reporter compact
@@ -364,6 +379,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="63"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b64-testflight" ]]; then
+            grep -qx 'version: 1.2.5+64' pubspec.yaml || {
+              echo "ERROR: Build 64 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="64"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
