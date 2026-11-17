@@ -225,13 +225,14 @@ class _GoalVdLineThreeBrainsExpansionState
   }
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => Material(
     key: Key('b63-three-brains-${widget.fixtureId}'),
-    decoration: BoxDecoration(
-      color: const Color(0xFF111827),
+    color: const Color(0xFF111827),
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: Colors.white12),
+      side: const BorderSide(color: Colors.white12),
     ),
+    clipBehavior: Clip.antiAlias,
     child: ExpansionTile(
       key: Key('b63-three-brains-tile-${widget.fixtureId}'),
       initiallyExpanded: false,
