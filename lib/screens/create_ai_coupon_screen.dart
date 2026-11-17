@@ -12,6 +12,7 @@ import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
+import '../services/italy_schedule_filter.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
@@ -546,8 +547,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       if (bestOdd == null ||
           bestOdd.odd <= _minimumOdd ||
           (_italyScheduleOnly &&
-              !ItalianBookmakerMarketFilter.appearsInItalianMarket(
-                  bestOdd.bookmakerName))) {
+              (!ItalyScheduleFilter.allows(preliminary.match) ||
+                  !ItalianBookmakerMarketFilter.appearsInItalianMarket(
+                      bestOdd.bookmakerName)))) {
         continue;
       }
 
@@ -1048,6 +1050,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               try {
                 odds = await _oddsService.getFixtureMarketOdds(
                   fixtureId: match.fixtureId,
+                  italianBookmakerOnly: _italyScheduleOnly,
                 );
               } catch (_) {
                 odds = null;
@@ -1470,7 +1473,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       setState(() {
         _sportsOnlyPreview
           ..clear()
-          ..addAll(preview.take(_advancedShortlistSize(preview.length)));
+          ..addAll(preview
+              .where((item) => item.probability >= _minimumCouponProbability)
+              .take(_advancedShortlistSize(preview.length)));
       });
 
       // Fase 4: quote soltanto DOPO l'analisi avanzata.
@@ -1512,6 +1517,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             try {
               final odds = await _oddsService.getFixtureMarketOdds(
                 fixtureId: candidate.match.fixtureId,
+                italianBookmakerOnly: _italyScheduleOnly,
               );
 
               if (_hasRealQuotedMarket(odds)) {
@@ -1885,7 +1891,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               // Soltanto adesso intervengono le quote reali.
               final odds =
                   quoteCache[fixtureId] ??
-                  await _oddsService.getFixtureMarketOdds(fixtureId: fixtureId);
+                  await _oddsService.getFixtureMarketOdds(
+                    fixtureId: fixtureId,
+                    italianBookmakerOnly: _italyScheduleOnly,
+                  );
 
               if (!_hasRealQuotedMarket(odds)) continue;
 
@@ -2959,6 +2968,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         }
         final odds = await _oddsService.getFixtureMarketOdds(
           fixtureId: base.match.fixtureId,
+          italianBookmakerOnly: _italyScheduleOnly,
         );
         final candidates = _sportsMarketCandidates(base.analysis);
         final allowed = <GoalVdLineSystemSelection>[];
@@ -4306,8 +4316,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Verifica finale: usa solo quote del feed attribuite '
-                      'a marchi presenti in Italia. Non limita l’analisi.'
+                    ? 'Filtra competizioni e quote verso marchi presenti in Italia. '
+                      'Il feed non dimostra che la quota sia sul sito .it; '
+                      'controlla prima di giocare.'
                     : 'Calendario completo: tutte le partite disponibili.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
