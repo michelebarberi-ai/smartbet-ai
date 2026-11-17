@@ -221,7 +221,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   // Calendario completo per impostazione predefinita. Il Palinsesto Italia
   // e' SOLO una verifica opzionale di quote per fixture, non una whitelist.
-  bool _italyScheduleOnly = false;
+  bool _italyScheduleOnly = true;
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
   final Set<String> _selectedCompetitionKeys = <String>{};
