@@ -14,7 +14,8 @@ import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
 import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_refundable_market_candidate_service.dart';
-import '../services/italy_schedule_filter.dart';
+import '../services/football_competition_catalog_service.dart';
+import '../services/italian_bookmaker_availability_service.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -191,7 +192,44 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       const SmartBetXPremiumService();
 
   bool _loading = false;
-  bool _italyScheduleOnly = true;
+  // Il calendario globale e' la base, il filtro Italia solo quote per fixture.
+  bool _italyScheduleOnly = false;
+  String? _italianOddsCoverageWarning;
+  final _italianOddsAvailability = const ItalianBookmakerAvailabilityService();
+  final _competitionCatalog = const FootballCompetitionCatalogService();
+  Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
+
+  bool _competitionPasses(MatchModel match) =>
+      _selectedCompetitionKeys.isEmpty ||
+      _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
+      _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
+
+  Future<List<MatchModel>> _applyCompetitionAndBookmakerFilter(
+      List<MatchModel> matches) async {
+    final available = matches.where(_competitionPasses).toList();
+    if (!_italyScheduleOnly) {
+      _italianOddsCoverageWarning = null;
+      return available;
+    }
+    final dates = <DateTime>{
+      for (final match in available)
+        if (DateTime.tryParse(match.date) != null)
+          DateUtils.dateOnly(DateTime.parse(match.date).toLocal()),
+    }.toList()..sort();
+    final quotedFixtures = <int>{};
+    var incomplete = 0;
+    for (final date in dates) {
+      final found = await _italianOddsAvailability.forDate(date);
+      quotedFixtures.addAll(found.quotedFixtureIds);
+      if (!found.complete) incomplete++;
+    }
+    _italianOddsCoverageWarning = incomplete > 0
+        ? 'Verifica quote parziale su $incomplete giornate: le gare '
+          'non riscontrate sono da verificare, non necessariamente non quotate.'
+        : null;
+    return available.where((match) =>
+        quotedFixtures.contains(match.fixtureId)).toList();
+  }
 
   _CombinationPeriod _period = _CombinationPeriod.today;
   DateTimeRange? _customPeriod;
@@ -1221,19 +1259,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<List<MatchModel>> _automaticCandidatePool({
     required bool drawOnly,
   }) async {
-    final fixtures = (await _loadMatchesForSelectedPeriod())
-        .where(
-          (match) =>
-              match.fixtureId > 0 &&
-              match.hasTeamIds &&
-              _isUpcoming(match) &&
-              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
-              (_selectedCompetitionKeys.isEmpty ||
-                  _selectedCompetitionKeys.contains(
-                    CompetitionFilterSheet.keyFor(match),
-                  )),
-        )
-        .toList();
+    final fixtures = await _applyCompetitionAndBookmakerFilter(
+        (await _loadMatchesForSelectedPeriod())
+            .where((match) => match.fixtureId > 0 &&
+                match.hasTeamIds && _isUpcoming(match)).toList());
     _autoAvailableCount = fixtures.length;
     _autoExaminedCount = 0;
     _autoDeepCount = 0;
@@ -2201,20 +2230,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
-      final scheduleMatches = _italyScheduleOnly
-          ? allMatches.where(ItalyScheduleFilter.allows).toList()
-          : allMatches;
-
-      final matches = scheduleMatches
-          .where(
-            (m) =>
-                _isUpcoming(m) &&
-                (_selectedCompetitionKeys.isEmpty ||
-                    _selectedCompetitionKeys.contains(
-                      CompetitionFilterSheet.keyFor(m),
-                    )),
-          )
-          .toList();
+      final matches = await _applyCompetitionAndBookmakerFilter(
+        allMatches.where((m) => m.fixtureId > 0 &&
+            m.hasTeamIds && _isUpcoming(m)).toList());
 
       if (!mounted) {
         return;
@@ -3106,21 +3124,27 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     try {
       final allMatches = await _loadMatchesForSelectedPeriod();
 
-      final available = _italyScheduleOnly
-          ? allMatches.where(ItalyScheduleFilter.allows).toList()
-          : allMatches;
-
+      final catalogFuture = _competitionCatalog.load()
+          .catchError((Object error) {
+            debugPrint('COMBINAZIONI CATALOGO: $error');
+            return <FootballCompetitionCatalogEntry>[];
+          });
+      final available = allMatches.where((m) =>
+          m.fixtureId > 0 && m.hasTeamIds && _isUpcoming(m)).toList();
+      final catalog = await catalogFuture;
       if (!mounted) return;
 
       final selected = await CompetitionFilterSheet.show(
         context: context,
         matches: available,
+        catalog: catalog,
         selectedKeys: _selectedCompetitionKeys,
       );
 
       if (selected == null || !mounted) return;
 
       setState(() {
+        _catalogByKey = {for (final item in catalog) item.selectionKey: item};
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
@@ -4635,8 +4659,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Competizioni principali più vicine ai palinsesti dei bookmaker italiani.'
-                    : 'Tutte le competizioni disponibili.',
+                    ? 'Solo fixture con quote verificate presso marchi '
+                      'presenti in Italia; le probabilità non cambiano.'
+                    : 'Tutte le partite e i campionati disponibili da API-Football.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               onChanged: (_loading || _checkingOdds)
@@ -4644,6 +4669,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
+                        _italianOddsCoverageWarning = null;
                         _results.clear();
                         _xPremiumSelectedMatches.clear();
                         _xPremiumResults.clear();
