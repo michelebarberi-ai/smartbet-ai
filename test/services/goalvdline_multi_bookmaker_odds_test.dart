@@ -39,6 +39,49 @@ void main() {
     service.dispose();
   });
 
+  test('B65: filtro Italia esclude quote estere e usa quota locale reale',
+      () async {
+    var calls = 0;
+    final service = OddsService(client: MockClient((_) async {
+      calls++;
+      return http.Response(jsonEncode({
+        'errors': <String, Object>{},
+        'response': [
+          fixture('Pinnacle', 12, '2.10'),
+          fixture('Sisal', 8, '1.44'),
+        ],
+      }), 200);
+    }));
+    const fixtureId = 920065;
+    final global = await service.getFixtureMarketOdds(fixtureId: fixtureId);
+    expect(global?.oddFor('1')?.odd, 2.10);
+    final italian = await service.getFixtureMarketOdds(
+      fixtureId: fixtureId,
+      italianBookmakerOnly: true,
+    );
+    expect(italian?.oddFor('1')?.odd, 1.44);
+    expect(italian?.oddFor('1')?.bookmakerName, 'Sisal');
+    expect(italian?.bookmakerCount, 1);
+    // La cache della ricerca globale non deve contaminare la ricerca IT.
+    expect(calls, 2);
+    service.dispose();
+  });
+
+  test('B65: quota solo estera non puo essere attribuita all Italia',
+      () async {
+    final service = OddsService(client: MockClient((_) async =>
+        http.Response(jsonEncode({
+          'errors': <String, Object>{},
+          'response': [fixture('Pinnacle', 12, '1.85')],
+        }), 200)));
+    final italian = await service.getFixtureMarketOdds(
+      fixtureId: 920066, italianBookmakerOnly: true,
+    );
+    expect(italian?.oddFor('1'), isNull);
+    expect(italian?.bookmakerCount, 0);
+    service.dispose();
+  });
+
   test('B47: no bookmaker quote never becomes an invented playable pick',
       () async {
     final service = OddsService(client: MockClient((_) async =>
