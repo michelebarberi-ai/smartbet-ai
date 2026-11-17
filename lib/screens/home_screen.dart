@@ -10,8 +10,6 @@ import '../services/smartbet_learning_coordinator.dart';
 import '../services/goalvdline_ui_edition.dart';
 import '../widgets/goalvdline_public_learning_card.dart';
 import '../widgets/ai_card.dart';
-import '../widgets/goalvdline_daily_matches_card.dart';
-import 'create_ai_coupon_screen.dart';
 import '../widgets/header.dart';
 import '../widgets/menu_grid.dart';
 import '../widgets/goalvdline_central_learning_consent_card.dart';
@@ -560,21 +558,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     lastUpdate: dashboard.lastUpdate,
                   ),
 
-                  const SizedBox(height: 18),
-                  GoalVdLineDailyMatchesCard(
-                    count: dashboard.todayMatches,
-                    totalCount: dashboard.allTodayMatches,
-                    loading: dashboard.loading,
-                    onCreateCoupon: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => const CreateAiCouponScreen(),
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 35),
+
+                  const Text(
+                    'I tuoi strumenti',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
 
+                  const SizedBox(height: 18),
+                  const MenuGrid(),
+                  const SizedBox(height: 25),
+
+                  // B67: statistiche e apprendimento alla fine della Home.
+                  // Non alterare calcoli, storico o percorsi di diagnostica.
                   if (!GoalVdLineUiEdition.internalDiagnostics)
                     GoalVdLinePublicLearningCard(
                       records: analysisHistory.records,
@@ -756,20 +756,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ],
                   ),
 
-                  const SizedBox(height: 35),
-
-                  const Text(
-                    'I tuoi strumenti',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-                  const MenuGrid(),
-                  const SizedBox(height: 25),
                 ],
               ),
             );
