@@ -534,6 +534,8 @@ const footballInFlight = new Map();
 
 const FIXTURES_TTL_MS = 15 * 60 * 1000;
 const ODDS_TTL_MS = 5 * 60 * 1000;
+// Catalogo delle competizioni separato dal calendario: una richiesta/die.
+const LEAGUES_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getFootballCache(key) {
   const cached = footballCache.get(key);
@@ -690,6 +692,49 @@ async function requestApiFootball({
     footballInFlight.delete(cacheKey);
   }
 }
+
+// ------------------------------------------------------------
+// CATALOGO COMPETIZIONI (non e' il calendario partite del giorno)
+// ------------------------------------------------------------
+// Ritorna solo campi non sensibili; una sola chiamata upstream/giorno
+// con cache/single-flight esistenti. Nessuna quota o analisi viene avviata.
+app.get("/football/leagues", async (req, res) => {
+  try {
+    const result = await requestApiFootball({
+      path: "/leagues",
+      query: { current: "true" },
+      ttlMs: LEAGUES_TTL_MS,
+    });
+    const rows = Array.isArray(result.data?.response)
+      ? result.data.response : [];
+    const leagues = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const id = Number(row?.league?.id);
+      const name = String(row?.league?.name || "").trim();
+      const country = String(row?.country?.name || "World").trim();
+      if (!Number.isInteger(id) || id <= 0 || !name || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      leagues.push({
+        id, name, country,
+        type: String(row?.league?.type || ""),
+      });
+    }
+    res.set("X-SmartBet-Cache", result.cache);
+    res.set("Cache-Control", "public, max-age=3600");
+    return res.json({ success: true, response: leagues, results: leagues.length });
+  } catch (error) {
+    console.error("SMARTBET FOOTBALL LEAGUES ERROR:", {
+      status: error?.statusCode || 500,
+      message: String(error?.message || "error").slice(0, 200),
+    });
+    return res.status(error.statusCode || 500).json({
+      success: false, error: "Catalogo competizioni temporaneamente non disponibile.",
+    });
+  }
+});
 
 // ------------------------------------------------------------
 // FIXTURES
