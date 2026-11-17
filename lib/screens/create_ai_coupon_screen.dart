@@ -222,7 +222,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   // Calendario completo per impostazione predefinita. Il Palinsesto Italia
   // e' SOLO una verifica opzionale di quote per fixture, non una whitelist.
-  bool _italyScheduleOnly = true;
+  bool _italyScheduleOnly = GoalVdLineQuotePolicy.italianOnlyByDefault;
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
   final Set<String> _selectedCompetitionKeys = <String>{};
@@ -4319,7 +4319,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     ? 'Filtra competizioni e quote verso marchi presenti in Italia. '
                       'Il feed non dimostra che la quota sia sul sito .it; '
                       'controlla prima di giocare.'
-                    : 'Calendario completo: tutte le partite disponibili.',
+                    : 'Calendario completo: partite e quote reali anche da bookmaker esteri. '
+                      'Verifica sempre che il mercato sia disponibile prima di giocare.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               onChanged: _loading
@@ -4639,8 +4640,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   Text('${forecast.market} · '
-                      'stima ${forecast.probability}% · '
-                      'selezione non confermata'
+                      'stima del modello ${forecast.probability}% · '
+                      'quota/mercato non confermati'
                       '${forecast.probability < _minimumCouponProbability ? ' · sotto soglia' : ''}',
                     style: const TextStyle(color: Colors.orangeAccent,
                       fontSize: 11)),
@@ -4655,8 +4656,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           if (!_loading && _errors > 0) ...[
             const SizedBox(height: 12),
             Text(
-              '$_errors partite non analizzate per dati insufficienti '
-              'o errore temporaneo.',
+              '$_errors controlli non riusciti (analisi o quote): '
+              'dati insufficienti oppure errore temporaneo.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.orangeAccent, fontSize: 10),
             ),
