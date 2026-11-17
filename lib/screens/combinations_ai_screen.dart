@@ -204,6 +204,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   _CombinationPeriod _period = _CombinationPeriod.today;
   DateTimeRange? _customPeriod;
   final Set<String> _selectedCompetitionKeys = <String>{};
+  // B66: fixture future con ID validi nel periodo/nei campionati scelti.
+  // E' un conteggio di candidate, non di pronostici già elaborati.
+  int? _periodAvailableFixtureCount;
+  int? _selectedAvailableFixtureCount;
 
   bool _competitionPasses(MatchModel match) =>
       _selectedCompetitionKeys.isEmpty ||
@@ -283,7 +287,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       'OSPITE SEGNA',
       'MULTIGOL',
     ],
-    'Combinazioni avanzate': ['COMBO CHANCE', 'COMBO AVANZATE', 'MERCATI OPPURE'],
+    'Combinazioni avanzate': ['COMBO AVANZATE', 'MERCATI OPPURE'],
     'Handicap': ['HANDICAP EUROPEO', 'HANDICAP ASIATICO'],
   };
 
@@ -990,6 +994,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _customPeriod = selected;
 
       _selectedCompetitionKeys.clear();
+      _periodAvailableFixtureCount = null;
+      _selectedAvailableFixtureCount = null;
       _expandedComboFixtures.clear();
       _results.clear();
       _xPremiumSelectedMatches.clear();
@@ -3154,6 +3160,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       setState(() {
         _catalogByKey = {for (final item in catalog) item.selectionKey: item};
+        _periodAvailableFixtureCount = available.length;
+        _selectedAvailableFixtureCount = selected.isEmpty
+            ? available.length
+            : available.where((match) =>
+                selected.contains('id:${match.leagueId}') ||
+                selected.contains(CompetitionFilterSheet.keyFor(match))).length;
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
@@ -3203,6 +3215,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   _period = period;
 
                   _selectedCompetitionKeys.clear();
+                  _periodAvailableFixtureCount = null;
+                  _selectedAvailableFixtureCount = null;
                   _expandedComboFixtures.clear();
                   _results.clear();
                   _xPremiumSelectedMatches.clear();
@@ -3305,6 +3319,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             height: 1.35,
           ),
         ),
+        if (_selectedAvailableFixtureCount != null &&
+            _periodAvailableFixtureCount != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Partite candidate: $_selectedAvailableFixtureCount '
+            'su $_periodAvailableFixtureCount nel periodo',
+            key: const Key('combinations-selected-fixture-count'),
+            style: const TextStyle(
+              color: Colors.greenAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
         const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
@@ -3374,7 +3402,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       case 'DRAW NO BET':
         return 'Vittoria o rimborso';
       case 'COMBO CHANCE':
-        return 'Combo Chance';
+        return 'Combo avanzate · simulazione';
       case 'COMBO AVANZATE':
         return 'Combo avanzate';
       case 'MERCATI OPPURE':
@@ -3402,7 +3430,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   }) {
     final expanded = _expandedMarketGroup == title;
     final selectedCount = markets
-        .where((market) => _selectedMarkets.contains(market))
+        .where((market) => _selectedMarkets.contains(market) ||
+            (market == 'COMBO AVANZATE' &&
+                _selectedMarkets.contains('COMBO CHANCE')))
         .length;
 
     return Container(
@@ -3497,15 +3527,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     spacing: 7,
                     runSpacing: 7,
                     children: markets.map((market) {
-                      final selected = _selectedMarkets.contains(market);
-                      final isComboChance = market == 'COMBO CHANCE';
+                      // Un solo chip Combo avanzate per le due modalità.
+                      final isComboChance = market == 'COMBO AVANZATE' &&
+                          _selectedMarkets.contains('COMBO CHANCE');
+                      final selected = _selectedMarkets.contains(market) ||
+                          isComboChance;
                       return ChoiceChip(
                         label: Text(_marketDisplayName(market)),
                         selected: selected,
                         showCheckmark: false,
                         onSelected: (_loading || _checkingOdds)
                             ? null
-                            : (_) => _toggleMarketSelection(market),
+                            : (_) => _toggleMarketSelection(
+                                isComboChance ? 'COMBO CHANCE' : market,
+                              ),
                         selectedColor: isComboChance
                             ? Colors.orangeAccent
                             : const Color(0xFF00C853),
@@ -3545,10 +3580,58 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   if (title == 'Combinazioni avanzate') ...[
                     const SizedBox(height: 10),
                     const Text(
-                      'Combo Chance è una simulazione senza quota bookmaker '
-                      'e si seleziona da sola.',
+                      'Combo avanzate: scegli se cercare mercati combinati '
+                      'con quote oppure esplorare solo le stime statistiche.',
                       style: TextStyle(color: Colors.white54, fontSize: 10),
                     ),
+                    if (_selectedMarkets.contains('COMBO AVANZATE') ||
+                        _selectedMarkets.contains('COMBO CHANCE')) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 6,
+                        children: [
+                          ChoiceChip(
+                            key: const Key('combo-with-odds-mode'),
+                            label: const Text('Con quote'),
+                            selected: _selectedMarkets.contains('COMBO AVANZATE'),
+                            onSelected: (_loading || _checkingOdds)
+                                ? null
+                                : (selected) {
+                                    if (!selected) return;
+                                    if (_selectedMarkets.contains('COMBO CHANCE')) {
+                                      _toggleMarketSelection('COMBO AVANZATE');
+                                    }
+                                  },
+                          ),
+                          ChoiceChip(
+                            key: const Key('combo-statistical-mode'),
+                            label: const Text('Solo simulazione'),
+                            selected: _selectedMarkets.contains('COMBO CHANCE'),
+                            onSelected: (_loading || _checkingOdds)
+                                ? null
+                                : (selected) {
+                                    if (selected &&
+                                        !_selectedMarkets.contains('COMBO CHANCE')) {
+                                      _toggleMarketSelection('COMBO CHANCE');
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _selectedMarkets.contains('COMBO CHANCE')
+                            ? 'Solo simulazione: probabilità congiunte '
+                              'calcolate dal modello, senza quota e non giocabili.'
+                            : 'Con quote: cerca mercati combinati nel feed, '
+                              'con controlli di probabilità e Auditor. '
+                              'Verificare sempre il palinsesto del bookmaker.',
+                        style: const TextStyle(
+                          color: Colors.white60, fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
