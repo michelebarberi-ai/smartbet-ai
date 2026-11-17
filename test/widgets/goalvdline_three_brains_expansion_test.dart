@@ -11,6 +11,7 @@ void main() {
     drawProbability: 21,
     awayProbability: 63,
     prediction: score > 0 ? '2' : 'N/D',
+    explanation: 'Dati simulati per test',
     valueBet: 'N/D',
     risk: 'Medio',
     expectedHomeGoals: home,
