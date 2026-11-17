@@ -5,13 +5,15 @@ import 'package:smartbet_ai_new/services/italy_schedule_filter.dart';
 MatchModel fixture({
   String country = 'Italia',
   required String league,
+  String homeTeam = 'Casa',
+  String awayTeam = 'Ospite',
 }) {
   return MatchModel(
     fixtureId: 101,
     homeTeamId: 201,
     awayTeamId: 202,
-    homeTeam: 'Casa',
-    awayTeam: 'Ospite',
+    homeTeam: homeTeam,
+    awayTeam: awayTeam,
     league: league,
     leagueId: 0,
     country: country,
@@ -32,6 +34,42 @@ MatchModel fixture({
 }
 
 void main() {
+  test('B63: Premier League Cup e PL2 sono competizioni U21, non senior', () {
+    for (final league in [
+      'Premier League Cup',
+      'Premier League Cup - Group B',
+      'Premier League International Cup',
+      'Premier League 2',
+      'Professional Development League',
+      'FA Youth Cup',
+    ]) {
+      expect(ItalyScheduleFilter.allows(
+          fixture(country: 'Inghilterra', league: league)),
+          isFalse, reason: league);
+    }
+    expect(ItalyScheduleFilter.allows(
+        fixture(country: 'Inghilterra', league: 'Premier League')),
+        isTrue);
+    expect(ItalyScheduleFilter.allows(
+        fixture(country: 'Inghilterra', league: 'FA Cup')),
+        isTrue);
+  });
+
+  test('B63: nomi squadre U21 non diventano partite senior', () {
+    expect(ItalyScheduleFilter.allows(fixture(
+      country: 'Inghilterra',
+      league: 'Premier League',
+      homeTeam: 'Swansea City U21',
+      awayTeam: 'Gillingham FC U21',
+    )), isFalse);
+    expect(ItalyScheduleFilter.allows(fixture(
+      country: 'Internazionale',
+      league: 'Nations League',
+      homeTeam: 'Denmark',
+      awayTeam: 'Norway',
+    )), isTrue);
+  });
+
   test('B50: Palinsesto Italia ammette Serie D e tutti i gironi', () {
     for (final league in [
       'Serie D',
