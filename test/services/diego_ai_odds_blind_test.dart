@@ -98,6 +98,7 @@ class _QuotesStub extends Fake implements OddsService {
   Future<FixtureMarketOdds?> getFixtureMarketOdds({
     required int fixtureId,
     String? bookmakerName,
+    bool italianBookmakerOnly = false,
   }) async {
     calls++;
     requestedBookmaker = bookmakerName;
