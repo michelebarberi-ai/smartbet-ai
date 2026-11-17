@@ -10,6 +10,8 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/football_competition_catalog_service.dart';
+import '../services/italian_bookmaker_availability_service.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
@@ -219,8 +221,49 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     });
   }
 
-  bool _italyScheduleOnly = true;
+  // Calendario completo per impostazione predefinita. Il Palinsesto Italia
+  // e' SOLO una verifica opzionale di quote per fixture, non una whitelist.
+  bool _italyScheduleOnly = false;
+  String? _italianOddsCoverageWarning;
+  final _italianOddsAvailability = const ItalianBookmakerAvailabilityService();
+  final _competitionCatalog = const FootballCompetitionCatalogService();
+  Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
   final Set<String> _selectedCompetitionKeys = <String>{};
+
+  bool _competitionPasses(MatchModel match) =>
+      _selectedCompetitionKeys.isEmpty ||
+      _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
+      _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
+
+  /// Prima carichiamo tutte le fixture del periodo e verifichiamo i
+  /// campionati scelti; SOLO se richiesto usiamo il feed bookmaker.
+  /// In nessun caso le quote alterano il ranking/probabilita' sportive.
+  Future<List<MatchModel>> _applyCompetitionAndBookmakerFilter(
+      List<MatchModel> games) async {
+    final available = games.where(_competitionPasses).toList();
+    if (!_italyScheduleOnly) {
+      _italianOddsCoverageWarning = null;
+      return available;
+    }
+    final days = <DateTime>{
+      for (final item in available)
+        if (DateTime.tryParse(item.date) != null)
+          DateUtils.dateOnly(DateTime.parse(item.date).toLocal()),
+    }.toList()..sort();
+    final allowed = <int>{};
+    var incompleteDays = 0;
+    for (final day in days) {
+      final status = await _italianOddsAvailability.forDate(day);
+      allowed.addAll(status.quotedFixtureIds);
+      if (!status.complete) incompleteDays++;
+    }
+    _italianOddsCoverageWarning = incompleteDays == 0
+        ? null
+        : 'Verifica quote incompleta per $incompleteDays giornate: '
+          'sono mostrate solo le partite con quote riscontrate nel feed. '
+          'Le altre restano da verificare, non sono escluse dal calendario.';
+    return available.where((m) => allowed.contains(m.fixtureId)).toList();
+  }
   String _phase = '';
 
   int _processed = 0;
@@ -1220,18 +1263,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final all = await _loadMatchesForSelectedPeriod();
-      final matches = all
-          .where(
-            (m) =>
-                m.hasTeamIds &&
-                _isUpcoming(m) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)) &&
-                (_selectedCompetitionKeys.isEmpty ||
-                    _selectedCompetitionKeys.contains(
-                      CompetitionFilterSheet.keyFor(m),
-                    )),
-          )
-          .toList();
+      final matches = await _applyCompetitionAndBookmakerFilter(
+          all.where((m) => m.hasTeamIds && _isUpcoming(m)).toList());
 
       _couponFixtureCount = matches.length;
       if (!mounted) return;
@@ -3494,19 +3527,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   Future<List<MatchModel>> _manualAvailableMatches() async {
     final all = await _loadMatchesForSelectedPeriod();
 
-    final matches = all
-        .where(
-          (match) =>
-              match.fixtureId > 0 &&
-              match.hasTeamIds &&
-              _isUpcoming(match) &&
-              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
-              (_selectedCompetitionKeys.isEmpty ||
-                  _selectedCompetitionKeys.contains(
-                    CompetitionFilterSheet.keyFor(match),
-                  )),
-        )
-        .toList();
+    final matches = await _applyCompetitionAndBookmakerFilter(
+        all.where((match) => match.fixtureId > 0 &&
+            match.hasTeamIds && _isUpcoming(match)).toList());
 
     matches.sort((a, b) {
       final dateA = DateTime.tryParse(a.date);
@@ -3993,27 +4016,31 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   Future<void> _openCompetitionFilter() async {
     try {
+      // Catalogo stagionale + calendario senza alcun filtro bookmaker.
+      // Il catalogo non obbliga l'utente a scegliere una competizione.
+      final catalogFuture = _competitionCatalog.load()
+          .catchError((Object error) {
+            debugPrint('CATALOGO COMPETIZIONI: $error');
+            return <FootballCompetitionCatalogEntry>[];
+          });
       final all = await _loadMatchesForSelectedPeriod();
-      final available = all
-          .where(
-            (m) =>
-                m.hasTeamIds &&
-                _isUpcoming(m) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)),
-          )
-          .toList();
+      final available = all.where((m) =>
+          m.fixtureId > 0 && m.hasTeamIds && _isUpcoming(m)).toList();
+      final catalog = await catalogFuture;
 
       if (!mounted) return;
 
       final selected = await CompetitionFilterSheet.show(
         context: context,
         matches: available,
+        catalog: catalog,
         selectedKeys: _selectedCompetitionKeys,
       );
 
       if (selected == null || !mounted) return;
 
       setState(() {
+        _catalogByKey = {for (final entry in catalog) entry.selectionKey: entry};
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
@@ -4042,17 +4069,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _selectedCompetitionKeys
             .map((key) {
               final parts = key.split('|||');
-              return parts.length > 1 ? parts.last.trim() : key.trim();
+              return parts.length > 1
+                  ? parts.last.trim()
+                  : (_catalogByKey[key]?.name ?? key.trim());
             })
             .where((name) => name.isNotEmpty)
             .toList()
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     final summary = all
-        ? (_italyScheduleOnly
-            ? 'Nessun campionato selezionato: il filtro Palinsesto Italia '
-              'rimane attivo e limita le competizioni.'
-            : 'Nessun filtro: GoalVdLine usa tutti i campionati disponibili.')
+        ? 'Tutti i campionati, inclusi quelli non ancora quotati in Italia.'
         : leagues.length <= 3
         ? leagues.join(' • ')
         : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
@@ -4320,8 +4346,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Competizioni principali più vicine ai palinsesti dei bookmaker italiani.'
-                    : 'Tutte le competizioni disponibili.',
+                    ? 'Solo partite con quote riscontrate presso marchi presenti '
+                      'nel mercato italiano. Le probabilità AI non cambiano.'
+                    : 'Calendario completo: tutte le competizioni e le partite '
+                      'disponibili da API-Football.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               onChanged: _loading
@@ -4329,6 +4357,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
+                        _italianOddsCoverageWarning = null;
                         _manualSelectedMatches.clear();
                         _results.clear();
                         _portfolioResults.clear();
