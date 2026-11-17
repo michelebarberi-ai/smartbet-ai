@@ -14,6 +14,24 @@ void main() {
     expect(result.title, 'COMPATIBILI');
   });
 
+  test('B64: X2 e ospite segna spiegati con lettura sportiva', () {
+    final reading = compare('X2', 'OSPITE SEGNA');
+    expect(reading.kind, GoalVdLineMarketRelationKind.compatible);
+    expect(reading.explanation, contains('favorevole agli ospiti'));
+    expect(reading.explanation, contains('potenziale offensivo'));
+    expect(reading.explanation, isNot(contains('una può vincere')));
+    expect(reading.explanation, isNot(contains('0-1')));
+  });
+
+  test('B64: interpretazione casa e fallback senza frasi meccaniche', () {
+    final home = compare('1X', 'CASA SEGNA');
+    expect(home.explanation, contains('squadra di casa'));
+    final other = compare('12', 'OVER 1.5');
+    expect(other.explanation, contains('SmartBet propone'));
+    expect(other.explanation, contains('Diego indica'));
+    expect(other.explanation, isNot(contains('l’altra perde')));
+  });
+
   test('P19B2C: Goal e No Goal incompatibili', () {
     expect(
       compare('GOAL', 'NO GOAL').kind,
