@@ -30,6 +30,7 @@ AnalysisResult _smart({
   drawProbability: 0,
   awayProbability: 0,
   prediction: 'N/D',
+    explanation: 'Dati simulati per test',
   valueBet: 'N/D',
   risk: 'N/D',
   expectedHomeGoals: home,
