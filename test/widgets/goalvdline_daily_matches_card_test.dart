@@ -20,19 +20,19 @@ void main() {
     await tester.pumpWidget(app(count: 12));
     expect(find.byKey(const Key('b45-daily-count')), findsOneWidget);
     expect(find.text('12'), findsOneWidget);
-    expect(find.textContaining('12 partite future compatibili'), findsOneWidget);
+    expect(find.textContaining('12 partite future disponibili'), findsOneWidget);
     expect(find.textContaining('non significa'), findsOneWidget);
   });
 
-  testWidgets('B63: Home explains filtered count versus all upcoming fixtures',
+  testWidgets('B63: Home displays unfiltered fixtures with no whitelist duplication',
       (tester) async {
-    await tester.pumpWidget(app(count: 14, totalCount: 57));
-    expect(find.text('14'), findsOneWidget);
+    await tester.pumpWidget(app(count: 57, totalCount: 57));
+    expect(find.text('57'), findsOneWidget);
     expect(find.textContaining('Totale incontri futuri nel feed di oggi: 57'),
-        findsOneWidget);
+        findsNothing);
     expect(find.textContaining('Palinsesto Italia'), findsWidgets);
-    expect(find.textContaining('filtro indicativo'), findsOneWidget);
-    expect(find.textContaining('quota reale'), findsOneWidget);
+    expect(find.textContaining('non il nome del campionato'), findsOneWidget);
+    expect(find.textContaining('quota sopra 1,20'), findsOneWidget);
   });
 
   testWidgets('B45: missing feed is N/D, never falsely zero',
