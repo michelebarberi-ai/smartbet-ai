@@ -169,6 +169,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   bool _multiMarketRankingEnabled = false;
   final Set<String> _multiMarketFamilies = <String>{'1X2', 'GOAL', 'OVER'};
   final List<_MultiMarketDisplayItem> _multiMarketResults = [];
+  // B65: il ranking statistico compare nella stessa scheda Combinazioni.
+  // Cache locale della simulazione, senza chiamate bookmaker aggiuntive.
+  final Map<int, SmartBetRankedMultiMarketFixture> _combinationRankingCache = {};
   final SmartBetMultiMarketRankingService _multiMarketRanker =
       const SmartBetMultiMarketRankingService();
   SmartBetLeagueMarketReliabilityReport? _historicalEvidence;
@@ -2194,6 +2197,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _errorMessage = null;
       _results.clear();
       _sportsOnlyPreview.clear();
+      _combinationRankingCache.clear();
+      _historicalEvidence = null;
       _systemResults.clear();
       _selectedSystemIndex = 0;
       _combinationFixtureCount = 0;
@@ -2204,6 +2209,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
 
     try {
+      // B65: lo storico del ranking viene letto anche nelle Combinazioni.
+      // E' solo informativo e non modifica probabilita o scelte del motore.
+      await _loadHistoricalEvidenceReadOnly();
+      if (!mounted) return;
       // Legge la STESSA preferenza sul dispositivo gia usata da GoalVdLine.
       // Nessuna chiamata AI aggiuntiva e nessuna modifica allo storico.
       final learningSession = await const SmartBetSharedLocalLearningService()
@@ -3340,6 +3349,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       _selectedMarket = _selectedMarkets.isEmpty ? '' : _selectedMarkets.last;
       _results.clear();
+      _combinationRankingCache.clear();
       _systemResults.clear();
       _selectedSystemIndex = 0;
       _errorMessage = null;
@@ -4163,6 +4173,157 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     ),
   ];
 
+
+  // B65 — unica esperienza Combinazioni + Ranking. Solo le famiglie
+  // selezionate alimentano la simulazione: nessun mercato estraneo entra
+  // nella graduatoria e nessuna quota viene dedotta dalle probabilita.
+  String? _rankingFamilyForMarket(String market) {
+    switch (market) {
+      case '1':
+      case 'X':
+      case '2':
+        return '1X2';
+      case '1X':
+      case 'X2':
+      case '12':
+        return 'DOPPIA CHANCE';
+      case 'OVER':
+      case 'UNDER':
+      case 'GOAL':
+      case 'MULTIGOL':
+      case 'MERCATI OPPURE':
+        return market;
+      case 'NO GOAL':
+        return 'GOAL';
+      case 'CASA SEGNA':
+      case 'OSPITE SEGNA':
+        return 'SEGNA';
+      default:
+        return null;
+    }
+  }
+
+  SmartBetRankedMultiMarketFixture? _rankingForCombination(
+    _CombinationCandidate item,
+  ) {
+    final cached = _combinationRankingCache[item.match.fixtureId];
+    if (cached != null) return cached;
+    if (!SmartBetMultiMarketRankingService.hasSimulationInputs(item.analysis)) {
+      return null;
+    }
+    final families = _selectedMarkets
+        .map(_rankingFamilyForMarket)
+        .whereType<String>()
+        .toSet()
+        .toList(growable: false);
+    if (families.isEmpty) return null;
+    try {
+      final ranking = _multiMarketRanker.rank(
+        selectedMatches: [
+          SmartBetMultiMarketFixture(
+            fixtureId: item.match.fixtureId,
+            analysis: item.analysis,
+          ),
+        ],
+        families: families,
+      ).single;
+      _combinationRankingCache[item.match.fixtureId] = ranking;
+      return ranking;
+    } catch (error) {
+      debugPrint('B65 ranking integrato ${item.match.fixtureId}: $error');
+      return null;
+    }
+  }
+
+  Widget _combinationRankingPanel(_CombinationCandidate item) {
+    final ranking = _rankingForCombination(item);
+    final quality = item.analysis.dataConfidence;
+    final qualityLabel = quality > 0 && quality <= 100
+        ? '${quality.toStringAsFixed(0)}%'
+        : 'non disponibile';
+    final historical = _historicalEvidence?.find(
+      engine: SmartBetAnalysisEngine.smartBet,
+      country: item.match.country,
+      league: item.match.league,
+      market: item.market,
+    );
+    final hasSignificantHistory = historical != null &&
+        historical.evidenceLevel !=
+            SmartBetLeagueMarketEvidenceLevel.insufficient;
+    final leaders = ranking?.familyLeaders.entries
+        .map((entry) =>
+            '${entry.key}: ${entry.value.market} '
+            '${(entry.value.probability * 100).toStringAsFixed(1)}%')
+        .toList(growable: false) ?? <String>[];
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: ValueKey('b65-unified-ranking-${item.match.fixtureId}'),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: const Text(
+          'RANKING STATISTICO · QUALITÀ E STORICO',
+          style: TextStyle(
+            color: Color(0xFF69F0AE),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: const Text(
+          'Analisi integrata, senza una seconda ricerca',
+          style: TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Qualità dati: $qualityLabel. '
+              '${ranking == null ? "Simulazione per i mercati scelti non disponibile." : "Simulazione xG disponibile."}',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              hasSignificantHistory
+                  ? 'Storico ${item.market} in ${item.match.league}: '
+                    '${historical.observedAccuracyPercent.toStringAsFixed(1)}% '
+                    'su ${historical.sampleSize} pronostici risolti '
+                    '(limite inferiore 95%: '
+                    '${historical.wilsonLower95Percent.toStringAsFixed(1)}%).'
+                  : 'Storico del mercato/campionato insufficiente'
+                    '${historical == null ? "" : " (${historical.sampleSize} partite)"}.' ,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ),
+          if (leaders.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Simulazioni per famiglia: ${leaders.join(" • ")}',
+                style: const TextStyle(color: Colors.white60, fontSize: 10),
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Le simulazioni non sono selezioni giocabili: non cambiano '
+              'il mercato scelto o la quota. Lo storico non è la '
+              'probabilità di questa partita. La presenza nel palinsesto '
+              'italiano va verificata separatamente.',
+              style: TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _resultCard(_CombinationCandidate item, int rank) {
     final result = item.analysis;
     final match = item.match;
@@ -4416,6 +4577,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           if (isFamilyMarket) ...[
             const SizedBox(height: 12),
             _familyBreakdownSection(item),
+          ],
+
+          if (!isComboChance) ...[
+            const SizedBox(height: 10),
+            _combinationRankingPanel(item),
           ],
 
           const SizedBox(height: 10),
@@ -4685,34 +4851,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           const SizedBox(height: 10),
 
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'RANKING MULTIMERCATO — AUTOMATICO',
-              style: TextStyle(
-                color: Color(0xFF00C853),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            subtitle: const Text(
-              'Scegli fino a 3 famiglie e il numero di partite.',
+          // B65: rimosso il secondo interruttore del Ranking multimercato.
+          // Il motore resta in uso nel pannello dei risultati Combinazioni.
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Il Ranking multimercato è integrato nei risultati: '
+              'qualità dei dati, simulazioni e storico sono consultabili '
+              'senza ripetere la ricerca.',
               style: TextStyle(color: Colors.white54, fontSize: 11),
             ),
-            value: _multiMarketRankingEnabled,
-            activeThumbColor: const Color(0xFF00C853),
-            onChanged: (_loading || _xPremiumChoosing)
-                ? null
-                : (value) {
-                    setState(() {
-                      _multiMarketRankingEnabled = value;
-                      if (value) _xPremiumEnabled = false;
-                      _multiMarketResults.clear();
-                      _xPremiumResults.clear();
-                      _results.clear();
-                      _systemResults.clear();
-                      _errorMessage = null;
-                    });
-                  },
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
