@@ -252,7 +252,7 @@ class DualEngineSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'RELAZIONE LOGICA: ${reading.title}',
+                  'LETTURA SPORTIVA · ${reading.title}',
                   style: const TextStyle(
                     color: Colors.cyanAccent,
                     fontSize: 13,
@@ -279,8 +279,9 @@ class DualEngineSummary extends StatelessWidget {
                 ],
                 const SizedBox(height: 6),
                 const Text(
-                  'Raffronto logico dei mercati, non verifica '
-                  'indipendente delle probabilità o dell’Auditor.',
+                  'Interpretazione dei mercati selezionati: non è '
+                  'una verifica indipendente delle probabilità '
+                  'né sostituisce i controlli dell’Auditor.',
                   style: TextStyle(
                     color: Colors.white38,
                     fontSize: 9.5,
