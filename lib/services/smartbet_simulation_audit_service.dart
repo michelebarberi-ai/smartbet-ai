@@ -112,7 +112,29 @@ class SmartBetSimulationAuditService {
     if (market == 'NO GOAL') return h == 0 || a == 0;
     if (market == 'HOME SCORES') return h > 0;
     if (market == 'AWAY SCORES') return a > 0;
-    final overUnder = RegExp(r'^(OVER|UNDER) ([0-4])\.5$').firstMatch(market);
+    final overUnder = RegExp(r'^(OVER|UNDER) ([0-5])\.5
+    if (overUnder != null) {
+      final threshold = int.parse(overUnder.group(2)!);
+      return overUnder.group(1) == 'OVER'
+          ? total > threshold
+          : total <= threshold;
+    }
+    final multigol = RegExp(r'^MULTIGOL ([1-3])-([3-5])$').firstMatch(market);
+    if (multigol != null) {
+      return total >= int.parse(multigol.group(1)!) &&
+          total <= int.parse(multigol.group(2)!);
+    }
+    throw StateError('Mercato non valutabile: $market');
+  }
+}
+
+class _MetricAccumulator {
+  int samples = 0;
+  double sumPredicted = 0;
+  double sumObserved = 0;
+  double sumBrier = 0;
+}
+).firstMatch(market);
     if (overUnder != null) {
       final threshold = int.parse(overUnder.group(2)!);
       return overUnder.group(1) == 'OVER'
