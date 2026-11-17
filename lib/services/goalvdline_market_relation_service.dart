@@ -111,6 +111,41 @@ class GoalVdLineMarketRelationService {
     return null;
   }
 
+  /// Lettura sportiva dei mercati: evita formule astratte sulla vincita
+  /// delle singole giocate. Non usa quote e non produce nuove probabilità.
+  static String _compatibleReading(String smartBet, String diego) {
+    final pair = {smartBet, diego};
+
+    if (pair.contains('X2') && pair.contains('OSPITE SEGNA')) {
+      return 'Il quadro delle due analisi è favorevole agli ospiti: '
+          'l’X2 indica la possibilità di evitare la sconfitta, '
+          'mentre «Ospite segna» evidenzia il loro potenziale offensivo. '
+          'Sono due segnali coerenti, ma riferiti ad aspetti diversi della gara.';
+    }
+    if (pair.contains('1X') && pair.contains('CASA SEGNA')) {
+      return 'Le analisi descrivono una squadra di casa potenzialmente '
+          'competitiva: l’1X guarda al risultato finale, mentre '
+          '«Casa segna» mette al centro la produzione offensiva. '
+          'Le indicazioni sono coerenti, senza essere la stessa previsione.';
+    }
+    if (pair.contains('2') && pair.contains('OSPITE SEGNA')) {
+      return 'Entrambi i mercati guardano agli ospiti: uno prevede la vittoria '
+          'esterna, l’altro almeno un gol segnato in trasferta. '
+          'La vittoria è lo scenario più specifico; le due stime '
+          'non costituiscono conferme indipendenti.';
+    }
+    if (pair.contains('1') && pair.contains('CASA SEGNA')) {
+      return 'Entrambi i mercati valorizzano la squadra di casa: '
+          'uno guarda alla vittoria, l’altro alla possibilità che segni. '
+          'La vittoria è uno scenario più specifico rispetto al solo gol.';
+    }
+
+    return 'SmartBet propone «$smartBet», mentre Diego indica «$diego». '
+        'Le due letture possono descrivere lo stesso svolgimento della gara, '
+        'ma mettono in evidenza aspetti diversi: la compatibilità '
+        'non equivale a una conferma dell’affidabilità.';
+  }
+
   static GoalVdLineMarketRelation compare({
     required String? goalVdLineMarket,
     required String? diegoMarket,
@@ -130,8 +165,8 @@ class GoalVdLineMarketRelationService {
       return const GoalVdLineMarketRelation(
         GoalVdLineMarketRelationKind.same,
         'STESSO MERCATO',
-        'Le due AI indicano lo stesso evento. '
-            'Le probabilità possono comunque essere differenti.',
+        'Entrambi i motori individuano lo stesso mercato sportivo, '
+            'anche se possono stimarne diversamente la probabilità.'
       );
     }
 
@@ -152,7 +187,6 @@ class GoalVdLineMarketRelationService {
     var both = false;
     var firstOnly = false;
     var secondOnly = false;
-    String? sharedExample;
 
     // Enumerazione deterministica degli esiti full-time.
     // Tutti i mercati qui supportati hanno soglie <= 5 gol.
@@ -166,7 +200,6 @@ class GoalVdLineMarketRelationService {
 
         if (a && b) {
           both = true;
-          sharedExample ??= '$home-$away';
         } else if (a) {
           firstOnly = true;
         } else if (b) {
@@ -188,8 +221,8 @@ class GoalVdLineMarketRelationService {
       return const GoalVdLineMarketRelation(
         GoalVdLineMarketRelationKind.incompatible,
         'INCOMPATIBILI',
-        'Non possono risultare entrambe vincenti '
-            'sullo stesso risultato finale.',
+        'Le due letture puntano su scenari inconciliabili dello stesso '
+            'risultato finale: serve prudenza prima di scegliere un mercato.'
       );
     }
 
@@ -197,8 +230,8 @@ class GoalVdLineMarketRelationService {
       return const GoalVdLineMarketRelation(
         GoalVdLineMarketRelationKind.same,
         'CONDIZIONI EQUIVALENTI',
-        'Le due selezioni hanno condizioni di vincita equivalenti, '
-            'pur utilizzando nomi differenti.',
+        'I modelli descrivono lo stesso scenario con nomi di mercato '
+            'diversi. Questo non dimostra che le stime siano calibrate.'
       );
     }
 
@@ -206,8 +239,9 @@ class GoalVdLineMarketRelationService {
       return const GoalVdLineMarketRelation(
         GoalVdLineMarketRelationKind.compatible,
         'GOALVDLINE IMPLICA DIEGO',
-        'Quando vince la selezione GoalVdLine, '
-            'vince anche quella di Diego. Non vale necessariamente il contrario.',
+        'SmartBet descrive uno scenario più specifico, compreso '
+            'in quello indicato da Diego. È una coerenza fra mercati, '
+            'non una conferma indipendente delle probabilità.'
       );
     }
 
@@ -215,17 +249,16 @@ class GoalVdLineMarketRelationService {
       return const GoalVdLineMarketRelation(
         GoalVdLineMarketRelationKind.compatible,
         'DIEGO IMPLICA GOALVDLINE',
-        'Quando vince la selezione Diego, '
-            'vince anche quella GoalVdLine. Non vale necessariamente il contrario.',
+        'Diego descrive uno scenario più specifico, compreso '
+            'in quello indicato da SmartBet. È una coerenza fra mercati, '
+            'non una conferma indipendente delle probabilità.'
       );
     }
 
     return GoalVdLineMarketRelation(
       GoalVdLineMarketRelationKind.compatible,
       'COMPATIBILI',
-      'Possono risultare entrambe vincenti, '
-          'ad esempio con $sharedExample. '
-          'Tuttavia una può vincere mentre l’altra perde.',
+      _compatibleReading(first, second),
     );
   }
 }
