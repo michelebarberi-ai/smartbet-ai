@@ -172,8 +172,8 @@ class StatisticsEngine {
   // PROBABILITÀ 1X2
   // ============================================================
   //
-  // IMPORTANTE:
-  // questa logica rimane invariata.
+  // Metodo legacy a fasce: non usare per nuove analisi SmartCore.
+  // Il percorso attivo B65 usa probabilitiesFromExpectedGoals.
   // ============================================================
 
   static Map<String, int> calculateProbabilities({
@@ -219,6 +219,64 @@ class StatisticsEngine {
       'home': homeProbability.round(),
       'draw': drawProbability.round(),
       'away': awayProbability.round(),
+    };
+  }
+
+  // B65: 1X2 continuo basato sui gol attesi ricavati dalla forma reale.
+  // Evita i precedenti cinque valori a fasce (es. X2 fisso all'85%).
+  // Probabilita grezze di modello, non frequenze storiche calibrate.
+  static Map<String, int> probabilitiesFromExpectedGoals({
+    required double expectedHomeGoals,
+    required double expectedAwayGoals,
+  }) {
+    if (!expectedHomeGoals.isFinite ||
+        !expectedAwayGoals.isFinite ||
+        expectedHomeGoals <= 0 ||
+        expectedAwayGoals <= 0) {
+      return const {'home': 0, 'draw': 0, 'away': 0};
+    }
+
+    var homeWin = 0.0;
+    var draw = 0.0;
+    var awayWin = 0.0;
+    var mass = 0.0;
+
+    // Fino a 10 gol per squadra: per xG <= 3.5 la coda residua
+    // e trascurabile; la normalizzazione preserva il totale al 100%.
+    for (var homeGoals = 0; homeGoals <= 10; homeGoals++) {
+      final pHome = _poissonProbability(
+        lambda: expectedHomeGoals,
+        goals: homeGoals,
+      );
+      for (var awayGoals = 0; awayGoals <= 10; awayGoals++) {
+        final probability = pHome * _poissonProbability(
+          lambda: expectedAwayGoals,
+          goals: awayGoals,
+        );
+        mass += probability;
+        if (homeGoals > awayGoals) {
+          homeWin += probability;
+        } else if (homeGoals == awayGoals) {
+          draw += probability;
+        } else {
+          awayWin += probability;
+        }
+      }
+    }
+
+    if (!mass.isFinite || mass <= 0) {
+      return const {'home': 0, 'draw': 0, 'away': 0};
+    }
+
+    final homePercent = ((homeWin / mass) * 100).round().clamp(0, 100);
+    final drawPercent = ((draw / mass) * 100).round().clamp(
+      0, 100 - homePercent,
+    );
+    final awayPercent = 100 - homePercent - drawPercent;
+    return {
+      'home': homePercent,
+      'draw': drawPercent,
+      'away': awayPercent,
     };
   }
 
