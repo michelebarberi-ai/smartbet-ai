@@ -55,10 +55,10 @@ void main() {
       fixture(id: 9, date: 'bad-date'),
       fixture(id: 0),
     ], now: now);
-    expect(count, 2);
+    expect(count, 3);
   });
 
-  test('B63: global total includes fixture outside Italy schedule without double counting', () {
+  test('B63: unfiltered daily counter includes all competitions without double counting', () {
     final games = [
       fixture(id: 1, league: 'Serie A', country: 'Italia'),
       fixture(id: 2, league: 'Premier Division', country: 'Irlanda'),
@@ -69,7 +69,7 @@ void main() {
       fixture(id: 6, kickoff: DateTime(2026, 11, 14, 20)),
       fixture(id: 7, homeId: 0),
     ];
-    expect(GoalVdLineDailyMatchCounter.countForToday(games, now: now), 1);
+    expect(GoalVdLineDailyMatchCounter.countForToday(games, now: now), 4);
     expect(GoalVdLineDailyMatchCounter.countAllForToday(games, now: now), 4);
   });
 
