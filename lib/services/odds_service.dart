@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'smartbet_european_handicap_odds_parser.dart';
 import 'smartbet_extra_markets_odds_parser.dart';
 import 'smartbet_refundable_markets_odds_parser.dart';
+import 'italian_bookmaker_market_filter.dart';
 
 // ============================================================
 // SINGOLA QUOTA MIGLIORE
@@ -180,6 +181,9 @@ class OddsService {
   Future<FixtureMarketOdds?> getFixtureMarketOdds({
     required int fixtureId,
     String? bookmakerName,
+    // B65: separa i mercati dei marchi con presenza italiana da quelli
+    // del feed globale. Non e' una verifica di pubblicazione sul sito .it.
+    bool italianBookmakerOnly = false,
   }) async {
     if (fixtureId <= 0) {
       return null;
@@ -190,7 +194,7 @@ class OddsService {
         requestedBookmaker == null || requestedBookmaker.isEmpty
         ? null
         : _normalizeBookmaker(requestedBookmaker);
-    final cacheKey = '$fixtureId|${normalizedBookmaker ?? '*'}';
+    final cacheKey = '$fixtureId|${normalizedBookmaker ?? '*'}|${italianBookmakerOnly ? 'IT' : 'WORLD'}';
 
     if (_marketCache.containsKey(cacheKey)) {
       final cachedAt = _marketCacheTime[cacheKey];
@@ -269,6 +273,13 @@ class OddsService {
               bookmakerItem['name']?.toString().trim().isNotEmpty == true
               ? bookmakerItem['name'].toString().trim()
               : 'Bookmaker $bookmakerId';
+
+          if (italianBookmakerOnly &&
+              !ItalianBookmakerMarketFilter.appearsInItalianMarket(
+                bookmakerName,
+              )) {
+            continue;
+          }
 
           if (normalizedBookmaker != null) {
             if (!_bookmakerMatches(bookmakerName, requestedBookmaker!)) {
