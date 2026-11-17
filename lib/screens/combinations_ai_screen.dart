@@ -196,6 +196,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   bool _italyScheduleOnly = true;
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
+  // Stato originale dei filtri, conservato durante l'integrazione B63.
+  _CombinationPeriod _period = _CombinationPeriod.today;
+  DateTimeRange? _customPeriod;
+  final Set<String> _selectedCompetitionKeys = <String>{};
 
   bool _competitionPasses(MatchModel match) =>
       _selectedCompetitionKeys.isEmpty ||
