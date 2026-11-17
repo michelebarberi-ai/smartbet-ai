@@ -110,6 +110,15 @@ class CompetitionFilterSheet {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final allSelected = selected.length == allKeys.length;
+            // Conteggi delle fixture realmente presenti nel periodo richiesto:
+            // non includono le competizioni del solo catalogo stagionale.
+            // Sono candidate all'analisi, non pronostici già validati.
+            final totalFixtures = availabilityCounts.values.fold<int>(
+              0, (sum, count) => sum + count,
+            );
+            final selectedFixtures = selected.fold<int>(
+              0, (sum, key) => sum + (availabilityCounts[key] ?? 0),
+            );
             final favoriteAvailable = allKeys.where((key) => favoriteKeys.contains(favoriteKeyFor(key))).toSet();
             final matchingCountries = <String, Map<String, String>>{};
             for (final country in countries) {
@@ -147,12 +156,37 @@ class CompetitionFilterSheet {
                 dense: true,
                 value: selected.contains(entry.key),
                 activeColor: _accent,
-                title: Text(
-                  entry.value,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.value,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      key: ValueKey('competition-match-count-${entry.key}'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${availabilityCounts[entry.key] ?? 0} partite',
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 subtitle: availabilityCounts.containsKey(entry.key)
                     ? Text(
@@ -349,7 +383,32 @@ class CompetitionFilterSheet {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'PARTITE SELEZIONATE: $selectedFixtures / $totalFixtures',
+                            key: const Key('competition-selected-fixtures-total'),
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Partite future candidate all’analisi: la disponibilità '
+                            'di statistiche, quote e mercati va verificata.',
+                            style: TextStyle(
+                              color: Colors.white54, fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                       child: SizedBox(
                         width: double.infinity,
                         child: FilledButton(
