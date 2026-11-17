@@ -746,6 +746,21 @@ const ITALIAN_ODDS_TTL_MS = 3 * 60 * 60 * 1000;
 const ITALIAN_ODDS_MAX_PAGES = 12; // 10 fixture per pagina, cap anti-spesa
 const italianOddsIndexCache = new Map();
 const italianOddsIndexInFlight = new Map();
+// Serializzazione globale delle verifiche per evitare burst fra date diverse.
+let italianOddsThrottleQueue = Promise.resolve();
+let lastItalianOddsRequestAt = 0;
+function waitForItalianOddsSlot() {
+  const next = italianOddsThrottleQueue.then(async () => {
+    const elapsed = Date.now() - lastItalianOddsRequestAt;
+    const delayMs = Math.max(0, 2000 - elapsed);
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    lastItalianOddsRequestAt = Date.now();
+  });
+  italianOddsThrottleQueue = next.catch(() => {});
+  return next;
+}
 const italianBrandTokens = new Set([
   "sisal", "sisalit", "snai", "eurobet", "bet365", "betfair",
   "betano", "bwin", "lottomatica", "goldbet", "planetwin365",
@@ -781,9 +796,9 @@ app.get("/football/italian-quoted-fixtures", async (req, res) => {
     let totalPages = 1;
     let pagesRead = 0;
     for (let page = 1; page <= Math.min(totalPages, ITALIAN_ODDS_MAX_PAGES); page++) {
-      // B63: le query sono SEQUENZIALI e distanziate; non consumano
-      // tutta la quota per minuto in un burst durante un refresh.
-      if (page > 1) await new Promise((resolve) => setTimeout(resolve, 1800));
+      // B63: richieste in coda globalmente anche se utenti o date
+      // diverse vengono caricati in contemporanea.
+      await waitForItalianOddsSlot();
       const result = await requestApiFootball({
         path: "/odds",
         query: { date, timezone: "Europe/Rome", page },
