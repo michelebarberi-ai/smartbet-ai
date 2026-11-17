@@ -5178,7 +5178,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           if (_multiMarketRankingEnabled && _multiMarketResults.isNotEmpty)
             _multiMarketResultList(),
 
-          if (!_xPremiumEnabled &&
+          // Non mostrare selezioni provvisorie prima della verifica quote
+          // e dell'Auditor, soprattutto con Palinsesto Italia attivo.
+          if (!_loading && !_checkingOdds && !_xPremiumEnabled &&
               !_multiMarketRankingEnabled &&
               _results.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -5224,7 +5226,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 _results.length < _topCount) ...[
               const SizedBox(height: 8),
               Text(
-                '${_results.length} selezioni confermate su $_topCount richieste. '
+                '${_results.length} selezioni con quota nel feed su $_topCount richieste. '
                 'Le stime aggiuntive, se presenti, sono mostrate separatamente.',
                 key: const Key('b51-combinations-partial-count'),
                 style: const TextStyle(
