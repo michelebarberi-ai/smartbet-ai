@@ -4049,7 +4049,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     final summary = all
-        ? 'Nessun filtro: GoalVdLine usa tutti i campionati disponibili.'
+        ? (_italyScheduleOnly
+            ? 'Nessun campionato selezionato: il filtro Palinsesto Italia '
+              'rimane attivo e limita le competizioni.'
+            : 'Nessun filtro: GoalVdLine usa tutti i campionati disponibili.')
         : leagues.length <= 3
         ? leagues.join(' • ')
         : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
