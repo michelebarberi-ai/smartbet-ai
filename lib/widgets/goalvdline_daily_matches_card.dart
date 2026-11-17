@@ -6,11 +6,13 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
   const GoalVdLineDailyMatchesCard({
     super.key,
     required this.count,
+    this.totalCount,
     required this.loading,
     required this.onCreateCoupon,
   });
 
   final int? count;
+  final int? totalCount;
   final bool loading;
   final VoidCallback onCreateCoupon;
 
@@ -23,7 +25,7 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
             ? 'Partite non disponibili: verifica la connessione e aggiorna.'
             : count == 0
                 ? 'Nessuna partita futura compatibile con il palinsesto Italia oggi.'
-                : '$count partite future disponibili per l’analisi AI oggi.';
+                : '$count partite future compatibili con il palinsesto Italia.';
 
     return Card(
       key: const Key('b45-daily-matches'),
@@ -54,11 +56,22 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
               ),
             ),
             Text(message),
+            if (!loading && totalCount != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                'Totale incontri futuri nel feed di oggi: $totalCount.',
+                key: const Key('b63-daily-total-count'),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 7),
             const Text(
-              'Conteggio aggiornato all’apertura e al refresh della Home. '
-              'Solo partite non iniziate: non significa che abbiano già '
-              'un pronostico affidabile o una quota Sisal disponibile.',
+              'Il numero principale esclude i campionati fuori dal filtro '
+              'Palinsesto Italia. In Crea Schedina puoi disattivarlo per '
+              'analizzare tutte le competizioni disponibili. '
+              'Solo partite non iniziate e con ID squadre validi; '
+              'non significa che abbiano già un pronostico affidabile '
+              'o una quota reale superiore a 1,20.',
               style: TextStyle(fontSize: 11, color: Colors.white70),
             ),
             const SizedBox(height: 12),
