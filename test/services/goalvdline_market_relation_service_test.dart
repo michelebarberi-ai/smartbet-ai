@@ -11,14 +11,15 @@ void main() {
   test('P19B2C: 12 e Over 1.5 compatibili', () {
     final result = compare('12', 'OVER 1.5');
     expect(result.kind, GoalVdLineMarketRelationKind.compatible);
-    expect(result.title, 'COMPATIBILI');
+    expect(result.title, 'MERCATI DIFFERENTI');
   });
 
   test('B64: X2 e ospite segna spiegati con lettura sportiva', () {
     final reading = compare('X2', 'OSPITE SEGNA');
     expect(reading.kind, GoalVdLineMarketRelationKind.compatible);
-    expect(reading.explanation, contains('favorevole agli ospiti'));
-    expect(reading.explanation, contains('potenziale offensivo'));
+    expect(reading.explanation, contains('doppia chance X2'));
+    expect(reading.explanation, contains('non conferma'));
+    expect(reading.title, 'MERCATI DIFFERENTI');
     expect(reading.explanation, isNot(contains('una può vincere')));
     expect(reading.explanation, isNot(contains('0-1')));
   });
