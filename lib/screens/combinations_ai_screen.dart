@@ -3252,7 +3252,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _selectedCompetitionKeys
             .map((key) {
               final parts = key.split('|||');
-              return parts.length > 1 ? parts.last.trim() : key.trim();
+              return parts.length > 1 ? parts.last.trim() : (_catalogByKey[key]?.name ?? key.trim());
             })
             .where((name) => name.isNotEmpty)
             .toList()
@@ -4681,6 +4681,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
 
+          if (_italianOddsCoverageWarning != null) ...[
+            const SizedBox(height: 6),
+            Text(_italianOddsCoverageWarning!,
+              style: const TextStyle(
+                color: Colors.amberAccent, fontSize: 11)),
+          ],
           const SizedBox(height: 18),
 
           _competitionSelector(),
