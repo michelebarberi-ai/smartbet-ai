@@ -70,6 +70,8 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
               'Il Palinsesto Italia nella Schedina AI controlla '
               'facoltativamente la presenza di quote per le singole '
               'partite, non il nome del campionato. '
+              'Il conteggio non significa che tutti gli incontri abbiano '
+              'un pronostico affidabile. '
               'La quota sopra 1,20 viene verificata soltanto '
               'per il mercato selezionato dopo l\'analisi sportiva.',
               style: TextStyle(fontSize: 11, color: Colors.white70),
