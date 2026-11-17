@@ -11,7 +11,7 @@ import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/football_competition_catalog_service.dart';
-import '../services/italian_bookmaker_availability_service.dart';
+import '../services/italian_bookmaker_market_filter.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
@@ -223,8 +223,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   // Calendario completo per impostazione predefinita. Il Palinsesto Italia
   // e' SOLO una verifica opzionale di quote per fixture, non una whitelist.
   bool _italyScheduleOnly = false;
-  String? _italianOddsCoverageWarning;
-  final _italianOddsAvailability = const ItalianBookmakerAvailabilityService();
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
   final Set<String> _selectedCompetitionKeys = <String>{};
@@ -234,35 +232,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
       _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
 
-  /// Prima carichiamo tutte le fixture del periodo e verifichiamo i
-  /// campionati scelti; SOLO se richiesto usiamo il feed bookmaker.
-  /// In nessun caso le quote alterano il ranking/probabilita' sportive.
-  Future<List<MatchModel>> _applyCompetitionAndBookmakerFilter(
-      List<MatchModel> games) async {
-    final available = games.where(_competitionPasses).toList();
-    if (!_italyScheduleOnly) {
-      _italianOddsCoverageWarning = null;
-      return available;
-    }
-    final days = <DateTime>{
-      for (final item in available)
-        if (DateTime.tryParse(item.date) != null)
-          DateUtils.dateOnly(DateTime.parse(item.date).toLocal()),
-    }.toList()..sort();
-    final allowed = <int>{};
-    var incompleteDays = 0;
-    for (final day in days) {
-      final status = await _italianOddsAvailability.forDate(day);
-      allowed.addAll(status.quotedFixtureIds);
-      if (!status.complete) incompleteDays++;
-    }
-    _italianOddsCoverageWarning = incompleteDays == 0
-        ? null
-        : 'Verifica quote incompleta per $incompleteDays giornate: '
-          'sono mostrate solo le partite con quote riscontrate nel feed. '
-          'Le altre restano da verificare, non sono escluse dal calendario.';
-    return available.where((m) => allowed.contains(m.fixtureId)).toList();
-  }
+  // Nessuna verifica bookmaker prima dell'analisi sportiva.
+  List<MatchModel> _applyCompetitionFilter(List<MatchModel> matches) =>
+      matches.where(_competitionPasses).toList();
+
   String _phase = '';
 
   int _processed = 0;
@@ -585,7 +558,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // sportivamente, è utilizzabile nella schedina.
       final bestOdd = odds?.oddFor(market);
 
-      if (bestOdd == null || bestOdd.odd <= _minimumOdd) {
+      // Solo al termine dell'analisi: eventuale filtro bookmaker.
+      // Il feed non certifica la giocabilità sul sito italiano.
+      if (bestOdd == null ||
+          bestOdd.odd <= _minimumOdd ||
+          (_italyScheduleOnly &&
+              !ItalianBookmakerMarketFilter.appearsInItalianMarket(
+                  bestOdd.bookmakerName))) {
         continue;
       }
 
@@ -1262,7 +1241,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final all = await _loadMatchesForSelectedPeriod();
-      final matches = await _applyCompetitionAndBookmakerFilter(
+      final matches = _applyCompetitionFilter(
           all.where((m) => m.hasTeamIds && _isUpcoming(m)).toList());
 
       _couponFixtureCount = matches.length;
@@ -1272,12 +1251,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         setState(() {
           _loading = false;
           _phase = '';
-          _error = _italyScheduleOnly
-              ? 'Nessuna partita con quote riscontrate presso i bookmaker '
-                'del filtro Palinsesto Italia. Il feed può essere incompleto: '
-                'disattiva il filtro per analizzare tutte le partite.'
-              : 'Non ci sono partite ancora da giocare disponibili nel '
-                'periodo selezionato.';
+          _error = 'Non ci sono partite future disponibili nel periodo selezionato.';
         });
         return;
       }
@@ -3530,7 +3504,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   Future<List<MatchModel>> _manualAvailableMatches() async {
     final all = await _loadMatchesForSelectedPeriod();
 
-    final matches = await _applyCompetitionAndBookmakerFilter(
+    final matches = _applyCompetitionFilter(
         all.where((match) => match.fixtureId > 0 &&
             match.hasTeamIds && _isUpcoming(match)).toList());
 
@@ -3567,12 +3541,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     if (!mounted) return;
-
-    if (_italianOddsCoverageWarning != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_italianOddsCoverageWarning!)),
-      );
-    }
 
     if (matches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4355,10 +4323,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Solo partite con quote riscontrate presso marchi presenti '
-                      'nel mercato italiano. Le probabilità AI non cambiano.'
-                    : 'Calendario completo: tutte le competizioni e le partite '
-                      'disponibili da API-Football.',
+                    ? 'Verifica finale: usa solo quote del feed attribuite '
+                      'a marchi presenti in Italia. Non limita l’analisi.'
+                    : 'Calendario completo: tutte le partite disponibili.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               onChanged: _loading
@@ -4366,7 +4333,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
-                        _italianOddsCoverageWarning = null;
                         _manualSelectedMatches.clear();
                         _results.clear();
                         _portfolioResults.clear();
@@ -4378,12 +4344,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
 
-          if (_italianOddsCoverageWarning != null) ...[
-            const SizedBox(height: 6),
-            Text(_italianOddsCoverageWarning!,
-              style: const TextStyle(
-                color: Colors.amberAccent, fontSize: 11)),
-          ],
           const SizedBox(height: 22),
 
           if (_mode == _CouponMode.automatic) ...[
