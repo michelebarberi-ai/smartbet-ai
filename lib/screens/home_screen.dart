@@ -563,6 +563,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 18),
                   GoalVdLineDailyMatchesCard(
                     count: dashboard.todayMatches,
+                    totalCount: dashboard.allTodayMatches,
                     loading: dashboard.loading,
                     onCreateCoupon: () {
                       Navigator.push(
