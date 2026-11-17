@@ -16,6 +16,7 @@ import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_refundable_market_candidate_service.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
+import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -213,6 +214,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   bool _marketAvailableInItalianFeed(_CombinationCandidate pick) =>
       pick.odd != null && pick.odd!.isFinite && pick.odd! > _minimumOdd &&
       pick.bookmaker != null &&
+      ItalyScheduleFilter.allows(pick.match) &&
       ItalianBookmakerMarketFilter.appearsInItalianMarket(pick.bookmaker!);
 
   List<MatchModel> _applyCompetitionFilter(List<MatchModel> matches) =>
@@ -2532,7 +2534,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       setState(() {
         _sportsOnlyPreview
           ..clear()
-          ..addAll(sportsOnly.take(_advancedShortlistSize(sportsOnly.length)));
+          ..addAll(sportsOnly
+              .where((item) => _acceptsMarketProbability(item.probability))
+              .take(_advancedShortlistSize(sportsOnly.length)));
         _checkingOdds = true;
       });
 
@@ -2591,6 +2595,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             // P19C: una sola richiesta quote per fixture, dopo la deep analysis.
             final marketOdds = await oddsService.getFixtureMarketOdds(
               fixtureId: item.match.fixtureId,
+              italianBookmakerOnly: _italyScheduleOnly,
             );
             if (marketOdds == null) continue;
             if (marketOdds.bestByOutcome.isNotEmpty) {
@@ -2638,6 +2643,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             // Le quote della famiglia entrano SOLO dopo la deep analysis.
             final marketOdds = await oddsService.getFixtureMarketOdds(
               fixtureId: item.match.fixtureId,
+              italianBookmakerOnly: _italyScheduleOnly,
             );
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
@@ -2657,13 +2663,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             }
 
             validCandidates.add(executableFamilyCandidate);
-          } else if (item.odd != null &&
+          } else if (!_italyScheduleOnly && item.odd != null &&
               item.odd! > _minimumOdd &&
               item.bookmaker != null) {
             validCandidates.add(item);
           } else {
             final marketOdds = await oddsService.getFixtureMarketOdds(
               fixtureId: item.match.fixtureId,
+              italianBookmakerOnly: _italyScheduleOnly,
             );
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
@@ -2706,7 +2713,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       }
 
       if (_italyScheduleOnly) {
-        // Solo dopo il ranking sportivo e le quote: mai filtro calendario.
+        // B65: verifica compatibilita di competizione E marchio.
+        // Il feed internazionale NON certifica disponibilita sul sito .it.
+        // Il filtro interviene solo dopo l'analisi sportiva.
         validCandidates.removeWhere(
           (pick) => !_marketAvailableInItalianFeed(pick),
         );
@@ -2803,6 +2812,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
       if (_selectedMarket != 'COMBO CHANCE' && validCandidates.isNotEmpty) {
         final checked = <_CombinationCandidate>[];
+        var actuallyRejected = 0;
         const feasibilityBatchSize = 3;
 
         for (
@@ -2844,10 +2854,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             }),
           );
 
+          actuallyRejected += auditedBatch.where((item) => item == null).length;
           checked.addAll(auditedBatch.whereType<_CombinationCandidate>());
         }
 
-        _combinationAuditRejected = validCandidates.length - checked.length;
+        // Conta solo le selezioni realmente auditate e bloccate, non quelle
+        // rimaste inesaminate dopo avere raggiunto il numero richiesto.
+        _combinationAuditRejected = actuallyRejected;
         validCandidates
           ..clear()
           ..addAll(checked.take(auditTargetCount));
@@ -4812,8 +4825,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Solo fixture con quote verificate presso marchi '
-                      'presenti in Italia; le probabilità non cambiano.'
+                    ? 'Campionati compatibili e quote di marchi presenti in Italia. '
+                      'Il feed non certifica il singolo palinsesto .it; '
+                      'controlla la disponibilità prima di giocare.'
                     : 'Tutte le partite e i campionati disponibili da API-Football.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
@@ -5250,7 +5264,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               'Partite: $_combinationFixtureCount • '
               'Previsioni sportive: $_combinationSportsCount • '
               'Analisi avanzate valide: $_combinationDeepCount • '
-              'Selezioni con quota e soglia idonee: $_combinationQuotedCount • '
+              'Selezioni con quota nel feed e soglia idonee: $_combinationQuotedCount • '
               'Bloccate dall’Auditor: $_combinationAuditRejected',
               key: const Key('b52-combinations-search-diagnostics'),
               style: const TextStyle(
