@@ -19,7 +19,6 @@ import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_reliability_service.dart';
-import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -1273,8 +1272,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         setState(() {
           _loading = false;
           _phase = '';
-          _error =
-              'Non ci sono partite ancora da giocare disponibili nel periodo selezionato.';
+          _error = _italyScheduleOnly
+              ? 'Nessuna partita con quote riscontrate presso i bookmaker '
+                'del filtro Palinsesto Italia. Il feed può essere incompleto: '
+                'disattiva il filtro per analizzare tutte le partite.'
+              : 'Non ci sono partite ancora da giocare disponibili nel '
+                'periodo selezionato.';
         });
         return;
       }
@@ -3565,6 +3568,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     if (!mounted) return;
 
+    if (_italianOddsCoverageWarning != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_italianOddsCoverageWarning!)),
+      );
+    }
+
     if (matches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4369,6 +4378,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
 
+          if (_italianOddsCoverageWarning != null) ...[
+            const SizedBox(height: 6),
+            Text(_italianOddsCoverageWarning!,
+              style: const TextStyle(
+                color: Colors.amberAccent, fontSize: 11)),
+          ],
           const SizedBox(height: 22),
 
           if (_mode == _CouponMode.automatic) ...[
