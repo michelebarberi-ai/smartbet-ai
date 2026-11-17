@@ -35,6 +35,7 @@ class DashboardStore extends ChangeNotifier {
   bool _aiOnline = false;
 
   int? _todayMatches;
+  int? _allTodayMatches;
   int? _liveMatches;
 
   int _analysesPerformed = 0;
@@ -55,6 +56,8 @@ class DashboardStore extends ChangeNotifier {
   bool get aiOnline => _aiOnline;
 
   int? get todayMatches => _todayMatches;
+
+  int? get allTodayMatches => _allTodayMatches;
 
   int? get liveMatches => _liveMatches;
 
@@ -194,10 +197,15 @@ class DashboardStore extends ChangeNotifier {
       _todayMatches = GoalVdLineDailyMatchCounter.countForToday(
         matches, now: now,
       );
+      // Stesso feed e stessa richiesta: il totale e' calcolato in memoria.
+      _allTodayMatches = GoalVdLineDailyMatchCounter.countAllForToday(
+        matches, now: now,
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('Dashboard matches error: $e');
       _todayMatches = null;
+      _allTodayMatches = null;
       notifyListeners();
     }
   }

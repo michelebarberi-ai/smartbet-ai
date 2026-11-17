@@ -112,7 +112,7 @@ class SmartBetSimulationAuditService {
     if (market == 'NO GOAL') return h == 0 || a == 0;
     if (market == 'HOME SCORES') return h > 0;
     if (market == 'AWAY SCORES') return a > 0;
-    final overUnder = RegExp(r'^(OVER|UNDER) ([0-4])\.5$').firstMatch(market);
+    final overUnder = RegExp(r'^(OVER|UNDER) ([0-5])\.5$').firstMatch(market);
     if (overUnder != null) {
       final threshold = int.parse(overUnder.group(2)!);
       return overUnder.group(1) == 'OVER'

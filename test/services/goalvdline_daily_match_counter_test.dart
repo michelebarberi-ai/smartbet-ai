@@ -55,7 +55,22 @@ void main() {
       fixture(id: 9, date: 'bad-date'),
       fixture(id: 0),
     ], now: now);
-    expect(count, 2);
+    expect(count, 3);
+  });
+
+  test('B63: unfiltered daily counter includes all competitions without double counting', () {
+    final games = [
+      fixture(id: 1, league: 'Serie A', country: 'Italia'),
+      fixture(id: 2, league: 'Premier Division', country: 'Irlanda'),
+      fixture(id: 3, league: 'Primera A', country: 'Colombia'),
+      fixture(id: 3, league: 'Primera A', country: 'Colombia'),
+      fixture(id: 4, league: 'International Friendly', country: 'Internazionale'),
+      fixture(id: 5, status: 'FT'),
+      fixture(id: 6, kickoff: DateTime(2026, 11, 14, 20)),
+      fixture(id: 7, homeId: 0),
+    ];
+    expect(GoalVdLineDailyMatchCounter.countForToday(games, now: now), 4);
+    expect(GoalVdLineDailyMatchCounter.countAllForToday(games, now: now), 4);
   });
 
   test('B45 morning: empty and no eligible results are truly zero', () {

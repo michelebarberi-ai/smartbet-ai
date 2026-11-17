@@ -10,6 +10,8 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/football_competition_catalog_service.dart';
+import '../services/italian_bookmaker_market_filter.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
@@ -17,13 +19,13 @@ import '../services/goalvdline_three_coupon_system.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_reliability_service.dart';
-import '../services/italy_schedule_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
+import '../widgets/goalvdline_three_brains_expansion.dart';
 import '../widgets/goalvdline_on_demand_coupon_panel.dart';
 import '../widgets/goalvdline_three_coupon_viewer.dart';
 import '../services/goalvdline_market_relation_service.dart';
@@ -32,7 +34,6 @@ import '../services/smartbet_device_learning_preferences.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 import '../services/goalvdline_competition_order.dart';
-import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
   const CreateAiCouponScreen({super.key});
@@ -218,8 +219,22 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     });
   }
 
+  // Calendario completo per impostazione predefinita. Il Palinsesto Italia
+  // e' SOLO una verifica opzionale di quote per fixture, non una whitelist.
   bool _italyScheduleOnly = true;
+  final _competitionCatalog = const FootballCompetitionCatalogService();
+  Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
   final Set<String> _selectedCompetitionKeys = <String>{};
+
+  bool _competitionPasses(MatchModel match) =>
+      _selectedCompetitionKeys.isEmpty ||
+      _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
+      _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
+
+  // Nessuna verifica bookmaker prima dell'analisi sportiva.
+  List<MatchModel> _applyCompetitionFilter(List<MatchModel> matches) =>
+      matches.where(_competitionPasses).toList();
+
   String _phase = '';
 
   int _processed = 0;
@@ -440,9 +455,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   List<({String market, int probability})> _sportsMarketCandidates(
-    AnalysisResult analysis, {
-    FixtureMarketOdds? odds,
-  }) {
+    AnalysisResult analysis,
+  ) {
     final probabilities = _markets(analysis);
     final candidates = <({String market, int probability, int order})>[];
 
@@ -455,22 +469,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       candidates.add((market: market, probability: probability, order: index));
     }
 
-    final handicapCandidates =
-        SmartBetEuropeanHandicapCandidateService.candidates(
-          expectedHomeGoals: analysis.expectedHomeGoals,
-          expectedAwayGoals: analysis.expectedAwayGoals,
-          quotedOutcomes: odds?.bestByOutcome.keys ?? const <String>[],
-        );
-
-    for (var index = 0; index < handicapCandidates.length; index++) {
-      final candidate = handicapCandidates[index];
-
-      candidates.add((
-        market: candidate.market,
-        probability: candidate.probability,
-        order: _marketOrder.length + index,
-      ));
-    }
+    // Gli handicap vengono esaminati separatamente come mercati opzionali.
+    // Non devono entrare nel ranking CORE solo perche' il feed quote ne
+    // pubblica una linea molto ampia (es. -4 o -5).
+    // In particolare le quote non generano candidati nel cervello sportivo.
 
     // Classifica puramente sportiva.
     //
@@ -496,10 +498,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required FixtureMarketOdds? odds,
   }) {
     // Ordine dei mercati deciso ESCLUSIVAMENTE dai dati sportivi.
-    final sportsCandidates = _sportsMarketCandidates(
-      preliminary.analysis,
-      odds: odds,
-    );
+    final sportsCandidates = _sportsMarketCandidates(preliminary.analysis);
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -542,7 +541,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // sportivamente, è utilizzabile nella schedina.
       final bestOdd = odds?.oddFor(market);
 
-      if (bestOdd == null || bestOdd.odd <= _minimumOdd) {
+      // Solo al termine dell'analisi: eventuale filtro bookmaker.
+      // Il feed non certifica la giocabilità sul sito italiano.
+      if (bestOdd == null ||
+          bestOdd.odd <= _minimumOdd ||
+          (_italyScheduleOnly &&
+              !ItalianBookmakerMarketFilter.appearsInItalianMarket(
+                  bestOdd.bookmakerName))) {
         continue;
       }
 
@@ -616,7 +621,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     //
     // Mostriamo quindi sempre il mercato statisticamente migliore,
     // indipendentemente dalla disponibilità o dal livello della quota.
-    final sportsCandidates = _sportsMarketCandidates(analysis, odds: odds);
+    final sportsCandidates = _sportsMarketCandidates(analysis);
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -989,6 +994,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final analyzed = <_CouponPick>[];
+      var insufficientStatistics = 0;
+      var unavailableMarkets = 0;
+      var temporaryFailures = 0;
 
       // SmartBet viene eseguito a piccoli batch.
       // DiegoAI viene poi aggiunto in sequenza.
@@ -1031,6 +1039,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               }
 
               if (smartBet.smartScore <= 0) {
+                insufficientStatistics++;
                 return null;
               }
 
@@ -1051,11 +1060,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               );
 
               if (pick == null) {
+                unavailableMarkets++;
                 return null;
               }
 
               return _manualAuditedPick(pick);
             } catch (e) {
+              temporaryFailures++;
               debugPrint(
                 'SMARTBET MANUAL COUPON ERROR '
                 '${match.fixtureId}: $e',
@@ -1141,7 +1152,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _phase = '';
 
         if (_results.isEmpty) {
-          _error = 'Non è stato possibile analizzare le partite selezionate.';
+          _error =
+              'Nessuna delle ${matches.length} partite selezionate '
+              'ha prodotto un pronostico utilizzabile. '
+              'Dati statistici insufficienti: $insufficientStatistics. '
+              'Mercati non calcolabili: $unavailableMarkets. '
+              'Errori temporanei: $temporaryFailures. '
+              'Non vengono inventate probabilità per colmare i dati mancanti.';
           return;
         }
 
@@ -1207,18 +1224,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final all = await _loadMatchesForSelectedPeriod();
-      final matches = all
-          .where(
-            (m) =>
-                m.hasTeamIds &&
-                _isUpcoming(m) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)) &&
-                (_selectedCompetitionKeys.isEmpty ||
-                    _selectedCompetitionKeys.contains(
-                      CompetitionFilterSheet.keyFor(m),
-                    )),
-          )
-          .toList();
+      final matches = _applyCompetitionFilter(
+          all.where((m) => m.hasTeamIds && _isUpcoming(m)).toList());
 
       _couponFixtureCount = matches.length;
       if (!mounted) return;
@@ -1227,8 +1234,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         setState(() {
           _loading = false;
           _phase = '';
-          _error =
-              'Non ci sono partite ancora da giocare disponibili nel periodo selezionato.';
+          _error = 'Non ci sono partite future disponibili nel periodo selezionato.';
         });
         return;
       }
@@ -2125,9 +2131,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               : 'GoalVdLine non ha trovato selezioni con quota disponibile '
                     'di almeno 1.20 che abbiano superato i controlli di qualità.';
         } else if (incompletePortfolios > 0) {
+          final prefix = incompletePortfolios == 1
+              ? 'Una schedina del portfolio contiene'
+              : '$incompletePortfolios schedine del portfolio contengono';
           _notice =
-              '$incompletePortfolios schedine del portfolio contengono meno '
-              'di $_count eventi: GoalVdLine non forza selezioni deboli.'
+              '$prefix meno di $_count eventi: GoalVdLine non forza '
+              'selezioni deboli.'
               '${auditRejected > 0 ? ' L’Auditor ha escluso $auditRejected candidate.' : ''}';
         } else if (adaptiveCount > 0 || auditRejected > 0) {
           final parts = <String>[];
@@ -2894,7 +2903,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       return 'Medio-Alto';
     }
 
-    if (_results.length >= 5 || totalOdd >= 5.0 || combined < 0.30) {
+    if (_results.length >= 5 || totalOdd >= 5.0 || combined < 0.65) {
       return 'Medio';
     }
 
@@ -2929,8 +2938,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _loading ||
         _threeSystemLoading ||
         _results.length < 3 ||
-        _results.length > 15 ||
-        _results.length != _count) {
+        _results.length > 15) {
       return;
     }
 
@@ -2942,11 +2950,17 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // Manteniamo i dati originali del motore. Solo mercati con
       // probabilità sufficiente e quota reale diventano alternative.
       for (final base in originalPicks) {
-        if (base.probability >= 80) continue;
+        // Gli handicap ampi meritano alternative anche quando il modello
+        // assegna loro una probabilità elevata.
+        if (base.probability >= 80 &&
+            !SmartBetHighHandicapAlternativeService.needsAlternative(
+                base.market)) {
+          continue;
+        }
         final odds = await _oddsService.getFixtureMarketOdds(
           fixtureId: base.match.fixtureId,
         );
-        final candidates = _sportsMarketCandidates(base.analysis, odds: odds);
+        final candidates = _sportsMarketCandidates(base.analysis);
         final allowed = <GoalVdLineSystemSelection>[];
         for (final candidate in candidates) {
           if (candidate.market == base.market) continue;
@@ -3473,19 +3487,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   Future<List<MatchModel>> _manualAvailableMatches() async {
     final all = await _loadMatchesForSelectedPeriod();
 
-    final matches = all
-        .where(
-          (match) =>
-              match.fixtureId > 0 &&
-              match.hasTeamIds &&
-              _isUpcoming(match) &&
-              (!_italyScheduleOnly || ItalyScheduleFilter.allows(match)) &&
-              (_selectedCompetitionKeys.isEmpty ||
-                  _selectedCompetitionKeys.contains(
-                    CompetitionFilterSheet.keyFor(match),
-                  )),
-        )
-        .toList();
+    final matches = _applyCompetitionFilter(
+        all.where((match) => match.fixtureId > 0 &&
+            match.hasTeamIds && _isUpcoming(match)).toList());
 
     matches.sort((a, b) {
       final dateA = DateTime.tryParse(a.date);
@@ -3972,27 +3976,31 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
   Future<void> _openCompetitionFilter() async {
     try {
+      // Catalogo stagionale + calendario senza alcun filtro bookmaker.
+      // Il catalogo non obbliga l'utente a scegliere una competizione.
+      final catalogFuture = _competitionCatalog.load()
+          .catchError((Object error) {
+            debugPrint('CATALOGO COMPETIZIONI: $error');
+            return <FootballCompetitionCatalogEntry>[];
+          });
       final all = await _loadMatchesForSelectedPeriod();
-      final available = all
-          .where(
-            (m) =>
-                m.hasTeamIds &&
-                _isUpcoming(m) &&
-                (!_italyScheduleOnly || ItalyScheduleFilter.allows(m)),
-          )
-          .toList();
+      final available = all.where((m) =>
+          m.fixtureId > 0 && m.hasTeamIds && _isUpcoming(m)).toList();
+      final catalog = await catalogFuture;
 
       if (!mounted) return;
 
       final selected = await CompetitionFilterSheet.show(
         context: context,
         matches: available,
+        catalog: catalog,
         selectedKeys: _selectedCompetitionKeys,
       );
 
       if (selected == null || !mounted) return;
 
       setState(() {
+        _catalogByKey = {for (final entry in catalog) entry.selectionKey: entry};
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
@@ -4021,14 +4029,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         _selectedCompetitionKeys
             .map((key) {
               final parts = key.split('|||');
-              return parts.length > 1 ? parts.last.trim() : key.trim();
+              return parts.length > 1
+                  ? parts.last.trim()
+                  : (_catalogByKey[key]?.name ?? key.trim());
             })
             .where((name) => name.isNotEmpty)
             .toList()
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     final summary = all
-        ? 'Nessun filtro: GoalVdLine usa tutti i campionati disponibili.'
+        ? 'Tutti i campionati, inclusi quelli non ancora quotati in Italia.'
         : leagues.length <= 3
         ? leagues.join(' • ')
         : '${leagues.take(3).join(' • ')} • +${leagues.length - 3}';
@@ -4296,8 +4306,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
               subtitle: Text(
                 _italyScheduleOnly
-                    ? 'Competizioni principali più vicine ai palinsesti dei bookmaker italiani.'
-                    : 'Tutte le competizioni disponibili.',
+                    ? 'Verifica finale: usa solo quote del feed attribuite '
+                      'a marchi presenti in Italia. Non limita l’analisi.'
+                    : 'Calendario completo: tutte le partite disponibili.',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               onChanged: _loading
@@ -4522,8 +4533,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed:
-                    _loading || _threeSystemLoading || _results.length != _count
-                    ? null
+                    _loading || _threeSystemLoading ||
+                            _results.length < 3 || _results.length > 15
+                        ? null
                     : _createSameMatchesSystem,
                 icon: const Icon(Icons.account_tree_outlined),
                 label: Text(
@@ -4535,9 +4547,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text(
-                  'Modalità aggiuntiva: da 3 a 15 partite, '
-                  'tre schedine con le stesse squadre e mercati alternativi '
-                  'solo quando attendibili.',
+                  'Modalità aggiuntiva: da 3 a 15 partite confermate, '
+                  'anche se ne erano state richieste di più. '
+                  'Le tre varianti usano le stesse squadre e solo '
+                  'alternative effettivamente quotate e verificate.',
                   style: TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ),
@@ -4702,10 +4715,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             _averageSmartScore.toStringAsFixed(1),
           ),
           _summaryRow(
-            'Probabilità combinata',
+            'Combinata teorica',
             '${(_combinedProbability * 100).toStringAsFixed(2)}%',
           ),
-          _summaryRow('Rischio', _riskLabel),
+          _summaryRow('Rischio indicativo', _riskLabel),
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'La combinata moltiplica le probabilità stimate e assume '
+              'indipendenza tra gli eventi. Non è una probabilità '
+              'certificata né garantisce il risultato.',
+              style: TextStyle(color: Colors.white54, fontSize: 10.5),
+            ),
+          ),
         ],
       ),
     );
@@ -4993,6 +5015,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ),
           ],
+
+          const SizedBox(height: 12),
+          GoalVdLineThreeBrainsExpansion(
+            key: ValueKey('coupon-three-brains-${item.match.fixtureId}'),
+            fixtureId: item.match.fixtureId,
+            smartBet: item.analysis,
+            dual: item.dualAnalysis,
+            selectedMarket: item.market,
+            selectedProbability: item.probability,
+          ),
 
           TeamStatsExpansion(match: item.match),
 

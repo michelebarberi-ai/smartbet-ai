@@ -1,12 +1,23 @@
 import '../models/match_model.dart';
-import 'italy_schedule_filter.dart';
 
 /// Counts distinct, not-yet-started fixtures for TODAY in the local timezone.
 /// It does NOT claim an AI forecast or a >=65% playable pick exists.
 class GoalVdLineDailyMatchCounter {
   const GoalVdLineDailyMatchCounter._();
 
+  /// Conteggio di TUTTE le partite future, senza nessuna whitelist
+  /// e senza inventare la disponibilita' di quote nei bookmaker.
+  static int countAllForToday(
+    Iterable<MatchModel> matches, {
+    required DateTime now,
+  }) => _count(matches, now: now);
+
   static int countForToday(
+    Iterable<MatchModel> matches, {
+    required DateTime now,
+  }) => _count(matches, now: now);
+
+  static int _count(
     Iterable<MatchModel> matches, {
     required DateTime now,
   }) {
@@ -14,8 +25,7 @@ class GoalVdLineDailyMatchCounter {
     final seen = <int>{};
     for (final match in matches) {
       if (match.fixtureId <= 0 ||
-          !match.hasTeamIds ||
-          !ItalyScheduleFilter.allows(match)) {
+          !match.hasTeamIds) {
         continue;
       }
 

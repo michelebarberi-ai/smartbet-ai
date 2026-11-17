@@ -127,6 +127,37 @@ void main() {
     ), isNull);
   });
 
+
+  test('B63: high handicap can offer safer ordinary markets across three variants', () {
+    final original = [
+      pick(1, 'HCP EURO CASA -4 2', 93, odd: 1.25),
+      pick(2, 'HCP EURO CASA -4 2', 86, odd: 1.57),
+      pick(3, 'OVER 2.5', 70, odd: 1.33),
+    ];
+    final coupons = GoalVdLineThreeCouponSystem.create(
+      original: original,
+      alternatives: {
+        1: [pick(1, 'OSPITE SEGNA', 68, odd: 2.10)],
+        2: [pick(2, 'OVER 2.5', 76, odd: 1.25)],
+        3: [pick(3, 'GOAL', 66, odd: 1.60)],
+      },
+      minimumProbability: 65,
+    );
+    expect(coupons, isNotNull);
+    expect(coupons!.length, 3);
+    final signatures = coupons
+        .map((coupon) => coupon.map((p) => '${p.fixtureId}|${p.market}').join(';'))
+        .toSet();
+    expect(signatures.length, 3);
+    for (final coupon in coupons) {
+      expect(coupon.map((p) => p.fixtureId).toList(), [1, 2, 3]);
+      expect(coupon.every((p) => p.probability >= 65 && p.odd > 1.20),
+          isTrue);
+    }
+    expect(coupons.first[0].market, 'HCP EURO CASA -4 2');
+    expect(coupons[1][0].market, 'OSPITE SEGNA');
+  });
+
   test('accetta da 3 a 15 eventi ma non 2 o 16', () {
     for (final n in [2, 16]) {
       expect(

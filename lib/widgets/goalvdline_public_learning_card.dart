@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_scorer_learning_service.dart';
 
 /// A minimal, non-technical public summary.
 /// It intentionally excludes legacy retrospective copies and never presents
@@ -12,6 +13,10 @@ class GoalVdLinePublicLearningSummary {
   final int verifiedMatchDays;
   final int smartBetVerified;
   final int diegoVerified;
+  final int smartBetCorrect;
+  final int diegoCorrect;
+  final int scorerVerified;
+  final int scorerScored;
 
   const GoalVdLinePublicLearningSummary({
     required this.verifiedPredictions,
@@ -20,11 +25,16 @@ class GoalVdLinePublicLearningSummary {
     required this.verifiedMatchDays,
     required this.smartBetVerified,
     required this.diegoVerified,
+    this.smartBetCorrect = 0,
+    this.diegoCorrect = 0,
+    this.scorerVerified = 0,
+    this.scorerScored = 0,
   });
 
   static GoalVdLinePublicLearningSummary fromRecords(
     Iterable<SmartBetAnalysisRecord> records, {
     DateTime? asOf,
+    Iterable<SmartBetScorerLearningRecord> scorerRecords = const [],
   }) {
     final now = (asOf ?? DateTime.now()).toUtc();
     final unique = <String>{};
@@ -34,6 +44,10 @@ class GoalVdLinePublicLearningSummary {
     var pending = 0;
     var smartBet = 0;
     var diego = 0;
+    var smartBetCorrect = 0;
+    var diegoCorrect = 0;
+    var scorerVerified = 0;
+    var scorerScored = 0;
 
     for (final r in records) {
       if (!r.prospectiveEligible ||
@@ -62,8 +76,29 @@ class GoalVdLinePublicLearningSummary {
       resolved++;
       fixtureIds.add(r.fixtureId);
       matchDays.add(r.matchDate.toUtc().toIso8601String().substring(0, 10));
-      if (r.engine == SmartBetAnalysisEngine.smartBet) smartBet++;
-      if (r.engine == SmartBetAnalysisEngine.diego) diego++;
+      if (r.engine == SmartBetAnalysisEngine.smartBet) {
+        smartBet++;
+        if (r.status == SmartBetAnalysisStatus.correct) smartBetCorrect++;
+      }
+      if (r.engine == SmartBetAnalysisEngine.diego) {
+        diego++;
+        if (r.status == SmartBetAnalysisStatus.correct) diegoCorrect++;
+      }
+    }
+
+    // Marcatori use a separate verified pre-match archive. Never fold
+    // its hit rate into the fixture-market accuracy denominators.
+    final scorerKeys = <String>{};
+    for (final r in scorerRecords) {
+      if (!r.isResolved ||
+          !r.predictedAt.toUtc().isBefore(r.kickoffAt.toUtc()) ||
+          !r.resolvedAt!.toUtc().isAfter(r.kickoffAt.toUtc()) ||
+          r.resolvedAt!.toUtc().isAfter(now) ||
+          !scorerKeys.add(r.key)) {
+        continue;
+      }
+      scorerVerified++;
+      if (r.scored) scorerScored++;
     }
     return GoalVdLinePublicLearningSummary(
       verifiedPredictions: resolved,
@@ -72,6 +107,10 @@ class GoalVdLinePublicLearningSummary {
       verifiedMatchDays: matchDays.length,
       smartBetVerified: smartBet,
       diegoVerified: diego,
+      smartBetCorrect: smartBetCorrect,
+      diegoCorrect: diegoCorrect,
+      scorerVerified: scorerVerified,
+      scorerScored: scorerScored,
     );
   }
 }
@@ -82,17 +121,52 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
   const GoalVdLinePublicLearningCard({
     super.key,
     required this.records,
+    this.scorerRecords = const [],
     this.asOf,
   });
 
   final List<SmartBetAnalysisRecord> records;
+  final List<SmartBetScorerLearningRecord> scorerRecords;
   /// Injectable cutoff for deterministic tests, defaults to current time.
   final DateTime? asOf;
+
+  Widget _rateColumn({
+    required String name,
+    required int correct,
+    required int verified,
+  }) {
+    final rate = verified == 0
+        ? '—'
+        : (100.0 * correct / verified).toStringAsFixed(1) + '%';
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(rate,
+              style: const TextStyle(
+                color: Colors.greenAccent,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              )),
+          ),
+          const SizedBox(height: 3),
+          Text(name, maxLines: 1,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(verified == 0 ? 'Nessun dato' : 'n=' + verified.toString(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 10)),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final summary = GoalVdLinePublicLearningSummary.fromRecords(
-      records, asOf: asOf,
+      records, asOf: asOf, scorerRecords: scorerRecords,
     );
     final hasSample = summary.verifiedPredictions > 0;
     return Card(
@@ -141,6 +215,32 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
                 '${summary.pendingPredictions} previsioni future in osservazione',
                 style: const TextStyle(color: Colors.white60, fontSize: 12),
               ),
+            const SizedBox(height: 12),
+            const Text('Risultati storici dei tre motori',
+              style: TextStyle(color: Colors.white70, fontSize: 12,
+                fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              key: const Key('b63-home-three-engine-accuracy'),
+              children: [
+                _rateColumn(name: 'SmartBet',
+                  correct: summary.smartBetCorrect,
+                  verified: summary.smartBetVerified),
+                _rateColumn(name: 'Diego',
+                  correct: summary.diegoCorrect,
+                  verified: summary.diegoVerified),
+                _rateColumn(name: 'Marcatori',
+                  correct: summary.scorerScored,
+                  verified: summary.scorerVerified),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'SmartBet e Diego: pronostici corretti. Marcatori: '
+              'giocatori pronosticati che hanno segnato. '
+              'Le tre percentuali non sono direttamente confrontabili.',
+              style: TextStyle(color: Colors.white54, fontSize: 10),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Le percentuali sui singoli pronostici sono stime, '

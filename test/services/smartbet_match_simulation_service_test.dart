@@ -25,7 +25,7 @@ void main() {
 
   test('OVER e UNDER sono complementari per tutti i limiti', () {
     final r = run(1.4, 1.5);
-    for (final t in [0, 1, 2, 3, 4]) {
+    for (final t in [0, 1, 2, 3, 4, 5]) {
       expect(
         r.probabilityFor('OVER $t.5') + r.probabilityFor('UNDER $t.5'),
         closeTo(1, 1e-10),

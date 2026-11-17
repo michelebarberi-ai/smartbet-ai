@@ -157,7 +157,7 @@ class SmartBetMatchSimulationService {
       // Probabilita' OR come unione logica, mai somma di due marginali.
       for (final market in SmartBetMarketProbabilityService.orMarkets)
         market: 0,
-      for (final threshold in [0, 1, 2, 3, 4]) ...{
+      for (final threshold in [0, 1, 2, 3, 4, 5]) ...{
         'OVER ${threshold}.5': 0,
         'UNDER ${threshold}.5': 0,
       },
@@ -195,7 +195,7 @@ class SmartBetMatchSimulationService {
           add(market);
         }
       }
-      for (final threshold in [0, 1, 2, 3, 4]) {
+      for (final threshold in [0, 1, 2, 3, 4, 5]) {
         add(goals > threshold ? 'OVER ${threshold}.5' : 'UNDER ${threshold}.5');
       }
       for (final range in [(1, 3), (1, 4), (2, 4), (2, 5), (3, 5)]) {

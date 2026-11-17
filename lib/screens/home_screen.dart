@@ -5,6 +5,7 @@ import '../services/dashboard_store.dart';
 import '../services/smartbet_analysis_comparison_store.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
+import '../services/smartbet_scorer_learning_service.dart';
 import '../services/smartbet_learning_coordinator.dart';
 import '../services/goalvdline_ui_edition.dart';
 import '../widgets/goalvdline_public_learning_card.dart';
@@ -86,6 +87,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   late final SmartBetLearningCoordinator _learningCoordinator;
 
+  List<SmartBetScorerLearningRecord> _scorerHistory = const [];
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _dashboard.initialize();
     WidgetsBinding.instance.addObserver(this);
     _refreshAnalysisHistory();
+    _refreshScorerHistory();
   }
 
   // B57: automatic foreground-only resolution. This does not schedule work
@@ -111,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
     _refreshAnalysisHistory();
+    _refreshScorerHistory();
   }
 
   @override
@@ -151,8 +156,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Read-only local scorer history: no network requests or automatic sending.
+  Future<void> _refreshScorerHistory() async {
+    try {
+      final scorerStore = SmartBetScorerLearningStore();
+      await scorerStore.initialize();
+      if (!mounted) return;
+      setState(() => _scorerHistory = scorerStore.records);
+    } catch (error) {
+      debugPrint('SCORER HISTORY READ ERROR: $error');
+      // Preserve the last valid snapshot instead of reporting a fake 0%.
+    }
+  }
+
   Future<void> _refreshHome() async {
-    await Future.wait([_dashboard.refresh(), _refreshAnalysisHistory(force: true)]);
+    await Future.wait([
+      _dashboard.refresh(),
+      _refreshAnalysisHistory(force: true),
+      _refreshScorerHistory(),
+    ]);
   }
 
   // ============================================================
@@ -541,6 +563,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 18),
                   GoalVdLineDailyMatchesCard(
                     count: dashboard.todayMatches,
+                    totalCount: dashboard.allTodayMatches,
                     loading: dashboard.loading,
                     onCreateCoupon: () {
                       Navigator.push(
@@ -555,6 +578,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   if (!GoalVdLineUiEdition.internalDiagnostics)
                     GoalVdLinePublicLearningCard(
                       records: analysisHistory.records,
+                      scorerRecords: _scorerHistory,
                     ),
                   if (GoalVdLineUiEdition.internalDiagnostics)
                   ExpansionTile(

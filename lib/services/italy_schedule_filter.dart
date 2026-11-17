@@ -30,6 +30,32 @@ class ItalyScheduleFilter {
       return false;
     }
 
+    // Alcune competizioni giovanili non riportano "U21" nel nome del
+    // campionato. "Premier League Cup" non e' la Premier League senior
+    // (nel 2026/27 e' una coppa delle accademie U21), e non deve passare
+    // soltanto per la sottostringa "premier league".
+    const youthCompetitions = [
+      'premier league cup',
+      'premier league international cup',
+      'premier league 2',
+      'professional development league',
+      'fa youth cup',
+    ];
+    if (youthCompetitions.any((name) => league == name ||
+        league.startsWith('$name -') ||
+        league.startsWith('$name group'))) {
+      return false;
+    }
+
+    // I nomi delle squadre possono essere gli unici a indicare U21/U23.
+    // Non escludere le nazionali senior o club senior per corrispondenze
+    // accidentali di parole; solo i marcatori espliciti di categoria.
+    final teams = '${_normalize(match.homeTeam)} | ${_normalize(match.awayTeam)}';
+    if (RegExp(r'\bu(?:17|18|19|20|21|23)\b|\bunder[ -]?(?:17|18|19|20|21|23)\b')
+        .hasMatch(teams)) {
+      return false;
+    }
+
     // Coppe / competizioni internazionali principali
     const international = [
       'champions league',
