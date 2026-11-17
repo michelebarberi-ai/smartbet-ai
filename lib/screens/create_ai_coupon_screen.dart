@@ -4513,6 +4513,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ],
             if (_mode == _CouponMode.automatic &&
+                _italyScheduleOnly && !_loading) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'QUOTE DA FEED INTERNAZIONALE • Marchio presente in Italia; '
+                'mercato sul sito .it da verificare prima di giocare.',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
+              ),
+            ],
+            if (_mode == _CouponMode.automatic &&
                 !_loading &&
                 _results.length < _count) ...[
               const SizedBox(height: 8),
@@ -4561,10 +4570,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text(
-                  'Modalità aggiuntiva: da 3 a 15 partite confermate, '
+                  'Modalità aggiuntiva: da 3 a 15 partite con quota nel feed, '
                   'anche se ne erano state richieste di più. '
                   'Le tre varianti usano le stesse squadre e solo '
-                  'alternative effettivamente quotate e verificate.',
+                  'alternative con quote presenti nel feed e controlli locali superati.',
                   style: TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ),
