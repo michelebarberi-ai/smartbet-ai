@@ -28,7 +28,12 @@ void main() {
 
     await tester.tap(find.text('Campionati'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Rimuovi dai preferiti').first);
+    // Il riepilogo con le partite occupa il footer: il preferito può
+    // essere fuori dalla zona visibile della lista al riaprirsi del sheet.
+    final removeFavorite = find.byTooltip('Rimuovi dai preferiti').first;
+    await tester.ensureVisible(removeFavorite);
+    await tester.pumpAndSettle();
+    await tester.tap(removeFavorite);
     await tester.pumpAndSettle();
     expect(find.text('Preferiti (0)'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
