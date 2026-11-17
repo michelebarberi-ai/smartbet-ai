@@ -24,8 +24,8 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
         : count == null
             ? 'Partite non disponibili: verifica la connessione e aggiorna.'
             : count == 0
-                ? 'Nessuna partita futura compatibile con il palinsesto Italia oggi.'
-                : '$count partite future compatibili con il palinsesto Italia.';
+                ? 'Nessuna partita futura ricevuta dal provider per oggi.'
+                : '$count partite future disponibili nel calendario di oggi.';
 
     return Card(
       key: const Key('b45-daily-matches'),
@@ -56,7 +56,7 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
               ),
             ),
             Text(message),
-            if (!loading && totalCount != null) ...[
+            if (!loading && totalCount != null && totalCount != count) ...[
               const SizedBox(height: 5),
               Text(
                 'Totale incontri futuri nel feed di oggi: $totalCount.',
@@ -66,13 +66,12 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
             ],
             const SizedBox(height: 7),
             const Text(
-              'Il Palinsesto Italia è un filtro indicativo delle '
-              'competizioni più spesso quotate dai bookmaker italiani, '
-              'non una verifica della singola partita. '
-              'Il totale comprende anche gare potenzialmente non quotate '
-              'in Italia. La disponibilità di un mercato con quota reale '
-              'superiore a 1,20 si verifica soltanto a valle '
-              'dell\'analisi sportiva.',
+              'Tutte le competizioni sono incluse nel calendario. '
+              'Il Palinsesto Italia nella Schedina AI controlla '
+              'facoltativamente la presenza di quote per le singole '
+              'partite, non il nome del campionato. '
+              'La quota sopra 1,20 viene verificata soltanto '
+              'per il mercato selezionato dopo l\'analisi sportiva.',
               style: TextStyle(fontSize: 11, color: Colors.white70),
             ),
             const SizedBox(height: 12),
