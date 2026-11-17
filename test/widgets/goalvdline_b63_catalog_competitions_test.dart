@@ -37,6 +37,12 @@ void main() {
     await tester.tap(find.text('Seleziona'));
     await tester.pumpAndSettle();
     expect(find.textContaining('3 nel catalogo'), findsOneWidget);
+    // L'elenco usa ListView.builder: i campionati fuori viewport sono lazy.
+    await tester.scrollUntilVisible(
+      find.text('Premier League'), 200,
+      scrollable: find.byType(Scrollable).last,
+      maxScrolls: 40,
+    );
     expect(find.text('Premier League'), findsOneWidget);
     expect(find.text('Nessuna partita futura nel periodo selezionato'),
         findsWidgets);
