@@ -178,7 +178,9 @@ class CompetitionFilterSheet {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${availabilityCounts[entry.key] ?? 0} partite',
+                        (availabilityCounts[entry.key] ?? 0) == 1
+                            ? '1 partita'
+                            : '${availabilityCounts[entry.key] ?? 0} partite',
                         style: const TextStyle(
                           color: Colors.greenAccent,
                           fontSize: 10,
@@ -190,7 +192,9 @@ class CompetitionFilterSheet {
                 ),
                 subtitle: availabilityCounts.containsKey(entry.key)
                     ? Text(
-                        '${availabilityCounts[entry.key]} partite future nel periodo',
+                        (availabilityCounts[entry.key] ?? 0) == 1
+                            ? '1 partita futura nel periodo'
+                            : '${availabilityCounts[entry.key]} partite future nel periodo',
                         style: const TextStyle(
                           color: Colors.greenAccent, fontSize: 10),
                       )
