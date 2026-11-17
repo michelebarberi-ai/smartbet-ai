@@ -4482,7 +4482,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ),
             ),
           ],
-          if (_results.isNotEmpty) ...[
+          // La schedina automatica non deve sembrare pronta durante
+          // l'analisi, il recupero quote o l'Auditor.
+          if (_results.isNotEmpty &&
+              (_mode == _CouponMode.manual || !_loading)) ...[
             const SizedBox(height: 28),
             Text(
               _loading
@@ -4514,7 +4517,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 _results.length < _count) ...[
               const SizedBox(height: 8),
               Text(
-                '${_results.length} selezioni confermate su $_count richieste. '
+                '${_results.length} selezioni con quota nel feed su $_count richieste. '
                 'Le altre stime sportive sono elencate separatamente.',
                 key: const Key('b51-coupon-partial-count'),
                 style: const TextStyle(
