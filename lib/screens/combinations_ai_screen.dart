@@ -15,7 +15,7 @@ import '../services/smartbet_multi_market_selection_service.dart';
 import '../services/smartbet_shared_local_learning_service.dart';
 import '../services/smartbet_refundable_market_candidate_service.dart';
 import '../services/football_competition_catalog_service.dart';
-import '../services/italian_bookmaker_availability_service.dart';
+import '../services/italian_bookmaker_market_filter.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -194,8 +194,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   bool _loading = false;
   // Il calendario globale e' la base, il filtro Italia solo quote per fixture.
   bool _italyScheduleOnly = false;
-  String? _italianOddsCoverageWarning;
-  final _italianOddsAvailability = const ItalianBookmakerAvailabilityService();
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
 
@@ -204,37 +202,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
       _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
 
-  Future<List<MatchModel>> _applyCompetitionAndBookmakerFilter(
-      List<MatchModel> matches) async {
-    final available = matches.where(_competitionPasses).toList();
-    if (!_italyScheduleOnly) {
-      _italianOddsCoverageWarning = null;
-      return available;
-    }
-    final dates = <DateTime>{
-      for (final match in available)
-        if (DateTime.tryParse(match.date) != null)
-          DateUtils.dateOnly(DateTime.parse(match.date).toLocal()),
-    }.toList()..sort();
-    final quotedFixtures = <int>{};
-    var incomplete = 0;
-    for (final date in dates) {
-      final found = await _italianOddsAvailability.forDate(date);
-      quotedFixtures.addAll(found.quotedFixtureIds);
-      if (!found.complete) incomplete++;
-    }
-    _italianOddsCoverageWarning = incomplete > 0
-        ? 'Verifica quote parziale su $incomplete giornate: le gare '
-          'non riscontrate sono da verificare, non necessariamente non quotate.'
-        : null;
-    return available.where((match) =>
-        quotedFixtures.contains(match.fixtureId)).toList();
-  }
+  // La verifica marca/mercato e' ESCLUSIVAMENTE finale, dopo la previsione.
+  bool _marketAvailableInItalianFeed(_CombinationCandidate pick) =>
+      pick.odd != null && pick.odd!.isFinite && pick.odd! > _minimumOdd &&
+      pick.bookmaker != null &&
+      ItalianBookmakerMarketFilter.appearsInItalianMarket(pick.bookmaker!);
 
-  _CombinationPeriod _period = _CombinationPeriod.today;
-  DateTimeRange? _customPeriod;
+  List<MatchModel> _applyCompetitionFilter(List<MatchModel> matches) =>
+      matches.where(_competitionPasses).toList();
 
-  final Set<String> _selectedCompetitionKeys = <String>{};
   bool _checkingOdds = false;
   int _processed = 0;
   int _total = 0;
@@ -1259,7 +1235,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<List<MatchModel>> _automaticCandidatePool({
     required bool drawOnly,
   }) async {
-    final fixtures = await _applyCompetitionAndBookmakerFilter(
+    final fixtures = _applyCompetitionFilter(
         (await _loadMatchesForSelectedPeriod())
             .where((match) => match.fixtureId > 0 &&
                 match.hasTeamIds && _isUpcoming(match)).toList());
@@ -2230,7 +2206,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
-      final matches = await _applyCompetitionAndBookmakerFilter(
+      final matches = _applyCompetitionFilter(
         allMatches.where((m) => m.fixtureId > 0 &&
             m.hasTeamIds && _isUpcoming(m)).toList());
 
@@ -2714,6 +2690,13 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         }
       } finally {
         oddsService.dispose();
+      }
+
+      if (_italyScheduleOnly) {
+        // Solo dopo il ranking sportivo e le quote: mai filtro calendario.
+        validCandidates.removeWhere(
+          (pick) => !_marketAvailableInItalianFeed(pick),
+        );
       }
 
       // P20A: correzioni locali SOLO sulle selezioni con quote reali.
@@ -4669,7 +4652,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
-                        _italianOddsCoverageWarning = null;
                         _results.clear();
                         _xPremiumSelectedMatches.clear();
                         _xPremiumResults.clear();
@@ -4681,12 +4663,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
 
-          if (_italianOddsCoverageWarning != null) ...[
-            const SizedBox(height: 6),
-            Text(_italianOddsCoverageWarning!,
-              style: const TextStyle(
-                color: Colors.amberAccent, fontSize: 11)),
-          ],
           const SizedBox(height: 18),
 
           _competitionSelector(),
