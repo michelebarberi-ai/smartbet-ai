@@ -2021,6 +2021,28 @@ Produci infine la valutazione probabilistica.
     const aiFailure = classifyAiProviderError(error);
 
     if (aiFailure) {
+      // B63: diagnostica sicura per distinguere billing, rate limit e
+      // errori del provider. Non esporre chiavi, prompt o dati partita.
+      // L'errore mostrato ai client resta generico.
+      console.error("SMARTBET_AI_PROVIDER_FAILURE", JSON.stringify({
+        at: new Date().toISOString(),
+        route: "/analyze",
+        analysisMode: req.body?.analysisMode === "automatic"
+          ? "automatic" : "detailed",
+        model: req.body?.analysisMode === "automatic"
+          ? "gpt-5.6-luna" : "gpt-5.1",
+        providerStatus: Number(
+          error?.status ?? error?.statusCode ?? error?.response?.status ?? 0
+        ),
+        providerCode: String(
+          error?.code ?? error?.error?.code ??
+          error?.response?.data?.error?.code ?? "unspecified"
+        ).slice(0, 80),
+        classification: aiFailure.code,
+        requestId: String(
+          error?.request_id ?? error?.requestId ?? ""
+        ).slice(0, 100),
+      }));
       markAiUnavailable(
         aiFailure.publicMessage,
         aiFailure.code,
