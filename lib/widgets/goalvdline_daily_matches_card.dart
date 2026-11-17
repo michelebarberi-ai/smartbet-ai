@@ -66,12 +66,13 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
             ],
             const SizedBox(height: 7),
             const Text(
-              'Il numero principale esclude i campionati fuori dal filtro '
-              'Palinsesto Italia. In Crea Schedina puoi disattivarlo per '
-              'analizzare tutte le competizioni disponibili. '
-              'Solo partite non iniziate e con ID squadre validi; '
-              'non significa che abbiano già un pronostico affidabile '
-              'o una quota reale superiore a 1,20.',
+              'Il Palinsesto Italia e un filtro indicativo delle '
+              'competizioni piu spesso quotate dai bookmaker italiani, '
+              'non una verifica della singola partita. '
+              'Il totale comprende anche gare potenzialmente non quotate '
+              'in Italia. La disponibilita di un mercato con quota reale '
+              'superiore a 1,20 si verifica soltanto a valle '
+              'dell\'analisi sportiva.',
               style: TextStyle(fontSize: 11, color: Colors.white70),
             ),
             const SizedBox(height: 12),
