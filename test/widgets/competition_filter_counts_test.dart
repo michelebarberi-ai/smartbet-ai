@@ -56,10 +56,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2 partite'), findsWidgets);
-    expect(find.text('1 partita'), findsWidgets);
     expect(find.text('PARTITE SELEZIONATE: 3 / 3'), findsOneWidget);
     expect(find.text('APPLICA (2)'), findsOneWidget);
 
+    // La lista è scorrevole: rendiamo visibile Ligue 1 prima di toccarla.
+    await tester.scrollUntilVisible(
+      find.text('Ligue 1'), 120,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 partita'), findsWidgets);
     // Togli Ligue 1: da 3 partite candidate si passa a 2.
     await tester.tap(find.text('Ligue 1').last);
     await tester.pumpAndSettle();
