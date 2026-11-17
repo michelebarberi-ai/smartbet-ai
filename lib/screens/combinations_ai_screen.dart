@@ -2227,9 +2227,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
+      // B65: con Palinsesto Italia attivo, non lasciare che leghe
+      // chiaramente fuori ambito (es. Lowland League) consumino gli slot
+      // della shortlist e le richieste quote di partite piu pertinenti.
+      // Disattivando il filtro si conserva l'analisi sportiva globale.
       final matches = _applyCompetitionFilter(
         allMatches.where((m) => m.fixtureId > 0 &&
-            m.hasTeamIds && _isUpcoming(m)).toList());
+            m.hasTeamIds && _isUpcoming(m) &&
+            (!_italyScheduleOnly || ItalyScheduleFilter.allows(m))).toList());
 
       if (!mounted) {
         return;
@@ -2239,6 +2244,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _total = matches.length;
         _combinationFixtureCount = matches.length;
       });
+
+      if (matches.isEmpty) {
+        setState(() {
+          _loading = false;
+          _errorMessage = _italyScheduleOnly
+              ? 'Nessuna partita futura nei campionati compatibili con '
+                  'Palinsesto Italia per il periodo e i filtri scelti. '
+                  'Puoi cambiare campionati o periodo; disattiva il filtro '
+                  'solo per visualizzare analisi globali non confermate.'
+              : 'Nessuna partita futura trovata con i filtri scelti.';
+        });
+        return;
+      }
 
       final allCandidates = <_CombinationCandidate>[];
 
@@ -2541,7 +2559,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _sportsOnlyPreview
           ..clear()
           ..addAll(sportsOnly
-              .where((item) => _acceptsMarketProbability(item.probability))
+              .where((item) => _acceptsMarketProbability(item.probability) &&
+                  (!_italyScheduleOnly || ItalyScheduleFilter.allows(item.match)))
               .take(_advancedShortlistSize(sportsOnly.length)));
         _checkingOdds = true;
       });
@@ -2573,6 +2592,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         for (final item in candidatesForOdds) {
           if (!mounted || validCandidates.length >= oddsTargetCount) {
             break;
+          }
+
+          // Evita interrogazioni globali sulle fixture esterne all'ambito
+          // Italia. Nessun filtro modifica la probabilita sportiva originale.
+          if (_italyScheduleOnly && !ItalyScheduleFilter.allows(item.match)) {
+            continue;
           }
 
           if (!_multiMarketMode &&
