@@ -238,7 +238,6 @@ class StatisticsEngine {
 
     var homeWin = 0.0;
     var draw = 0.0;
-    var awayWin = 0.0;
     var mass = 0.0;
 
     // Fino a 10 gol per squadra: per xG <= 3.5 la coda residua
@@ -258,8 +257,6 @@ class StatisticsEngine {
           homeWin += probability;
         } else if (homeGoals == awayGoals) {
           draw += probability;
-        } else {
-          awayWin += probability;
         }
       }
     }
@@ -272,6 +269,7 @@ class StatisticsEngine {
     final drawPercent = ((draw / mass) * 100).round().clamp(
       0, 100 - homePercent,
     );
+    // La quota '2' e il residuo delle due disgiunte: somma = 100.
     final awayPercent = 100 - homePercent - drawPercent;
     return {
       'home': homePercent,
