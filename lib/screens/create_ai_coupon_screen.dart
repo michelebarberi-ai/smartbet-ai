@@ -455,9 +455,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   List<({String market, int probability})> _sportsMarketCandidates(
-    AnalysisResult analysis, {
-    FixtureMarketOdds? odds,
-  }) {
+    AnalysisResult analysis,
+  ) {
     final probabilities = _markets(analysis);
     final candidates = <({String market, int probability, int order})>[];
 
@@ -499,10 +498,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     required FixtureMarketOdds? odds,
   }) {
     // Ordine dei mercati deciso ESCLUSIVAMENTE dai dati sportivi.
-    final sportsCandidates = _sportsMarketCandidates(
-      preliminary.analysis,
-      odds: odds,
-    );
+    final sportsCandidates = _sportsMarketCandidates(preliminary.analysis);
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -625,7 +621,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     //
     // Mostriamo quindi sempre il mercato statisticamente migliore,
     // indipendentemente dalla disponibilità o dal livello della quota.
-    final sportsCandidates = _sportsMarketCandidates(analysis, odds: odds);
+    final sportsCandidates = _sportsMarketCandidates(analysis);
 
     if (sportsCandidates.isEmpty) {
       return null;
@@ -2964,7 +2960,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         final odds = await _oddsService.getFixtureMarketOdds(
           fixtureId: base.match.fixtureId,
         );
-        final candidates = _sportsMarketCandidates(base.analysis, odds: odds);
+        final candidates = _sportsMarketCandidates(base.analysis);
         final allowed = <GoalVdLineSystemSelection>[];
         for (final candidate in candidates) {
           if (candidate.market == base.market) continue;
