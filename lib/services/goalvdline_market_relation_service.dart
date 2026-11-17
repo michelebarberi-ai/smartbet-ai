@@ -117,10 +117,11 @@ class GoalVdLineMarketRelationService {
     final pair = {smartBet, diego};
 
     if (pair.contains('X2') && pair.contains('OSPITE SEGNA')) {
-      return 'Il quadro delle due analisi è favorevole agli ospiti: '
-          'l’X2 indica la possibilità di evitare la sconfitta, '
-          'mentre «Ospite segna» evidenzia il loro potenziale offensivo. '
-          'Sono due segnali coerenti, ma riferiti ad aspetti diversi della gara.';
+      return 'GoalVdLine stima la doppia chance X2, mentre Diego AI '
+          'valuta la possibilità che gli ospiti segnino. '
+          'Sono eventi differenti: il dato sui gol non conferma la '
+          'probabilità dell’X2 e le due percentuali non vanno confrontate '
+          'come misure dello stesso pronostico.';
     }
     if (pair.contains('1X') && pair.contains('CASA SEGNA')) {
       return 'Le analisi descrivono una squadra di casa potenzialmente '
@@ -257,7 +258,7 @@ class GoalVdLineMarketRelationService {
 
     return GoalVdLineMarketRelation(
       GoalVdLineMarketRelationKind.compatible,
-      'COMPATIBILI',
+      'MERCATI DIFFERENTI',
       _compatibleReading(first, second),
     );
   }
