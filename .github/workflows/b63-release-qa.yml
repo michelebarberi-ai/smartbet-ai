@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/b63-home-three-engine-rates
+      - feature/b64-sports-reading
   workflow_dispatch:
 
 permissions:
@@ -39,4 +40,6 @@ jobs:
             test/widgets/goalvdline_three_brains_expansion_test.dart \
             test/widgets/goalvdline_b63_catalog_competitions_test.dart \
             test/services/italian_bookmaker_market_filter_test.dart \
-            test/services/goalvdline_daily_match_counter_test.dart
+            test/services/goalvdline_daily_match_counter_test.dart \
+            test/services/goalvdline_market_relation_service_test.dart \
+            test/services/dual_engine_summary_preview_test.dart
