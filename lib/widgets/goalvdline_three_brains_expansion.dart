@@ -239,7 +239,7 @@ class _GoalVdLineThreeBrainsExpansionState
       onExpansionChanged: (value) => setState(() => _expanded = value),
       tilePadding: const EdgeInsets.symmetric(horizontal: 12),
       childrenPadding: EdgeInsets.zero,
-      title: const Text('Analisi sintetica dei 3 cervelli',
+      title: const Text('Analisi motori AI',
         style: TextStyle(color: Colors.white,
           fontWeight: FontWeight.bold, fontSize: 12)),
       subtitle: const Text('Previsioni, simulazione e mercati più probabili',
