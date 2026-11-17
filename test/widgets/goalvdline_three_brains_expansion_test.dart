@@ -32,9 +32,9 @@ void main() {
         ),
       )),
     ));
-    expect(find.text('Analisi sintetica dei 3 cervelli'), findsOneWidget);
+    expect(find.text('Analisi motori AI'), findsOneWidget);
     expect(find.text('Simulatore'), findsNothing);
-    await tester.tap(find.text('Analisi sintetica dei 3 cervelli'));
+    await tester.tap(find.text('Analisi motori AI'));
     await tester.pumpAndSettle();
     expect(find.text('SmartBet AI'), findsOneWidget);
     expect(find.text('Simulatore'), findsOneWidget);
@@ -55,7 +55,7 @@ void main() {
         ),
       )),
     ));
-    await tester.tap(find.text('Analisi sintetica dei 3 cervelli'));
+    await tester.tap(find.text('Analisi motori AI'));
     await tester.pumpAndSettle();
     expect(find.text('Dati sui gol attesi insufficienti'), findsOneWidget);
     expect(find.textContaining('Non inventiamo una simulazione'), findsOneWidget);
