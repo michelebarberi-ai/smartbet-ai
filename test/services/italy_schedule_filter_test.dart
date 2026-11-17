@@ -70,6 +70,21 @@ void main() {
     )), isTrue);
   });
 
+  test('B65: Lowland League scozzese esclusa dal filtro Italia', () {
+    expect(ItalyScheduleFilter.allows(fixture(
+      country: 'Scotland',
+      league: 'Football League - Lowland League',
+      homeTeam: 'Berwick Rangers',
+      awayTeam: 'Civil Service Strollers',
+    )), isFalse);
+    expect(ItalyScheduleFilter.allows(fixture(
+      country: 'Internazionale',
+      league: 'Africa Cup of Nations - Qualification',
+      homeTeam: 'Liberia',
+      awayTeam: 'Cape Verde Islands',
+    )), isFalse);
+  });
+
   test('B50: Palinsesto Italia ammette Serie D e tutti i gironi', () {
     for (final league in [
       'Serie D',
