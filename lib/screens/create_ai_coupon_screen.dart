@@ -34,7 +34,6 @@ import '../services/smartbet_device_learning_preferences.dart';
 import '../widgets/team_stats_expansion.dart';
 import '../widgets/competition_filter_sheet.dart';
 import '../services/goalvdline_competition_order.dart';
-import 'package:smartbet_ai_new/services/smartbet_european_handicap_candidate_service.dart';
 
 class CreateAiCouponScreen extends StatefulWidget {
   const CreateAiCouponScreen({super.key});
@@ -471,22 +470,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       candidates.add((market: market, probability: probability, order: index));
     }
 
-    final handicapCandidates =
-        SmartBetEuropeanHandicapCandidateService.candidates(
-          expectedHomeGoals: analysis.expectedHomeGoals,
-          expectedAwayGoals: analysis.expectedAwayGoals,
-          quotedOutcomes: odds?.bestByOutcome.keys ?? const <String>[],
-        );
-
-    for (var index = 0; index < handicapCandidates.length; index++) {
-      final candidate = handicapCandidates[index];
-
-      candidates.add((
-        market: candidate.market,
-        probability: candidate.probability,
-        order: _marketOrder.length + index,
-      ));
-    }
+    // Gli handicap vengono esaminati separatamente come mercati opzionali.
+    // Non devono entrare nel ranking CORE solo perche' il feed quote ne
+    // pubblica una linea molto ampia (es. -4 o -5).
+    // In particolare le quote non generano candidati nel cervello sportivo.
 
     // Classifica puramente sportiva.
     //
