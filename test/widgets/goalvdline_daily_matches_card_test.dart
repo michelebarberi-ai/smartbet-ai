@@ -3,11 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/widgets/goalvdline_daily_matches_card.dart';
 
 void main() {
-  Widget app({required int? count, bool loading = false, VoidCallback? onTap}) =>
+  Widget app({required int? count, int? totalCount, bool loading = false, VoidCallback? onTap}) =>
       MaterialApp(
         home: Scaffold(
           body: GoalVdLineDailyMatchesCard(
             count: count,
+            totalCount: totalCount,
             loading: loading,
             onCreateCoupon: onTap ?? () {},
           ),
@@ -19,8 +20,18 @@ void main() {
     await tester.pumpWidget(app(count: 12));
     expect(find.byKey(const Key('b45-daily-count')), findsOneWidget);
     expect(find.text('12'), findsOneWidget);
-    expect(find.textContaining('12 partite future disponibili'), findsOneWidget);
+    expect(find.textContaining('12 partite future compatibili'), findsOneWidget);
     expect(find.textContaining('non significa'), findsOneWidget);
+  });
+
+  testWidgets('B63: Home explains filtered count versus all upcoming fixtures',
+      (tester) async {
+    await tester.pumpWidget(app(count: 14, totalCount: 57));
+    expect(find.text('14'), findsOneWidget);
+    expect(find.textContaining('Totale incontri futuri nel feed di oggi: 57'),
+        findsOneWidget);
+    expect(find.textContaining('Palinsesto Italia'), findsWidgets);
+    expect(find.textContaining('puoi disattivarlo'), findsOneWidget);
   });
 
   testWidgets('B45: missing feed is N/D, never falsely zero',
