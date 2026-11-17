@@ -66,11 +66,11 @@ class GoalVdLineDailyMatchesCard extends StatelessWidget {
             ],
             const SizedBox(height: 7),
             const Text(
-              'Il Palinsesto Italia e un filtro indicativo delle '
-              'competizioni piu spesso quotate dai bookmaker italiani, '
+              'Il Palinsesto Italia è un filtro indicativo delle '
+              'competizioni più spesso quotate dai bookmaker italiani, '
               'non una verifica della singola partita. '
               'Il totale comprende anche gare potenzialmente non quotate '
-              'in Italia. La disponibilita di un mercato con quota reale '
+              'in Italia. La disponibilità di un mercato con quota reale '
               'superiore a 1,20 si verifica soltanto a valle '
               'dell\'analisi sportiva.',
               style: TextStyle(fontSize: 11, color: Colors.white70),
