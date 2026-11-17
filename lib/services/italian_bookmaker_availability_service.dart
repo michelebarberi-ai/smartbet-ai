@@ -57,26 +57,40 @@ class ItalianBookmakerAvailabilityService {
       throw StateError('Verifica palinsesto HTTP ${response.statusCode}');
     }
     final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic> ||
-        body['success'] != true ||
-        body['fixtureIds'] is! List) {
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException('Risposta palinsesto non valida');
+    }
+    final data = parseResponse(body);
+    _cache[key] = data;
+    return data;
+  }
+
+  /// Testabile senza rete: gli ID confermati e quelli sconosciuti
+  /// non devono mai venire confusi quando il feed e' incompleto.
+  static ItalianBookmakerAvailability parseResponse(
+      Map<String, dynamic> body) {
+    if (body['success'] != true || body['fixtureIds'] is! List) {
       throw const FormatException('Risposta palinsesto non valida');
     }
     final verifiedAt = DateTime.tryParse(body['verifiedAt']?.toString() ?? '');
     if (verifiedAt == null) {
       throw const FormatException('Manca data verifica quote');
     }
-    final data = ItalianBookmakerAvailability(
-      quotedFixtureIds: Set.unmodifiable({
+    final read = (body['pagesRead'] as num?)?.toInt() ?? 0;
+    final total = (body['pagesTotal'] as num?)?.toInt() ?? 0;
+    if (read < 1 || total < 1 || read > total ||
+        (body['complete'] == true && read != total)) {
+      throw const FormatException('Copertura verifica quote incoerente');
+    }
+    return ItalianBookmakerAvailability(
+      quotedFixtureIds: Set<int>.unmodifiable({
         for (final x in body['fixtureIds'] as List)
           if (x is num && x.toInt() > 0) x.toInt(),
       }),
       complete: body['complete'] == true,
-      pagesRead: (body['pagesRead'] as num?)?.toInt() ?? 0,
-      pagesTotal: (body['pagesTotal'] as num?)?.toInt() ?? 0,
+      pagesRead: read,
+      pagesTotal: total,
       verifiedAt: verifiedAt.toUtc(),
     );
-    _cache[key] = data;
-    return data;
   }
 }
