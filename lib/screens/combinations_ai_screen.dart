@@ -5221,6 +5221,16 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ],
             ),
 
+            if (_italyScheduleOnly) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'QUOTE DA FEED INTERNAZIONALE • Marchio presente in Italia, '
+                'ma partita e mercato sul sito .it non certificati. '
+                'Verifica sul bookmaker prima di giocare.',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
+              ),
+            ],
+
             if (!_loading &&
                 _outputMode == _CombinationOutputMode.single &&
                 _results.length < _topCount) ...[
