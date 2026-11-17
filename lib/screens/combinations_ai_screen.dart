@@ -193,7 +193,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
   bool _loading = false;
   // Il calendario globale e' la base, il filtro Italia solo quote per fixture.
-  bool _italyScheduleOnly = false;
+  bool _italyScheduleOnly = true;
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
 
