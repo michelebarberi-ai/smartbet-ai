@@ -31,7 +31,8 @@ void main() {
     expect(find.textContaining('Totale incontri futuri nel feed di oggi: 57'),
         findsOneWidget);
     expect(find.textContaining('Palinsesto Italia'), findsWidgets);
-    expect(find.textContaining('puoi disattivarlo'), findsOneWidget);
+    expect(find.textContaining('filtro indicativo'), findsOneWidget);
+    expect(find.textContaining('quota reale'), findsOneWidget);
   });
 
   testWidgets('B45: missing feed is N/D, never falsely zero',
