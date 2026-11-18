@@ -7,6 +7,7 @@ const {
   fetchFootballJson,
   respondFootballFailure,
 } = require('./football_upstream_diagnostics');
+const {createFootballProviderGate} = require('./football_provider_gate');
 
 const app = express();
 
@@ -579,6 +580,10 @@ const footballCache = new Map();
 // provochino 20 chiamate ad API-Football.
 const footballInFlight = new Map();
 
+// One shared upstream budget across fixtures, odds, injury, lineups and
+// statistics. Cache hits are unaffected and no stale response is returned.
+const footballProviderGate = createFootballProviderGate();
+
 const FIXTURES_TTL_MS = 15 * 60 * 1000;
 const ODDS_TTL_MS = 5 * 60 * 1000;
 // Catalogo delle competizioni separato dal calendario: una richiesta/die.
@@ -672,10 +677,10 @@ async function requestApiFootball({
       `[API-FOOTBALL REQUEST] ${path}`,
     );
 
-    const data = await fetchFootballJson({
+    const data = await footballProviderGate.run(() => fetchFootballJson({
       url,
       apiKey: footballApiKey,
-    });
+    }));
 
     setFootballCache(
       cacheKey,
