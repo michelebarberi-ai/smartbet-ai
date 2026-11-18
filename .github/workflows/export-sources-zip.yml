@@ -1,0 +1,33 @@
+name: Esporta sorgenti completi GoalVdLine
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/b64-sports-reading
+    paths:
+      - .github/workflows/export-sources-zip.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project sources
+        uses: actions/checkout@v4
+      - name: Package tracked source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip --output="$RUNNER_TEMP/GoalVdLine-sorgenti-completi.zip" HEAD
+          unzip -t "$RUNNER_TEMP/GoalVdLine-sorgenti-completi.zip" | tail -n 2
+          ls -lh "$RUNNER_TEMP/GoalVdLine-sorgenti-completi.zip"
+      - name: Upload sources ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoalVdLine-sorgenti-completi
+          path: ${{ runner.temp }}/GoalVdLine-sorgenti-completi.zip
+          if-no-files-found: error
+          retention-days: 30
