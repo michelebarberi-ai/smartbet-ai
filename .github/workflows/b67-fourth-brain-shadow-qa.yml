@@ -1,0 +1,45 @@
+name: GoalVdLine B67 fourth brain SHADOW QA
+
+# No iOS upload, Render deploy, Neon change or live coupon activation.
+on:
+  push:
+    branches:
+      - feature/b67-fourth-brain-shadow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b67-meta-shadow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fourth-brain-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend regression unchanged
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Analyze all Flutter sources
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Fourth brain and engine regression
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_fourth_brain_service_test.dart \
+            test/services/smartbet_analysis_registration_service_test.dart \
+            test/services/smartbet_third_brain_capture_service_test.dart \
+            test/services/smartbet_three_engine_comparison_service_test.dart \
+            test/services/smartbet_market_ease_index_service_test.dart \
+            test/widgets/goalvdline_three_brains_expansion_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
