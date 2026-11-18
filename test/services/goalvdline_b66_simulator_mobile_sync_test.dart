@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:smartbet_ai_new/services/goalvdline_central_learning_mobile_sync.dart';
 import 'package:smartbet_ai_new/services/goalvdline_central_learning_outbox.dart';
+import 'package:smartbet_ai_new/services/goalvdline_historical_learning_review.dart';
 import 'package:smartbet_ai_new/services/smartbet_analysis_history_store.dart';
 
 void main() {
@@ -201,5 +202,24 @@ void main() {
       clock: () => now,
     );
     expect(await reload.eligibleLocalDrafts(), isEmpty);
+  });
+
+  test('B66: legacy retrospective preparation excludes simulator records',
+      () async {
+    final box = await outbox(includeLegacy: true);
+    expect(box.pendingCount, 8);
+    final store = SmartBetAnalysisHistoryStore();
+    await store.initialize();
+    final history = GoalVdLineHistoricalLearningReview(
+      preferences: await SharedPreferences.getInstance(),
+      clock: () => now.add(const Duration(days: 6)),
+    );
+    final audit = history.audit(store.records,
+        asOf: now.add(const Duration(days: 6)));
+    expect(audit.excluded, 7);
+    expect(audit.preparable, 1);
+    final prepared = await history.prepareFromHistory(store.records);
+    expect(prepared, 1);
+    expect(history.preparedDrafts.single.engine, 'smartBet');
   });
 }
