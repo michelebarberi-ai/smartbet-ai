@@ -33,6 +33,9 @@ jobs:
           flutter test --no-pub --reporter compact \
             test/services/smartbet_market_ease_index_service_test.dart \
             test/widgets/smartbet_market_ease_index_panel_test.dart \
-            test/services/smartbet_league_market_reliability_service_test.dart
+            test/services/smartbet_league_market_reliability_service_test.dart \
+            test/services/smartbet_third_brain_capture_service_test.dart \
+            test/services/smartbet_three_engine_comparison_service_test.dart \
+            test/services/smartbet_analysis_registration_service_test.dart
       - name: Full Flutter regression
         run: flutter test --no-pub --reporter compact
