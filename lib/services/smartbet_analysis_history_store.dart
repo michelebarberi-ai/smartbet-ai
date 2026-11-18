@@ -8,7 +8,7 @@ import 'smartbet_asian_handicap_accounting_service.dart';
 import 'smartbet_asian_handicap_market_settlement_service.dart';
 import 'smartbet_asian_handicap_settlement_service.dart';
 
-enum SmartBetAnalysisEngine { smartBet, diego }
+enum SmartBetAnalysisEngine { smartBet, diego, thirdBrain }
 
 enum SmartBetAnalysisSource { analysis, aiCoupon, combinations, dailyResults }
 
@@ -34,6 +34,11 @@ class SmartBetAnalysisRecord {
   final int? confidence;
   final String? classification;
   final bool? qualified;
+
+  /// Provenienza degli xG del terzo cervello e versione modello congelata.
+  /// Non costituiscono una certificazione di indipendenza statistica.
+  final String? inputSource;
+  final String? modelVersion;
 
   final List<SmartBetAnalysisSource> sources;
 
@@ -88,6 +93,8 @@ class SmartBetAnalysisRecord {
     required this.confidence,
     required this.classification,
     required this.qualified,
+    this.inputSource,
+    this.modelVersion,
     required this.sources,
     required this.prospectiveEligible,
     required this.status,
@@ -130,6 +137,8 @@ class SmartBetAnalysisRecord {
       confidence: confidence,
       classification: classification,
       qualified: qualified,
+      inputSource: inputSource,
+      modelVersion: modelVersion,
       sources: List.unmodifiable(mergedSources),
       prospectiveEligible: prospectiveEligible,
       status: status,
@@ -167,6 +176,8 @@ class SmartBetAnalysisRecord {
       confidence: confidence,
       classification: classification,
       qualified: qualified,
+      inputSource: inputSource,
+      modelVersion: modelVersion,
       sources: sources,
       prospectiveEligible: prospectiveEligible,
       status: status,
@@ -196,6 +207,8 @@ class SmartBetAnalysisRecord {
       'confidence': confidence,
       'classification': classification,
       'qualified': qualified,
+      if (inputSource != null) 'inputSource': inputSource,
+      if (modelVersion != null) 'modelVersion': modelVersion,
       'sources': sources.map((source) => source.name).toList(),
       'prospectiveEligible': prospectiveEligible,
       'status': status.name,
@@ -298,6 +311,8 @@ class SmartBetAnalysisRecord {
       confidence: _toInt(json['confidence']),
       classification: json['classification']?.toString(),
       qualified: _toBool(json['qualified']),
+      inputSource: json['inputSource']?.toString(),
+      modelVersion: json['modelVersion']?.toString(),
       sources: List.unmodifiable(sources),
       prospectiveEligible: _toBool(json['prospectiveEligible']) ?? false,
       status: status,
@@ -394,6 +409,8 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
     int? confidence,
     String? classification,
     bool? qualified,
+    String? inputSource,
+    String? modelVersion,
     DateTime? recordedAt,
     double? quotedOdd,
   }) async {
@@ -453,6 +470,8 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
       confidence: confidence,
       classification: classification?.trim(),
       qualified: qualified,
+      inputSource: inputSource?.trim(),
+      modelVersion: modelVersion?.trim(),
       sources: List.unmodifiable([source]),
       prospectiveEligible: now.isBefore(normalizedMatchDate),
       status: SmartBetAnalysisStatus.pending,
