@@ -6,10 +6,14 @@ import '../services/smartbet_analysis_history_store.dart';
 /// Diagnostica sui medesimi incontri/mercati. Nessuna promozione live.
 class GoalVdLineThreeEnginePairedComparisonPanel extends StatelessWidget {
   final GoalVdLinePairedThreeEngineReport report;
+  final bool fixedBenchmark;
+  final int frozenFixtures;
 
   const GoalVdLineThreeEnginePairedComparisonPanel({
     super.key,
     required this.report,
+    this.fixedBenchmark = false,
+    this.frozenFixtures = 0,
   });
 
   static String _engine(SmartBetAnalysisEngine e) => switch (e) {
@@ -24,18 +28,37 @@ class GoalVdLineThreeEnginePairedComparisonPanel extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       child: ExpansionTile(
-        key: const Key('three-engine-paired-panel'),
+        key: Key(fixedBenchmark
+            ? 'three-engine-fixed-benchmark-panel'
+            : 'three-engine-paired-panel'),
         initiallyExpanded: false,
-        title: const Text(
-          'Confronto reale dei tre motori · SHADOW',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        title: Text(
+          fixedBenchmark
+              ? 'Mercati fissi dei tre motori · SHADOW'
+              : 'Confronto reale dei tre motori · SHADOW',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          '${report.pairedFixtureMarkets} partite-mercato confrontabili · '
-          '${report.researchReadySegments} segmenti con campione sufficiente',
+          fixedBenchmark
+              ? '$frozenFixtures partite congelate · '
+                  '${report.pairedFixtureMarkets} confronti risolti'
+              : '${report.pairedFixtureMarkets} partite-mercato confrontabili · '
+                  '${report.researchReadySegments} segmenti con campione sufficiente',
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
+          if (fixedBenchmark)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Benchmark separato: i mercati vengono scelti prima '
+                'della partita e le probabilita\u0027 sono congelate alla '
+                'prima analisi disponibile. Gli esiti sono letti dallo '
+                'storico locale solo dopo la verifica del risultato. '
+                'Nessun invio a Neon, modifica quote, MEI o pronostici.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
           const Text(
             'Stessa partita, stesso mercato e risultato reale. '
             'Probabilità registrate prima del calcio d’inizio: '
@@ -113,14 +136,21 @@ class GoalVdLineThreeEnginePairedComparisonPanel extends StatelessWidget {
               'Mostrati 10 segmenti su ${segments.length}.',
               style: const TextStyle(fontSize: 11),
             ),
-          const Text(
-            'Le previsioni sono quelle selezionate e registrate nello '
-            'storico: la copertura comune può essere bassa. '
-            'Il terzo modello può condividere la fonte dei dati sportivi. '
-            'Nessuna classifica abilita una quarta AI o modifica le schedine. '
-            'Anche con 100 incontri e 14 giornate serve validazione '
-            'prospettica indipendente prima di considerare un miglioramento.',
-            style: TextStyle(fontSize: 11),
+          Text(
+            fixedBenchmark
+              ? 'Questo benchmark non include le selezioni storiche '
+                'ricostruite, ma soltanto probabilita\u0027 disponibili '
+                'prima del kickoff. Se manca anche un solo motore, il '
+                'mercato non entra nel confronto. Il terzo modello '
+                'puo\u0027 condividere le fonti statistiche. '
+                'La quarta AI resta non attiva.'
+              : 'Le previsioni sono quelle selezionate e registrate nello '
+                'storico: la copertura comune può essere bassa. '
+                'Il terzo modello può condividere la fonte dei dati sportivi. '
+                'Nessuna classifica abilita una quarta AI o modifica le schedine. '
+                'Anche con 100 incontri e 14 giornate serve validazione '
+                'prospettica indipendente prima di considerare un miglioramento.',
+            style: const TextStyle(fontSize: 11),
           ),
         ],
       ),
