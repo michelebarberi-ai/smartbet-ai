@@ -4797,6 +4797,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     const SizedBox(height: 10),
                     DualEngineSummary(analysis: forecast.dualAnalysis!),
                   ],
+                  // B70: quote assenti, proxy 503 e filtri bookmaker NON
+                  // devono nascondere la diagnosi dei motori sportivi.
+                  // Questa scheda resta soltanto consultiva; non puo'
+                  // creare ne' modificare selezioni della schedina.
+                  if (forecast.analysis.smartScore > 0) ...[
+                    const SizedBox(height: 10),
+                    GoalVdLineThreeBrainsExpansion(
+                      fixtureId: forecast.match.fixtureId,
+                      smartBet: forecast.analysis,
+                      dual: forecast.dualAnalysis,
+                      selectedMarket: forecast.market,
+                      selectedProbability: forecast.probability,
+                    ),
+                  ],
                 ],
               ),
             )),
