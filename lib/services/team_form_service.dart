@@ -158,7 +158,24 @@ class TeamFormService {
 
   static final Map<String, DateTime> _cacheTime = {};
 
+  // Le fixture grezze gia' ricevute per SmartCore possono essere lette
+  // dal terzo motore senza una seconda richiesta API. Non sono stime xG.
+  static final Map<String, List<dynamic>> _fixtureCache = {};
+
   static const Duration _cacheDuration = Duration(minutes: 30);
+
+  /// Restituisce SOLO i dati gia' presenti in memoria; non fa richieste.
+  /// Il consumatore e' responsabile del filtro FT e del cutoff prepartita.
+  static List<dynamic>? cachedRecentFixtures({required int teamId, int last = 10}) {
+    final key = '$teamId-$last';
+    final cachedAt = _cacheTime[key];
+    if (teamId <= 0 || cachedAt == null ||
+        DateTime.now().difference(cachedAt) >= _cacheDuration) {
+      return null;
+    }
+    final values = _fixtureCache[key];
+    return values == null ? null : List<dynamic>.unmodifiable(values);
+  }
 
   // ============================================================
   // ULTIME PARTITE
@@ -214,6 +231,7 @@ class TeamFormService {
       }
 
       _cache[cacheKey] = result;
+      _fixtureCache[cacheKey] = List<dynamic>.unmodifiable(responseData);
       _cacheTime[cacheKey] = DateTime.now();
 
       return result;
@@ -411,6 +429,7 @@ class TeamFormService {
   static void clearCache() {
     _cache.clear();
     _cacheTime.clear();
+    _fixtureCache.clear();
   }
 
   void dispose() {
