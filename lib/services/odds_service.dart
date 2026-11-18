@@ -139,6 +139,34 @@ class FixtureMarketOdds {
   }
 }
 
+/// Why a fixture's real pre-match quotes did not reach the coupon.
+enum OddsLookupStatus {
+  available,
+  noFeedRows,
+  noBookmakers,
+  noItalianBookmakers,
+  unsupportedMarkets,
+  invalidPayload,
+  providerError,
+  upstreamUnavailable,
+  quotaOrRateLimit,
+  networkError,
+}
+
+class OddsLookupDiagnostic {
+  final OddsLookupStatus status;
+  final int bookmakerCount;
+  final int recognizedMarketCount;
+  final int? httpStatus;
+
+  const OddsLookupDiagnostic({
+    required this.status,
+    this.bookmakerCount = 0,
+    this.recognizedMarketCount = 0,
+    this.httpStatus,
+  });
+}
+
 // ============================================================
 // ODDS SERVICE
 // ============================================================
@@ -153,6 +181,42 @@ class OddsService {
 
   static final Map<String, FixtureMarketOdds?> _marketCache = {};
   static final Map<String, DateTime> _marketCacheTime = {};
+  static final Map<String, OddsLookupDiagnostic> _marketCacheDiagnostics = {};
+  final Map<String, OddsLookupDiagnostic> _lastLookupDiagnostics = {};
+
+  static bool _isRateLimit(String body) {
+    final sample = body.length > 1200 ? body.substring(0, 1200) : body;
+    return RegExp(r'quota|rate.?limit|daily.?limit|too many requests|'
+      r'requests.*(?:limit|reached)', caseSensitive: false).hasMatch(sample);
+  }
+
+  String _lookupKey({
+    required int fixtureId,
+    String? bookmakerName,
+    bool italianBookmakerOnly = false,
+  }) {
+    final selected = bookmakerName?.trim();
+    final normalized = selected == null || selected.isEmpty
+        ? '*'
+        : _normalizeBookmaker(selected);
+    return '$fixtureId|$normalized|${italianBookmakerOnly ? 'IT' : 'WORLD'}';
+  }
+
+  OddsLookupDiagnostic? diagnosticFor({
+    required int fixtureId,
+    String? bookmakerName,
+    bool italianBookmakerOnly = false,
+  }) {
+    final key = _lookupKey(fixtureId: fixtureId,
+      bookmakerName: bookmakerName,
+      italianBookmakerOnly: italianBookmakerOnly);
+    return _lastLookupDiagnostics[key] ?? _marketCacheDiagnostics[key];
+  }
+
+  void _setDiagnostic(String key, OddsLookupDiagnostic diagnostic) {
+    _lastLookupDiagnostics[key] = diagnostic;
+    _marketCacheDiagnostics[key] = diagnostic;
+  }
   // Missing Sisal quotes must never remain missing until the app restarts.
   // Positive quotes also expire instead of becoming stale indefinitely.
   static const Duration _missingQuoteTtl = Duration(minutes: 10);
@@ -194,7 +258,11 @@ class OddsService {
         requestedBookmaker == null || requestedBookmaker.isEmpty
         ? null
         : _normalizeBookmaker(requestedBookmaker);
-    final cacheKey = '$fixtureId|${normalizedBookmaker ?? '*'}|${italianBookmakerOnly ? 'IT' : 'WORLD'}';
+    final cacheKey = _lookupKey(
+      fixtureId: fixtureId,
+      bookmakerName: requestedBookmaker,
+      italianBookmakerOnly: italianBookmakerOnly,
+    );
 
     if (_marketCache.containsKey(cacheKey)) {
       final cachedAt = _marketCacheTime[cacheKey];
@@ -207,6 +275,7 @@ class OddsService {
       }
       _marketCache.remove(cacheKey);
       _marketCacheTime.remove(cacheKey);
+      _marketCacheDiagnostics.remove(cacheKey);
     }
 
     final uri = Uri.parse(
@@ -217,25 +286,46 @@ class OddsService {
       final response = await _client.get(uri);
 
       if (response.statusCode != 200) {
+        _setDiagnostic(cacheKey, OddsLookupDiagnostic(
+          status: response.statusCode == 429 ||
+                  _isRateLimit(response.body)
+              ? OddsLookupStatus.quotaOrRateLimit
+              : OddsLookupStatus.upstreamUnavailable,
+          httpStatus: response.statusCode,
+        ));
         return null;
       }
 
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
+        _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
+          status: OddsLookupStatus.invalidPayload,
+        ));
         return null;
       }
 
       final errors = decoded['errors'];
 
       if (errors is Map && errors.isNotEmpty) {
-        debugPrint('ODDS API ERROR: $errors');
+        // Do not display raw provider payloads, keys or credentials in UI.
+        _setDiagnostic(cacheKey, OddsLookupDiagnostic(
+          status: _isRateLimit(errors.toString())
+              ? OddsLookupStatus.quotaOrRateLimit
+              : OddsLookupStatus.providerError,
+        ));
+        debugPrint('ODDS API ERROR for fixture $fixtureId');
         return null;
       }
 
       final responseData = decoded['response'];
 
       if (responseData is! List || responseData.isEmpty) {
+        _setDiagnostic(cacheKey, OddsLookupDiagnostic(
+          status: responseData is List
+              ? OddsLookupStatus.noFeedRows
+              : OddsLookupStatus.invalidPayload,
+        ));
         debugPrint('QUOTE PRE-MATCH NON DISPONIBILI');
         return null;
       }
@@ -756,6 +846,9 @@ class OddsService {
       }
 
       if (normalizedBookmaker != null && !requestedBookmakerSeen) {
+        _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
+          status: OddsLookupStatus.noBookmakers,
+        ));
         debugPrint(
           'BOOKMAKER NON DISPONIBILE PER FIXTURE $fixtureId: $requestedBookmaker',
         );
@@ -844,11 +937,25 @@ class OddsService {
 
       debugPrint('========================================');
 
+      _setDiagnostic(cacheKey, OddsLookupDiagnostic(
+        status: bestByOutcome.isNotEmpty
+            ? OddsLookupStatus.available
+            : bookmakerIds.isEmpty
+                ? italianBookmakerOnly
+                    ? OddsLookupStatus.noItalianBookmakers
+                    : OddsLookupStatus.noBookmakers
+                : OddsLookupStatus.unsupportedMarkets,
+        bookmakerCount: bookmakerIds.length,
+        recognizedMarketCount: bestByOutcome.length,
+      ));
       _marketCache[cacheKey] = result;
       _marketCacheTime[cacheKey] = _now();
       return result;
     } catch (e) {
-      debugPrint('SMARTBET ODDS EXCEPTION: $e');
+      _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
+        status: OddsLookupStatus.networkError,
+      ));
+      debugPrint('SMARTBET ODDS EXCEPTION for fixture $fixtureId: $e');
       return null;
     }
   }
@@ -1034,6 +1141,7 @@ class OddsService {
   static void clearCache() {
     _marketCache.clear();
     _marketCacheTime.clear();
+    _marketCacheDiagnostics.clear();
   }
 
   void dispose() {
