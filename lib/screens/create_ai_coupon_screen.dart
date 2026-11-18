@@ -282,6 +282,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final insufficientPrice = count(OddsLookupStatus.available) -
         _couponFixturesWithEligibleQuotes.length;
     final quota = count(OddsLookupStatus.quotaOrRateLimit);
+    final skippedForCooldown = count(OddsLookupStatus.providerCooldownActive);
     final proxyConfig = count(OddsLookupStatus.proxyConfigurationError);
     final proxyAccess = count(OddsLookupStatus.proxyAccessDenied);
     final routeMissing = count(OddsLookupStatus.proxyRouteUnavailable);
@@ -297,7 +298,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     final httpSummary = statusCounts.isEmpty ? 'N/D'
         : (statusCounts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
             .map((e) => '${e.key}×${e.value}').join(', ');
-    return 'QUOTE REALI — richieste: ${diagnoses.length} • '
+    return 'QUOTE REALI — richieste HTTP: ${diagnoses.length - skippedForCooldown} • '
+        'evitate durante pausa API: $skippedForCooldown • '
         'con mercati quotati >1,20: ${_couponFixturesWithEligibleQuotes.length} • '
         'senza offerte dal feed: $withoutCoverage • '
         'bookmaker/mercati non utilizzabili: $filtered • '
@@ -326,10 +328,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           'del backend, non modificare i pronostici.';
     }
     if (diagnoses.any((d) =>
-        d.status == OddsLookupStatus.quotaOrRateLimit)) {
-      return 'Il servizio quote segnala un possibile limite di richieste. '
-          'Non significa che le partite non siano quotate. '
-          'Verifica la disponibilità del provider prima di riprovare.';
+        d.status == OddsLookupStatus.quotaOrRateLimit ||
+        d.status == OddsLookupStatus.providerCooldownActive)) {
+      return 'Il fornitore sportivo ha raggiunto il limite delle richieste '
+          'e il server ha sospeso temporaneamente le interrogazioni. '
+          'Non significa che le partite siano prive di quote: '
+          'una nuova ricerca va effettuata solo dopo il ripristino '
+          'del servizio, senza forzare richieste durante la pausa.';
     }
     if (diagnoses.any((d) =>
         d.status == OddsLookupStatus.upstreamUnavailable ||
