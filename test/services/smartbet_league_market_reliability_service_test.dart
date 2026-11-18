@@ -19,6 +19,8 @@ void main() {
     DateTime? knownAt,
     bool prospective = true,
     double? odd,
+    String? inputSource,
+    String? modelVersion,
   }) {
     final start = kickoff ?? DateTime.utc(2026, 7, 1).add(Duration(days: fixture));
     final first = firstSeenAt ?? start.subtract(const Duration(hours: 6));
@@ -46,6 +48,8 @@ void main() {
       lastSeenAt: resolved,
       resolvedAt: status == SmartBetAnalysisStatus.pending ? null : resolved,
       quotedOdd: odd,
+      inputSource: inputSource,
+      modelVersion: modelVersion,
     );
   }
 
@@ -159,4 +163,40 @@ void main() {
     expect(noneCorrect.wilsonLower95Percent, greaterThanOrEqualTo(0));
     expect(noneCorrect.wilsonUpper95Percent, lessThan(100));
   });
+  test('B65: terzo cervello non mescola xG SmartBet con fallback Diego', () {
+    final start = DateTime.utc(2026, 9, 1);
+    final report = service.evaluate(records: [
+      for (var i = 0; i < 60; i++)
+        record(
+          fixture: 1000 + i,
+          engine: SmartBetAnalysisEngine.thirdBrain,
+          inputSource: 'SmartBet AI',
+          modelVersion: 'third-brain-v1',
+          kickoff: start.add(Duration(days: i % 20)),
+        ),
+      for (var i = 0; i < 60; i++)
+        record(
+          fixture: 2000 + i,
+          engine: SmartBetAnalysisEngine.thirdBrain,
+          inputSource: 'Diego AI',
+          modelVersion: 'third-brain-v1',
+          kickoff: start.add(Duration(days: i % 20)),
+        ),
+    ], asOf: cutoff);
+    final thirdSegments = report.segments
+        .where((s) => s.engine == SmartBetAnalysisEngine.thirdBrain)
+        .toList();
+    expect(thirdSegments, hasLength(2));
+    expect(thirdSegments.every((s) => s.sampleSize == 60), isTrue);
+    expect(report.find(
+      engine: SmartBetAnalysisEngine.thirdBrain,
+      country: 'Italia', league: 'Serie A', market: 'GOAL',
+    ), isNull); // Ambigua senza la provenienza.
+    expect(report.find(
+      engine: SmartBetAnalysisEngine.thirdBrain,
+      country: 'Italia', league: 'Serie A', market: 'GOAL',
+      inputSource: 'Diego AI', modelVersion: 'third-brain-v1',
+    )!.sampleSize, 60);
+  });
+
 }
