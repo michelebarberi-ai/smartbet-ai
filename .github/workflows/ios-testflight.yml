@@ -22,6 +22,7 @@ on:
       - release/b66-testflight
       - release/b67-testflight
       - release/b68-testflight
+      - release/b69-testflight
 
 jobs:
   build-ios:
@@ -42,7 +43,8 @@ jobs:
        github.ref != 'refs/heads/release/b65-testflight' &&
        github.ref != 'refs/heads/release/b66-testflight' &&
        github.ref != 'refs/heads/release/b67-testflight' &&
-       github.ref != 'refs/heads/release/b68-testflight') ||
+       github.ref != 'refs/heads/release/b68-testflight' &&
+       github.ref != 'refs/heads/release/b69-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
@@ -56,7 +58,8 @@ jobs:
        github.ref != 'refs/heads/release/b65-testflight' &&
        github.ref != 'refs/heads/release/b66-testflight' &&
        github.ref != 'refs/heads/release/b67-testflight' &&
-       github.ref != 'refs/heads/release/b68-testflight') ||
+       github.ref != 'refs/heads/release/b68-testflight' &&
+       github.ref != 'refs/heads/release/b69-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -85,7 +88,9 @@ jobs:
         (github.ref == 'refs/heads/release/b67-testflight' &&
          github.event.head_commit.message == 'release(build67): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b68-testflight' &&
-         github.event.head_commit.message == 'release(build68): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build68): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b69-testflight' &&
+         github.event.head_commit.message == 'release(build69): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -137,26 +142,28 @@ jobs:
           pod install
           cd ..
 
-      - name: B63/B64/B65/B66/B67/B68 backend syntax preflight
+      - name: B63/B64/B65/B66/B67/B68/B69 backend syntax preflight
         if: >-
           github.ref == 'refs/heads/release/b63-testflight' ||
           github.ref == 'refs/heads/release/b64-testflight' ||
           github.ref == 'refs/heads/release/b65-testflight' ||
           github.ref == 'refs/heads/release/b66-testflight' ||
           github.ref == 'refs/heads/release/b67-testflight' ||
-          github.ref == 'refs/heads/release/b68-testflight'
+          github.ref == 'refs/heads/release/b68-testflight' ||
+          github.ref == 'refs/heads/release/b69-testflight'
         run: |
           node --check backend/server.js
           node --check backend/auto_coupon/background_worker.js
 
       # B64: run the backend regression before preparing signing assets.
-      - name: B64/B65/B66/B67/B68 full backend regression before signing
+      - name: B64/B65/B66/B67/B68/B69 full backend regression before signing
         if: >-
           github.ref == 'refs/heads/release/b64-testflight' ||
           github.ref == 'refs/heads/release/b65-testflight' ||
           github.ref == 'refs/heads/release/b66-testflight' ||
           github.ref == 'refs/heads/release/b67-testflight' ||
-          github.ref == 'refs/heads/release/b68-testflight'
+          github.ref == 'refs/heads/release/b68-testflight' ||
+          github.ref == 'refs/heads/release/b69-testflight'
         run: |
           npm --prefix backend ci --no-audit --no-fund
           npm --prefix backend test
@@ -211,7 +218,7 @@ jobs:
             test/services/goalvdline_b57_public_private_consensus_test.dart
 
       # B62: run full regression before preparing signing credentials.
-      - name: B62/B63/B64/B65/B66/B67/B68 full Flutter regression before signing
+      - name: B62/B63/B64/B65/B66/B67/B68/B69 full Flutter regression before signing
         if: >-
           github.ref == 'refs/heads/release/b62-testflight' ||
           github.ref == 'refs/heads/release/b63-testflight' ||
@@ -219,7 +226,8 @@ jobs:
           github.ref == 'refs/heads/release/b65-testflight' ||
           github.ref == 'refs/heads/release/b66-testflight' ||
           github.ref == 'refs/heads/release/b67-testflight' ||
-          github.ref == 'refs/heads/release/b68-testflight'
+          github.ref == 'refs/heads/release/b68-testflight' ||
+          github.ref == 'refs/heads/release/b69-testflight'
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter test --no-pub --reporter compact
@@ -442,6 +450,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="68"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b69-testflight" ]]; then
+            grep -qx 'version: 1.2.5+69' pubspec.yaml || {
+              echo "ERROR: Build 69 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="69"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
