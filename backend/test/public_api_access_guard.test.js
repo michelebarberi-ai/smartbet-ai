@@ -130,3 +130,103 @@ test('football uses its own budget and does not require a mobile token by defaul
 test('invalid configuration cannot silently disable token enforcement', () => {
   assert.throws(() => createPublicApiGuard({tokenMode: 'enabled'}));
 });
+
+test('transition prefer: anonymous old iPhones get tighter limits, verified installations their own budgets', async () => {
+  const token = 'V'.repeat(43);
+  const guard = createPublicApiGuard({
+    tokenMode: 'prefer',
+    authenticate: async t => t === token ? 'installation-01' : null,
+    env: {
+      PUBLIC_AI_CLIENT_HOURLY_LIMIT: '3',
+      PUBLIC_AI_ANON_CLIENT_HOURLY_LIMIT: '1',
+      PUBLIC_AI_ANON_GLOBAL_DAILY_LIMIT: '2',
+      PUBLIC_AI_GLOBAL_DAILY_LIMIT: '8',
+    },
+  });
+
+  const old1 = await invoke(guard, {ip: '192.0.2.3'});
+  assert.equal(old1.allowed, true);
+  const old2 = await invoke(guard, {ip: '192.0.2.3'});
+  assert.equal(old2.res.code, 429);
+  assert.equal(old2.res.body.code, 'AI_RATE_LIMITED');
+
+  const authed1 = await invoke(guard, {ip: '192.0.2.3', auth: 'Bearer ' + token});
+  assert.equal(authed1.allowed, true);
+  const authed2 = await invoke(guard, {ip: '198.51.100.1', auth: 'Bearer ' + token});
+  assert.equal(authed2.allowed, true);
+  assert.equal((await invoke(guard, {ip: '203.0.113.1', auth: 'Bearer ' + token})).allowed, true);
+  const fourth = await invoke(guard, {ip: '203.0.113.2', auth: 'Bearer ' + token});
+  assert.equal(fourth.res.code, 429);
+
+  // Verified requests have not used the separate anonymous-wide budget.
+  assert.equal((await invoke(guard, {ip: '192.0.2.4'})).allowed, true);
+  assert.equal((await invoke(guard, {ip: '192.0.2.5'})).res.code, 429);
+});
+
+test('prefer: invalid bearer is rejected and cannot claim mobile identity', async () => {
+  const guard = createPublicApiGuard({
+    tokenMode: 'prefer',
+    authenticate: async () => null,
+  });
+  assert.equal((await invoke(guard, {auth: 'Bearer bad'})).res.code, 401);
+  const invalid = await invoke(guard, {auth: 'Bearer ' + 'X'.repeat(43)});
+  assert.equal(invalid.res.code, 401);
+  assert.equal(invalid.res.body.code, 'PUBLIC_API_AUTH_DENIED');
+  assert.equal((await invoke(guard)).allowed, true);
+});
+
+test('prefer: token verifier outage does not silently accept bearer as anonymous', async () => {
+  const guard = createPublicApiGuard({
+    tokenMode: 'prefer',
+    authenticate: async () => { throw new Error('Neon unavailable'); },
+  });
+  const failed = await invoke(guard, {auth: 'Bearer ' + 'U'.repeat(43)});
+  assert.equal(failed.res.code, 503);
+  assert.equal(failed.res.body.code, 'PUBLIC_API_AUTH_UNAVAILABLE');
+  assert.equal((await invoke(guard)).allowed, true);
+});
+
+test('prefer: token guessing is bounded BEFORE calling Neon', async () => {
+  let count = 0;
+  const guard = createPublicApiGuard({
+    tokenMode: 'prefer',
+    authenticate: async () => { count++; return null; },
+    env: {PUBLIC_MOBILE_AUTH_ATTEMPTS_PER_MINUTE: '2'},
+  });
+  assert.equal((await invoke(guard, {auth: 'Bearer ' + 'Q'.repeat(43)})).res.code, 401);
+  assert.equal((await invoke(guard, {auth: 'Bearer ' + 'R'.repeat(43)})).res.code, 401);
+  const third = await invoke(guard, {auth: 'Bearer ' + 'S'.repeat(43)});
+  assert.equal(third.res.code, 429);
+  assert.equal(third.res.body.code, 'PUBLIC_API_AUTH_RATE_LIMITED');
+  assert.equal(count, 2);
+});
+
+test('off: backend remains backwards compatible and does not call the token verifier', async () => {
+  let verified = 0;
+  const guard = createPublicApiGuard({
+    authenticate: async () => { verified++; throw new Error('unexpected'); },
+    env: {PUBLIC_AI_CLIENT_HOURLY_LIMIT: '2'},
+  });
+  assert.equal((await invoke(guard, {auth: 'Bearer ' + 'B'.repeat(43)})).allowed, true);
+  assert.equal((await invoke(guard)).allowed, true);
+  assert.equal((await invoke(guard)).res.code, 429);
+  assert.equal(verified, 0);
+});
+
+test('unauthorized bearer does not consume the AI execution budget', async () => {
+  const guard = createPublicApiGuard({
+    tokenMode: 'prefer',
+    authenticate: async t => t === 'A'.repeat(43) ? 'install-one' : null,
+    env: {PUBLIC_AI_GLOBAL_DAILY_LIMIT: '1'},
+  });
+  for (let i = 0; i < 5; i++) {
+    const result = await invoke(guard, {auth: 'Bearer ' + 'N'.repeat(43)});
+    assert.equal(result.res.code, 401);
+  }
+  assert.equal((await invoke(guard, {auth: 'Bearer ' + 'A'.repeat(43)})).allowed, true);
+  assert.equal((await invoke(guard)).res.code, 429);
+});
+
+test('unsupported token mode is still rejected', () => {
+  assert.throws(() => createPublicApiGuard({tokenMode: 'enabled'}));
+});
