@@ -75,7 +75,7 @@ test('repository initialize never applies the optional AI scope migration', asyn
   await repo.initialize();
   assert.equal(typeof startupSql, 'string');
   assert.match(startupSql, /CREATE TABLE IF NOT EXISTS sb_learning_clients_v1/);
-  assert.doesNotMatch(startupSql, /ALTER TABLE sb_learning_clients_v1[\\s\\S]*token_scopes/);
+  assert.doesNotMatch(startupSql, /ALTER TABLE sb_learning_clients_v1[\s\S]*token_scopes/);
   assert.doesNotMatch(startupSql, /ADD COLUMN IF NOT EXISTS token_scopes/);
 });
 
