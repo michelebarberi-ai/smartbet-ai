@@ -40,6 +40,8 @@ jobs:
             test/services/dual_engine_summary_preview_test.dart \
             test/services/goalvdline_market_relation_service_test.dart \
             test/services/smartbet_sports_audit_status_test.dart \
-            test/services/goalvdline_multi_bookmaker_odds_test.dart
+            test/services/goalvdline_multi_bookmaker_odds_test.dart \
+            test/services/goalvdline_odds_lookup_diagnostics_test.dart \
+            test/services/goalvdline_odds_scan_guard_test.dart
       - name: Full Flutter regression
         run: flutter test --no-pub --reporter compact
