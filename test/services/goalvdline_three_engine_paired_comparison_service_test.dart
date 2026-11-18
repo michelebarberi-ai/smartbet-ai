@@ -174,9 +174,12 @@ void main() {
     final report = evaluator.evaluate(records: [
       ...match,
       match[0],
-      ...trio(306),
+      record(fixture: 306, engine: SmartBetAnalysisEngine.smartBet,
+        probability: 0.70),
       record(fixture: 306, engine: SmartBetAnalysisEngine.diego,
         probability: double.nan),
+      record(fixture: 306, engine: SmartBetAnalysisEngine.thirdBrain,
+        probability: 0.60),
     ], asOf: cutoff);
     expect(report.pairedFixtureMarkets, 1);
     expect(report.segments.single.fixtureCount, 1);
