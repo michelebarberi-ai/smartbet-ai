@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
-const {localClock} = require('./auto_coupon/daily_schedule');
+const {romeDayKey} = require('./daily_palinsesto/rome_clock');
 const {normalizeFixtureDigest} = require('./daily_palinsesto/digest');
 const cors = require("cors");
 const OpenAI = require("openai");
@@ -746,7 +746,7 @@ app.get("/football/leagues", async (req, res) => {
 // No cron is started by this route: push requires separate APNs setup.
 app.get('/football/palinsesto/oggi', async (_req, res) => {
   const now = new Date();
-  const dayKey = localClock(now, 'Europe/Rome').dayKey;
+  const dayKey = romeDayKey(now);
   try {
     const response = await requestApiFootball({
       path: '/fixtures',
