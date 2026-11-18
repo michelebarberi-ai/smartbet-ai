@@ -481,4 +481,58 @@ void main() {
       expect(link.diegoRecordKey, diegoRecord.key);
     },
   );
+  test('B65: analisi esplicita registra terzo motore senza mutare la coppia', () async {
+    final store = SmartBetAnalysisHistoryStore();
+    final service = SmartBetAnalysisRegistrationService(store: store);
+    final smart = AnalysisResult(
+      smartScore: 78,
+      dataConfidence: 75,
+      expectedHomeGoals: 2.1,
+      expectedAwayGoals: 0.9,
+      homeProbability: 70,
+      drawProbability: 20,
+      awayProbability: 10,
+      prediction: '1',
+      valueBet: '',
+      risk: 'MEDIO',
+      explanation: 'xG prepartita per test',
+    );
+    final dual = DualEngineAnalysis(
+      smartBet: smart,
+      diego: null,
+      comparison: const DualEngineComparison(
+        status: DualEngineAgreement.unavailable,
+        smartBetMarket: '1',
+        diegoMarket: 'N/D',
+        smartBetProbability: 0.70,
+      ),
+    );
+    await service.registerSelection(
+      match: match(fixtureId: 910),
+      smartBet: smart,
+      source: SmartBetAnalysisSource.analysis,
+      dualAnalysis: dual,
+      captureThirdBrainHistory: true,
+      recordedAt: recordedAt,
+    );
+
+    final third = store.records.where(
+      (r) => r.engine == SmartBetAnalysisEngine.thirdBrain,
+    ).toList();
+    expect(third, hasLength(5));
+    expect(third.every((r) =>
+      r.inputSource == 'SmartBet AI' &&
+      r.prospectiveEligible &&
+      r.quotedOdd == null), isTrue);
+    final original = store.records.where(
+      (r) => r.engine == SmartBetAnalysisEngine.smartBet,
+    ).toList();
+    expect(original, hasLength(1));
+    expect(original.single.market, '1');
+    expect(original.single.probability, 0.70);
+    expect(store.records.where(
+      (r) => r.engine == SmartBetAnalysisEngine.diego,
+    ), isEmpty);
+  });
+
 }
