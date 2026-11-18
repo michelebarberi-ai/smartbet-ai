@@ -14,6 +14,9 @@ class GoalVdLineLearningDraft {
   final DateTime firstSeenAt;
   final DateTime kickoffAt;
 
+  /// Provenienza degli xG solo per il simulatore (non indipendenza statistica).
+  final String? inputSource;
+
   const GoalVdLineLearningDraft({
     required this.fixtureId,
     required this.engine,
@@ -21,6 +24,7 @@ class GoalVdLineLearningDraft {
     required this.probability,
     required this.firstSeenAt,
     required this.kickoffAt,
+    this.inputSource,
   });
 
   String get key => '$engine|$fixtureId|$market';
@@ -32,6 +36,7 @@ class GoalVdLineLearningDraft {
     'probability': probability,
     'firstSeenAt': firstSeenAt.toUtc().toIso8601String(),
     'kickoffAt': kickoffAt.toUtc().toIso8601String(),
+    if (inputSource != null) 'inputSource': inputSource!,
   };
 
   static GoalVdLineLearningDraft? fromJson(Object? raw) {
@@ -42,10 +47,14 @@ class GoalVdLineLearningDraft {
     final probability = raw['probability'];
     final first = DateTime.tryParse(raw['firstSeenAt']?.toString() ?? '');
     final kickoff = DateTime.tryParse(raw['kickoffAt']?.toString() ?? '');
+    final inputSource = raw['inputSource'];
 
     if (id is! int ||
         id <= 0 ||
-        (engine != 'smartBet' && engine != 'diego') ||
+        (engine != 'smartBet' && engine != 'diego' && engine != 'simulator') ||
+        (engine == 'simulator' &&
+            inputSource != 'smartBet' && inputSource != 'diego') ||
+        (engine != 'simulator' && raw.containsKey('inputSource')) ||
         market is! String ||
         market.trim().isEmpty ||
         probability is! num ||
@@ -65,6 +74,7 @@ class GoalVdLineLearningDraft {
       probability: probability.toDouble(),
       firstSeenAt: first.toUtc(),
       kickoffAt: kickoff.toUtc(),
+      inputSource: engine == 'simulator' ? inputSource as String : null,
     );
   }
 }
@@ -161,44 +171,84 @@ class GoalVdLineCentralLearningOutbox {
     _consent = true;
   }
 
-  Future<bool> captureIfEligible(SmartBetAnalysisRecord? record) async {
+  Future<bool> captureIfEligible(SmartBetAnalysisRecord? record) async =>
+      (await captureBatchIfEligible([record])).isNotEmpty;
+
+  /// B66: one durable write for the seven simulator markets from one fixture.
+  /// Consent remains off by default; this never performs an HTTP request.
+  Future<List<GoalVdLineLearningDraft>> captureBatchIfEligible(
+    Iterable<SmartBetAnalysisRecord?> records,
+  ) async {
     await initialize();
-    if (!_consent || record == null || _consentSince == null) return false;
+    if (!_consent || _consentSince == null) {
+      return const <GoalVdLineLearningDraft>[];
+    }
     final now = _clock().toUtc();
     await _removeExpiredAndPersist();
 
-    final probability = record.probability;
-    if (!record.prospectiveEligible ||
-        record.status != SmartBetAnalysisStatus.pending ||
-        probability == null ||
-        !probability.isFinite ||
-        probability < 0 ||
-        probability > 1 ||
-        record.fixtureId <= 0 ||
-        record.market.trim().isEmpty ||
-        record.firstSeenAt.toUtc().isBefore(_consentSince!) ||
-        record.firstSeenAt.toUtc().isAfter(
-          now.add(const Duration(minutes: 1)),
-        ) ||
-        !record.matchDate.toUtc().isAfter(now.add(_kickoffMargin))) {
-      return false;
-    }
+    final seen = _pending.map((draft) => draft.key).toSet();
+    final added = <GoalVdLineLearningDraft>[];
+    const simulatorMarkets = <String>{
+      '1', 'X', '2', 'GOAL', 'NO GOAL', 'OVER 2.5', 'UNDER 2.5',
+    };
+    for (final record in records) {
+      if (record == null || _pending.length + added.length >= _maxPending) {
+        continue;
+      }
+      final probability = record.probability;
+      final kickoff = record.matchDate.toUtc();
+      final first = record.firstSeenAt.toUtc();
+      final engine = record.engine.name;
+      String? inputSource;
+      if (engine == 'simulator') {
+        inputSource = switch (record.classification) {
+          'SIMULATOR_XG_FROM_SMARTBET' => 'smartBet',
+          'SIMULATOR_XG_FROM_DIEGO' => 'diego',
+          _ => null,
+        };
+        if (inputSource == null ||
+            !simulatorMarkets.contains(record.market)) {
+          continue;
+        }
+      } else if (engine != 'smartBet' && engine != 'diego') {
+        continue;
+      }
 
-    if (_pending.any((draft) => draft.key == record.key)) return false;
-    if (_pending.length >= _maxPending) return false;
+      if (!record.prospectiveEligible ||
+          record.status != SmartBetAnalysisStatus.pending ||
+          probability == null || !probability.isFinite ||
+          probability < 0 || probability > 1 ||
+          record.fixtureId <= 0 ||
+          record.market.trim().isEmpty ||
+          first.isBefore(_consentSince!) ||
+          first.isAfter(now.add(const Duration(minutes: 1))) ||
+          !first.isBefore(kickoff) ||
+          !kickoff.isAfter(now.add(_kickoffMargin))) {
+        continue;
+      }
 
-    _pending.add(
-      GoalVdLineLearningDraft(
+      final draft = GoalVdLineLearningDraft(
         fixtureId: record.fixtureId,
-        engine: record.engine.name,
+        engine: engine,
         market: record.market,
         probability: probability,
-        firstSeenAt: record.firstSeenAt.toUtc(),
-        kickoffAt: record.matchDate.toUtc(),
-      ),
-    );
-    await _saveDrafts();
-    return true;
+        firstSeenAt: first,
+        kickoffAt: kickoff,
+        inputSource: inputSource,
+      );
+      if (seen.add(draft.key)) added.add(draft);
+    }
+
+    if (added.isEmpty) return const <GoalVdLineLearningDraft>[];
+    final originalLength = _pending.length;
+    _pending.addAll(added);
+    try {
+      await _saveDrafts();
+    } catch (_) {
+      _pending.removeRange(originalLength, _pending.length);
+      rethrow;
+    }
+    return List.unmodifiable(added);
   }
 
   /// Per la P23B2: lascia solo bozze ancora accettabili prima del kickoff.
