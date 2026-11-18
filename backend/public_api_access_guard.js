@@ -198,6 +198,9 @@ function createPublicApiGuard({
     let identity = 'ip:' + ip;
     let anonymous = true;
 
+    if (tokenMode === 'require' && typeof authenticate !== 'function') {
+      return denied(res, 503, 'PUBLIC_API_AUTH_NOT_READY', 0);
+    }
     if (tokenMode !== 'off') {
       if (header) {
         const match = MOBILE_BEARER.exec(header);
