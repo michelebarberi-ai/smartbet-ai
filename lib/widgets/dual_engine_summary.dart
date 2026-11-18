@@ -6,7 +6,15 @@ import '../services/goalvdline_market_relation_service.dart';
 class DualEngineSummary extends StatelessWidget {
   final DualEngineAnalysis analysis;
 
-  const DualEngineSummary({super.key, required this.analysis});
+  /// Final local coupon selection audit, separate from the advanced sports
+  /// model audit embedded in AnalysisResult. UI only: never upgrades either.
+  final String? localSelectionAuditStatus;
+
+  const DualEngineSummary({
+    super.key,
+    required this.analysis,
+    this.localSelectionAuditStatus,
+  });
 
   Color _statusColor() {
     switch (analysis.comparison.status) {
@@ -135,12 +143,24 @@ class DualEngineSummary extends StatelessWidget {
         ? previewProbability
         : comparison.smartBetProbability;
     final secondProbability = comparison.diegoProbability;
+    final displayedGoalMarket = hasStatisticalPreview
+        ? previewMarket
+        : comparison.smartBetMarket;
+    final diego = analysis.diego;
+    // A different selected market (e.g. home scores) must not be mistaken
+    // for agreement on the 1X2 outcome (e.g. home wins).
+    final double? sameMarketDiegoProbability = diego == null
+        ? null
+        : switch (displayedGoalMarket) {
+            '1' => diego.homeProbability,
+            'X' => diego.drawProbability,
+            '2' => diego.awayProbability,
+            _ => null,
+          };
 
     final probabilityGap = firstProbability != null && secondProbability != null
         ? (firstProbability - secondProbability).abs() * 100
         : null;
-
-    final diego = analysis.diego;
 
     final statusColor = _statusColor();
 
@@ -197,7 +217,7 @@ class DualEngineSummary extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             hasStatisticalPreview
-                ? 'AUDITOR SPORTIVO NON ESEGUITO'
+                ? 'AUDITOR SPORTIVO AVANZATO NON ESEGUITO'
                 : comparison.label,
             style: TextStyle(
               color: statusColor,
@@ -206,6 +226,21 @@ class DualEngineSummary extends StatelessWidget {
             ),
           ),
 
+          if (localSelectionAuditStatus == 'CONFERMATA' ||
+              localSelectionAuditStatus == 'CON RISERVA') ...[
+            const SizedBox(height: 4),
+            Text(
+              'AUDITOR LOCALE DELLA SELEZIONE: '
+              '${localSelectionAuditStatus!} · verifica diversa '
+              'dall’Auditor sportivo avanzato',
+              key: const Key('b69-local-audit-status'),
+              style: const TextStyle(
+                color: Colors.lightGreenAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const SizedBox(height: 11),
 
           Row(
@@ -339,6 +374,24 @@ class DualEngineSummary extends StatelessWidget {
                 height: 1.35,
               ),
             ),
+            if (firstProbability != null &&
+                sameMarketDiegoProbability != null &&
+                displayedGoalMarket != comparison.diegoMarket) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Confronto sullo stesso mercato '
+                '${displayedGoalMarket!}: GoalVdLine '
+                '${_percent(firstProbability)} · Diego '
+                '${_percent(sameMarketDiegoProbability)} '
+                '(${((firstProbability - sameMarketDiegoProbability).abs() * 100).toStringAsFixed(0)} '
+                'punti percentuali di differenza). '
+                'Il mercato Diego evidenziato sopra è diverso.',
+                key: const Key('b69-same-market-1x2-comparison'),
+                style: const TextStyle(
+                  color: Colors.white70, fontSize: 10, height: 1.35,
+                ),
+              ),
+            ],
             if (hasStatisticalPreview && previewMarket == 'X') ...[
               const SizedBox(height: 6),
               Text(
