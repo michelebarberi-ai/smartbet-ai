@@ -17,6 +17,9 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     typeof env.LEARNING_SUBJECT_SALT === 'string' && env.LEARNING_SUBJECT_SALT.length >= 32;
 
   const mobileEnabled = configured && env.LEARNING_MOBILE_INGEST_ENABLED === 'true';
+  // Explicit admin-only issuance of AI-scoped mobile tokens. OFF by default.
+  const aiScopedProvisionEnabled = mobileEnabled &&
+    env.LEARNING_AI_SCOPE_PROVISION_ENABLED === 'true';
   const historicalEnabled = mobileEnabled && env.LEARNING_RETRO_INGEST_ENABLED === 'true';
   const autoCouponPrefsEnabled = mobileEnabled && env.AUTO_COUPON_PREFERENCES_ENABLED === 'true';
   const pushRegistrationEnabled = autoCouponPrefsEnabled && registrationReady(env);
@@ -33,6 +36,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
   app.get('/learning/v1/status', (_req, res) => {
     return res.json({service: 'SmartBet Central Learning', version: 1,
       enabled: configured, mobileIngestEnabled: mobileEnabled,
+      aiScopedProvisionEnabled,
       retrospectiveIngestEnabled: historicalEnabled,
       autoCouponPreferencesEnabled: autoCouponPrefsEnabled,
       autoCouponGenerationEnabled: false, autoCouponPushEnabled: false,
@@ -120,6 +124,20 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
       error: 'Invio mobile non abilitato.'});
     res.set('Cache-Control', 'no-store');
     return res.status(201).json(await getService().provisionMobileClient());
+  }, res));
+
+  // Separate endpoint, separate feature gate. NEVER allow a mobile client
+  // to request a broader scope, and NEVER alter scopes of existing tokens.
+  app.post('/learning/v1/clients/provision-ai', authorize, (req, res) => handle(async () => {
+    if (!aiScopedProvisionEnabled) {
+      return res.status(503).json({
+        success: false, error: 'Emissione credenziali AI non abilitata.',
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    return res.status(201).json(
+      await getService().provisionMobileClient({aiAccess: true}),
+    );
   }, res));
 
   app.post('/learning/v1/clients/revoke', authorize, (req, res) => handle(async () => {
