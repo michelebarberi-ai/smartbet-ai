@@ -15,6 +15,7 @@ import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
 import '../services/italy_schedule_filter.dart';
 import '../services/goalvdline_coupon_probability_policy.dart';
+import '../services/goalvdline_coupon_screening_policy.dart';
 import '../services/goalvdline_coupon_ready_notifier.dart';
 import '../services/goalvdline_ready_coupon_local_store.dart';
 import '../services/goalvdline_three_coupon_system.dart';
@@ -519,15 +520,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   int _bestStatisticalProbability(AnalysisResult analysis) {
-    var best = 0;
-
-    for (final value in _markets(analysis).values) {
-      if (value > best) {
-        best = value;
-      }
-    }
-
-    return best;
+    // Broad «OPPURE» union markets may reach 98-99% on almost
+    // any fixture. Keep them in the full sporting market analysis,
+    // but do not use them to select which leagues receive deep AI.
+    return GoalVdLineCouponScreeningPolicy
+        .comparableMarketProbability(analysis);
   }
 
   // ============================================================
@@ -835,13 +832,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   double _preliminaryRankScore(_PreCandidate candidate) {
-    // Screening puramente sportivo.
-    //
-    // Le quote NON devono influenzare l'accesso all'analisi avanzata.
-    // Combiniamo la probabilità del mercato statistico migliore con
-    // l'affidabilità generale del quadro espressa dallo Smart Score.
-    return (candidate.bestProbability * 0.55) +
-        (candidate.analysis.smartScore * 0.45);
+    // League coverage/data quality influence access to deep analysis,
+    // never sporting probabilities or odds in the final coupon.
+    return GoalVdLineCouponScreeningPolicy.screeningScore(
+      analysis: candidate.analysis,
+      match: candidate.match,
+    );
   }
 
   int _advancedShortlistSize(int available) {
@@ -916,7 +912,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return [today];
 
       case _CouponPeriod.weekend:
-        return [today, today.add(const Duration(days: 1))];
+        return GoalVdLineCouponScreeningPolicy.nextWeekend(today);
 
       case _CouponPeriod.next3Days:
         return List<DateTime>.generate(
@@ -1331,8 +1327,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     try {
       await _prepareLiveLearning();
       final all = await _loadMatchesForSelectedPeriod();
-      final matches = _applyCompetitionFilter(
-          all.where((m) => m.hasTeamIds && _isUpcoming(m)).toList());
+      // B70: Palinsesto Italia must filter *before* selecting 36 deep
+      // analyses. Previously we screened thousands of youth/reserve and
+      // obscure fixtures which later could not enter a valid coupon.
+      final matches = GoalVdLineCouponScreeningPolicy.eligibleMatches(
+        _applyCompetitionFilter(
+          all.where((m) => m.hasTeamIds && _isUpcoming(m)).toList(),
+        ),
+        italianScheduleOnly: _italyScheduleOnly,
+      );
 
       _couponFixtureCount = matches.length;
       if (!mounted) return;
@@ -1431,9 +1434,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       // l'accesso all'analisi AI.
       final advancedCount = _advancedShortlistSize(preliminary.length);
 
-      final advancedShortlist = preliminary
-          .take(math.min(advancedCount, preliminary.length))
-          .toList();
+      final advancedShortlist = GoalVdLineCouponScreeningPolicy.diversifiedTop(
+        preliminary,
+        limit: advancedCount,
+        leagueIdOf: (candidate) => candidate.match.leagueId,
+        leagueNameOf: (candidate) => candidate.match.league,
+        countryOf: (candidate) => candidate.match.country,
+      );
 
       final reservePreliminary = preliminary
           .skip(advancedShortlist.length)
