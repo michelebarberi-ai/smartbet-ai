@@ -49,9 +49,11 @@ class SmartBetMarketEaseIndexPanel extends StatelessWidget {
             ),
           ...entries.take(12).map((entry) {
             final s = entry.evidence;
-            final engine = s.engine.name == 'diego'
-                ? 'Diego AI'
-                : 'SmartBet AI';
+            final engine = switch (s.engine.name) {
+              'diego' => 'Diego AI',
+              'thirdBrain' => 'Terzo cervello · Poisson',
+              _ => 'SmartBet AI',
+            };
             final score = entry.score;
             return Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -82,6 +84,11 @@ class SmartBetMarketEaseIndexPanel extends StatelessWidget {
                     '${s.wilsonLower95Percent.toStringAsFixed(1)}'
                     '–${s.wilsonUpper95Percent.toStringAsFixed(1)}%',
                   ),
+                  if (s.inputSource != null)
+                    Text('Origine xG: ${s.inputSource}; '
+                      'modello: ${s.modelVersion ?? "N/D"}. '
+                      'Non indipendente nei dati di ingresso.',
+                      style: const TextStyle(fontSize: 11)),
                   Text(
                     'Brier: ${s.brierScore?.toStringAsFixed(4) ?? "N/D"} · '
                     'scostamento: '
