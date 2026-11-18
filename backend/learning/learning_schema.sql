@@ -34,12 +34,9 @@ CREATE TABLE IF NOT EXISTS sb_learning_clients_v1 (
   expires_at TIMESTAMPTZ NOT NULL,
   revoked_at TIMESTAMPTZ
 );
--- B65: legacy tokens remain learning-only. Explicitly issued AI tokens
--- carry a separate scoped authorization. The migration is additive and must
--- NOT be applied to production without explicit approval.
-ALTER TABLE sb_learning_clients_v1
-  ADD COLUMN IF NOT EXISTS token_scopes TEXT NOT NULL
-  DEFAULT 'learning:predictions';
+-- B65: the optional AI token scopes migration is intentionally NOT part
+-- of automatic initialization. See migrations/2026_11_mobile_ai_scopes.sql.
+-- Applying a new app version must not implicitly change production schema.
 
 CREATE INDEX IF NOT EXISTS sb_learning_clients_valid_v1
   ON sb_learning_clients_v1 (expires_at)
