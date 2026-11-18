@@ -30,11 +30,21 @@ Tutte le nuove operazioni restano disattivate per default.
 `GET /learning/v1/status` fornisce
 `dailyPalinsestoRegistrationEnabled` e `dailyPalinsestoPushEnabled`.
 
+## Neon staging verificato — 19 novembre 2026
+
+La migrazione B73 è stata applicata **solo** sul ramo Neon
+`smartbet-b45-staging` (`br-delicate-art-bawymk9l`) mediante
+transazione additiva. I controlli hanno confermato:
+- `sb_daily_palinsesto_subscriptions_v1`: presente, 0 righe;
+- `sb_daily_palinsesto_deliveries_v1`: presente, 0 righe;
+- chiave primaria, vincoli su ora/minuto/ambiente APNs/stato e indice retry;
+- database di produzione invariato, nessuna delle due tabelle B73 presente.
+
 ## Provisioning, da eseguire soltanto dopo verifica
 
-1. Applicare `backend/learning/migrations/b73_daily_palinsesto_push.sql`
-   **prima in staging Neon**, controllando presenza di entrambe le tabelle,
-   senza toccare quelle per le schedine.
+1. **Staging completato.** Applicare lo stesso script B73 al database
+   **di produzione solo con autorizzazione esplicita**; non migrare i dati
+   delle vecchie schedine.
 2. Verificare APNs production/TestFlight con token iPhone reale e corretta
    chiave `APNS_PRIVATE_KEY_BASE64`, `APNS_KEY_ID`, `APNS_TEAM_ID`,
    `APNS_BUNDLE_ID`, `APNS_ENVIRONMENT=production`.
