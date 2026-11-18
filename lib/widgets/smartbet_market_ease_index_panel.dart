@@ -46,7 +46,11 @@ class SmartBetMarketEaseIndexPanel extends StatelessWidget {
             ),
           ...report.entries.take(12).map((entry) {
             final s = entry.evidence;
-            final engine = s.engine.name == 'diego' ? 'Diego AI' : 'SmartBet AI';
+            final engine = switch (s.engine.name) {
+              'diego' => 'Diego AI',
+              'simulator' => 'Simulatore',
+              _ => 'SmartBet AI',
+            };
             final label = entry.score == null
                 ? entry.status == MarketEaseEvidenceStatus.exploratory
                     ? 'In osservazione (campione esplorativo)'
