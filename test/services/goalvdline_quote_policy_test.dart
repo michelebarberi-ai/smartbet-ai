@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartbet_ai_new/services/goalvdline_quote_policy.dart';
 
 void main() {
-  test('B65 quote globali per impostazione predefinita', () {
-    expect(GoalVdLineQuotePolicy.italianOnlyByDefault, isFalse);
+  test('B71 Palinsesto Italia attivo per impostazione predefinita', () {
+    expect(GoalVdLineQuotePolicy.italianOnlyByDefault, isTrue);
   });
 
   test('P20.6 Sisal-only: rifiuta bookmaker diversi', () {
