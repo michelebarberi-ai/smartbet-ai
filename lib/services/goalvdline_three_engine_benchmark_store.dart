@@ -232,7 +232,21 @@ class GoalVdLineThreeEngineBenchmarkStore {
           r.league.trim().toUpperCase() == snapshot.league.toUpperCase() &&
           r.country.trim().toUpperCase() == snapshot.country.toUpperCase() &&
           (r.status == SmartBetAnalysisStatus.correct ||
-              r.status == SmartBetAnalysisStatus.wrong)).toList();
+              r.status == SmartBetAnalysisStatus.wrong) &&
+          // The score and the stored settlement must agree. Corrupted or
+          // imported status data cannot certify an observed final result.
+          ((r.status == SmartBetAnalysisStatus.correct &&
+            SmartBetAnalysisMarketSettlement.evaluate(
+              market: r.market,
+              homeGoals: r.actualHomeGoals!,
+              awayGoals: r.actualAwayGoals!,
+            ) == SmartBetAnalysisSettlement.correct) ||
+           (r.status == SmartBetAnalysisStatus.wrong &&
+            SmartBetAnalysisMarketSettlement.evaluate(
+              market: r.market,
+              homeGoals: r.actualHomeGoals!,
+              awayGoals: r.actualAwayGoals!,
+            ) == SmartBetAnalysisSettlement.wrong))).toList();
       if (valid.isEmpty) continue;
       final first = valid.first;
       final home = first.actualHomeGoals!;
@@ -313,6 +327,15 @@ class GoalVdLineThreeEngineBenchmarkCaptureService {
         !now.isBefore(kickoff.subtract(const Duration(minutes: 2))) ||
         match.league.trim().isEmpty || match.country.trim().isEmpty ||
         smartBet.smartScore <= 0 || smartBet.dataConfidence <= 0) {
+      return false;
+    }
+    // Do not compare an unrelated or stale Diego analysis against this
+    // fixture. Every benchmark market must describe the SAME kickoff.
+    final diegoKickoff = DateTime.tryParse(diego.match.date)?.toUtc();
+    if (diego.match.fixtureId != match.fixtureId ||
+        diegoKickoff == null ||
+        !diegoKickoff.isAtSameMomentAs(kickoff) ||
+        diego.dataConfidence <= 0) {
       return false;
     }
     await store.initialize();
