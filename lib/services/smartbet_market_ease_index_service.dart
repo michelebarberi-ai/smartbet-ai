@@ -124,7 +124,7 @@ class SmartBetMarketEaseIndexService {
     // Il limite Wilson inferiore e' la base conservativa, non una
     // probabilita futura. Penalita trasparente per overconfidence:
     // gap = accuratezza - probabilita media; gap negativo => stima alta.
-    final overconfidence = (-gap).clamp(0.0, 20.0).toDouble() * 0.5;
+    final overconfidence = (-gap!).clamp(0.0, 20.0).toDouble() * 0.5;
 
     // Brier vs riferimento costante che predice la frequenza osservata.
     // Un punteggio peggiore riceve malus; uno migliore NON ottiene bonus
