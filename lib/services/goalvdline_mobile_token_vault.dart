@@ -6,18 +6,18 @@ class GoalVdLineMobileTokenVault {
   GoalVdLineMobileTokenVault({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
 
-  static const _key = 'goalvdline_learning_mobile_token_v1';
+  static const storageKey = 'goalvdline_learning_mobile_token_v1';
   static final _pattern = RegExp(r'^[A-Za-z0-9_-]{43}$');
   final FlutterSecureStorage _storage;
 
   static bool validToken(String value) => _pattern.hasMatch(value.trim());
 
   Future<String?> read() async {
-    final token = await _storage.read(key: _key);
+    final token = await _storage.read(key: storageKey);
     if (token == null) return null;
     if (validToken(token)) return token;
     // Una credenziale corrotta non deve essere usata per effettuare richieste.
-    await _storage.delete(key: _key);
+    await _storage.delete(key: storageKey);
     return null;
   }
 
@@ -27,7 +27,7 @@ class GoalVdLineMobileTokenVault {
       throw const FormatException('Token mobile non valido');
     }
     await _storage.write(
-      key: _key,
+      key: storageKey,
       value: value,
       iOptions: const IOSOptions(
         accessibility: KeychainAccessibility.unlocked,
@@ -36,5 +36,5 @@ class GoalVdLineMobileTokenVault {
     );
   }
 
-  Future<void> delete() => _storage.delete(key: _key);
+  Future<void> delete() => _storage.delete(key: storageKey);
 }
