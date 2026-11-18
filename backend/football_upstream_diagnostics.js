@@ -44,6 +44,22 @@ function providerReportedError(errors) {
     Object.keys(errors).length > 0;
 }
 
+// Some API-Football plans report quota exhaustion inside a 200 JSON body
+// instead of HTTP 429. Detect that narrow case by its known error field and
+// wording, without logging or returning the provider's error payload.
+function providerReportedRateLimit(errors) {
+  if (!errors || Array.isArray(errors) || typeof errors !== 'object') {
+    return false;
+  }
+  for (const [key, value] of Object.entries(errors)) {
+    const field = key.toLowerCase().replace(/[^a-z]/g, '');
+    if (!['requests', 'ratelimit', 'quota'].includes(field)) continue;
+    const message = String(value ?? '').slice(0, 300);
+    if (/limit|quota|exceed|too.many|throttl/i.test(message)) return true;
+  }
+  return false;
+}
+
 /**
  * A single request to API-Football. Return only validated JSON objects.
  * Inject fetch in tests. Defaults to a timeout without additional retries.
@@ -96,6 +112,9 @@ async function fetchFootballJson({
     throw failure('FOOTBALL_PROVIDER_INVALID_JSON', status);
   }
   if (providerReportedError(payload.errors)) {
+    if (providerReportedRateLimit(payload.errors)) {
+      throw failure('FOOTBALL_PROVIDER_RATE_LIMIT', status);
+    }
     throw failure('FOOTBALL_PROVIDER_REPORTED_ERROR', status);
   }
   return payload;
