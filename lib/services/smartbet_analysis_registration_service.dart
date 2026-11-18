@@ -12,6 +12,7 @@ import 'smartbet_frozen_model_registration_store.dart';
 import 'smartbet_simulation_shadow_capture_service.dart';
 import 'smartbet_simulation_shadow_store.dart';
 import 'goalvdline_central_learning_outbox.dart';
+import 'goalvdline_third_brain_history_capture_service.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -47,6 +48,7 @@ class SmartBetAnalysisRegistrationService {
     int? smartBetProbabilityPercent,
     double? smartBetOdd,
     DualEngineAnalysis? dualAnalysis,
+    bool captureThirdBrainHistory = false,
     DateTime? recordedAt,
   }) async {
     final matchDate = DateTime.tryParse(match.date);
@@ -115,6 +117,27 @@ class SmartBetAnalysisRegistrationService {
           history: _store.records,
           recordedAt: recordedAt,
         );
+      }
+    }
+
+    // ============================================================
+    // TERZO CERVELLO — storico locale SHADOW, mai backend o quota
+    // ============================================================
+    if (captureThirdBrainHistory) {
+      try {
+        await GoalVdLineThirdBrainHistoryCaptureService(
+          store: _store,
+        ).capture(
+          match: match,
+          smartBet: smartBet,
+          diego: nativeDiego,
+          source: source,
+          recordedAt: recordedAt,
+        );
+      } catch (error) {
+        // Un errore dello storico sperimentale non puo' impedire
+        // registrazione e confronto SmartBet/Diego.
+        debugPrint('Third brain history SHADOW unavailable: $error');
       }
     }
 
