@@ -14,16 +14,24 @@
 - Gli indirizzi di proxy/NAT possono raggruppare più dispositivi. I limiti per processo NON sono limiti globali tra replica/riavvii e non garantiscono un tetto monetario OpenAI. Un sistema distribuito richiederebbe contatori condivisi (es. Neon/Redis) e un budget ufficiale separato.
 - I parametri si modificano con le variabili `PUBLIC_AI_CLIENT_HOURLY_LIMIT`, `PUBLIC_AI_GLOBAL_DAILY_LIMIT`, `PUBLIC_AI_MAX_CONCURRENT`, `PUBLIC_FOOTBALL_CLIENT_MINUTE_LIMIT`, `PUBLIC_FOOTBALL_GLOBAL_DAILY_LIMIT`, `PUBLIC_FOOTBALL_MAX_CONCURRENT` solo dopo aver valutato il traffico.
 
-## Credenziali installazione — da attivare in un rilascio coordinato
-- Le installazioni con token provisionato possono usare `GoalVdLineMobileTokenVault`; il token è quello rilasciato dal learning server e conservato nel Portachiavi.
-- `SmartBetAiService` invia tale Bearer a `/analyze` e `/audit` solo se la nuova app viene compilata con `--dart-define=GOALVDLINE_AI_MOBILE_AUTH=true`. Default false: nessuna trasmissione nuova di credenziali.
-- Per la verifica server-side, configurare in modo riservato `PUBLIC_API_AUTH_DATABASE_URL` sul backend AI con accesso minimo alla tabella `sb_learning_clients_v1`; opzionale `PUBLIC_API_AUTH_PG_SSL=true`.
-- **Non** attivare `PUBLIC_AI_MOBILE_TOKEN_MODE=require` prima che le installazioni ammesse abbiano token validi e che la nuova app sia distribuita. Questa azione bloccherebbe i client più vecchi e gli utenti senza credenziale learning.
-- `PUBLIC_FOOTBALL_MOBILE_TOKEN_MODE` resta `off`: per attivarlo servirebbe aggiornare anche tutti i client di fixture, quote, catalogo e dossier; oggi solo il rate limit automatico protegge i loro percorsi.
-- Non inserire token amministratore, chiavi di Neon, OpenAI o di altri provider nel client.
-- Prima dell'attivazione aggiorna privacy e flussi di consenso se estendi l'uso della credenziale learning.
-- In presenza di errore DB, la modalità `require` rifiuta la richiesta; non degrada mai a modalità anonima.
-- Un provider di auth più stabile, budgeting condiviso e una strategia di migrazione utenti saranno necessari per il rilascio pubblico.
+## Credenziali per installazione — rollout B65, ancora OFF
+
+**Regola di sicurezza:** il vecchio token mobile ha scope `learning:predictions`
+e NON autorizza chiamate a OpenAI. Un token con permesso `ai:analyze` può
+essere emesso soltanto da un endpoint amministrativo protetto e separato.
+
+- `backend/learning/learning_schema.sql` include una **migrazione additiva** `token_scopes`, con default `learning:predictions` per preservare il principio del minimo privilegio. **Non è stata eseguita in Neon di produzione.**
+- `LearningRepository.findValidClientForScope(..., 'ai:analyze')` verifica scope, hash, scadenza e revoca. Gli altri scope sono rifiutati dalla nuova API.
+- `POST /learning/v1/clients/provision-ai` è accessibile SOLO al server amministrativo, richiede `LEARNING_AI_SCOPE_PROVISION_ENABLED=true`, che è **disattivato di default**. I client iOS non possiedono la chiave amministrativa e non possono autoassegnarsi privilegi.
+- I nuovi token hanno la forma opaca già prevista e scadono secondo la durata del servizio learning (30 giorni). Serve un piano di rinnovo che NON ricorra all'emissione anonima.
+- Sul telefono `GoalVdLineAiScopedTokenVault` usa una chiave Portachiavi diversa da `GoalVdLineMobileTokenVault`. Nessun fallback al token learning; accetta il salvataggio solo se l'emissione ha dichiarato `ai:analyze`.
+- `SmartBetAiService` allega il token AI solo con `--dart-define=GOALVDLINE_AI_MOBILE_AUTH=true`; il valore predefinito è `false`. `/analyze` e `/audit` usano HTTPS origin fissata e non seguono redirect con la credenziale.
+- Backend: `PUBLIC_AI_MOBILE_TOKEN_MODE=off` è il default. `prefer` consente la transizione: anonimi con budget ridotti, verificati AI-scoped con quota per installazione. `require` blocca tutti i client privi di token: **non attivare** finché non è pronta la distribuzione delle credenziali per gli utenti.
+- Per collegare il server AI allo storico dei token, predisporre `PUBLIC_API_AUTH_DATABASE_URL` con privilegi minimi **di sola lettura** sulla tabella delle credenziali; aggiungere connessione TLS e verifica certificate secondo configurazione Neon. Non esporre credenziali in Flutter.
+- I token AI non sono ancora provisionati sul telefono via UI pubblica. Non promettere che tutti possano effettuare l'accesso a `require` o che una credenziale esistente abbia scope AI.
+- Per qualunque rollout verificare privacy e cookie/log, il reale host del reverse proxy, traffico per IP/NAT, rischi di blocco e possibilità di rollback. I limiti attuali sono **per processo**, non un tetto economico globale.
+- L'informativa `GET /privacy` è stata aggiornata **nel codice** per descrivere Neon, Render, OpenAI, provider sportivi, APNs, consenso e diritti. Prima del rilascio pubblico deve essere controllata per titolare, informazioni di contatto, periodi di retention, trasferimenti e aggiornamento della scheda privacy App Store. Il valore di default `support@example.com` va sostituito con un contatto reale in configurazione.
+- Non attivare servizi a pagamento, non aggiornare Neon di produzione, non cambiare impostazioni Render e non pubblicare TestFlight senza il gate di rilascio.
 
 ## Valutazione idea MEI di Emergent
 Il testo di Emergent è una proposta, **non codice verificato**. Il percorso `/app/uploads/GoalVdLine_B64_MEI_trial.zip` appartiene al suo ambiente e non era allegato in questa conversazione.
