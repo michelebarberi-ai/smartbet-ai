@@ -128,8 +128,8 @@ class SmartBetThreeEngineComparisonService {
       final bucket = buckets.putIfAbsent(market, () => _ThreeEngineBucket());
       final smartValid = smartBet != null && _sameOutcome(simulator, smartBet);
       final diegoValid = diego != null && _sameOutcome(simulator, diego);
-      if (smartValid) bucket.addSmartBet(simulator, smartBet!);
-      if (diegoValid) bucket.addDiego(simulator, diego!);
+      if (smartValid) bucket.addSmartBet(simulator, smartBet);
+      if (diegoValid) bucket.addDiego(simulator, diego);
       if (smartValid && diegoValid) bucket.triplets++;
     }
 
