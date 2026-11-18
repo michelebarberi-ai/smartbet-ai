@@ -8,7 +8,7 @@ import '../ai/smartcore.dart';
 import '../ai/decision_engine.dart';
 
 import 'goalvdline_comparison_store.dart';
-import 'goalvdline_mobile_token_vault.dart';
+import 'goalvdline_ai_scoped_token_vault.dart';
 import 'goalvdline_shadow_service.dart';
 import 'match_dossier_builder.dart';
 import 'smartbet_contextual_shadow_capture_service.dart';
@@ -215,9 +215,9 @@ class SmartBetAiService {
 
   static const String backendUrl = 'https://smartbet-ai-y6gw.onrender.com';
 
-  // B65: rollout autorizzato per le installazioni gia provviste di token.
-  // OFF per default: non estendere silenziosamente la credenziale learning
-  // a un secondo servizio finche informativa, client e backend non siano pronti.
+  // B65: rollout separato e OFF per default. Unicamente la credenziale
+  // scoped ai:analyze puo essere inviata al backend analisi.
+  // La credenziale learning-only non viene mai recuperata per questa API.
   static const bool _enableMobileAuthForAi =
       bool.fromEnvironment('GOALVDLINE_AI_MOBILE_AUTH', defaultValue: false);
 
@@ -226,8 +226,8 @@ class SmartBetAiService {
     if (!_enableMobileAuthForAi) return headers;
     if (!backendUrl.startsWith('https://')) return headers;
     try {
-      final token = await GoalVdLineMobileTokenVault().read();
-      if (token != null && GoalVdLineMobileTokenVault.validToken(token)) {
+      final token = await GoalVdLineAiScopedTokenVault().read();
+      if (token != null) {
         headers['Authorization'] = 'Bearer $token';
       }
     } catch (_) {
