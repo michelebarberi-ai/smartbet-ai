@@ -12,6 +12,8 @@ test('isolated HTTP staging: 180 requests across markets never stampede an upstr
   {timeout: 25000}, async () => {
   let clock = 1_000_000;
   let upstreamCalls = 0;
+  let upstreamInFlight = 0;
+  let maxObservedUpstream = 0;
   let state = 'limited';
   let startProbe;
   let releaseProbe;
@@ -21,28 +23,37 @@ test('isolated HTTP staging: 180 requests across markets never stampede an upstr
   const gate = createFootballProviderGate({
     now: () => clock,
     maxConcurrent: 4,
+    maxQueue: 32,
+    maxWaitMs: 8000,
     baseCooldownMs: 1000,
     maxCooldownMs: 4000,
   });
 
   const fakeProvider = async () => {
     upstreamCalls++;
-    if (state === 'limited') {
+    upstreamInFlight++;
+    maxObservedUpstream = Math.max(maxObservedUpstream, upstreamInFlight);
+    try {
+      if (state === 'limited') {
+        return {
+          ok: false,
+          status: 429,
+          text: async () => '{"errors":{"requests":"Too many requests"}}',
+        };
+      }
+      if (state === 'probe_hold') {
+        startProbe();
+        return await probeResponse;
+      }
+      await new Promise(resolve => setTimeout(resolve, 8));
       return {
-        ok: false,
-        status: 429,
-        text: async () => '{"errors":{"requests":"Too many requests"}}',
+        ok: true,
+        status: 200,
+        text: async () => '{"response":[{"ok":true}],"errors":{}}',
       };
+    } finally {
+      upstreamInFlight--;
     }
-    if (state === 'probe_hold') {
-      startProbe();
-      return await probeResponse;
-    }
-    return {
-      ok: true,
-      status: 200,
-      text: async () => '{"response":[{"ok":true}],"errors":{}}',
-    };
   };
 
   const cache = new Map([
@@ -143,10 +154,24 @@ test('isolated HTTP staging: 180 requests across markets never stampede an upstr
     assert.equal(recovered.status, 200);
     assert.equal(upstreamCalls, 3);
 
+    // Normal traffic: 20 distinct fixture+market requests while the
+    // provider is HEALTHY. The FIFO queue should avoid immediate 503s
+    // without sending more than four upstream requests concurrently.
+    const healthyBurst = await Promise.all(Array.from({length: 20}, (_, i) =>
+      request('/football/fixtures?date=healthy-' + i),
+    ));
+    assert.equal(healthyBurst.length, 20);
+    assert.ok(healthyBurst.every(r => r.status === 200),
+      'healthy requests should be queued and served, not dropped');
+    assert.equal(upstreamCalls, 23);
+    assert.ok(maxObservedUpstream <= 4,
+      'provider upstream concurrency never exceeds four');
+
     console.log('[STAGING-SIMULATION] 180 unique requests: 1 upstream 429, ' +
       '180 local cooldown responses, 0 extra provider calls. ' +
       'Cached item 200, expired item 503, 45 during probe blocked, ' +
-      'one probe succeeded, recovered 200. No production traffic.');
+      'one probe succeeded, recovered 200. 20 healthy concurrent requests ' +
+      'all succeeded, upstream concurrency <= 4. No production traffic.');
   } finally {
     if (typeof releaseProbe === 'function') {
       releaseProbe({
