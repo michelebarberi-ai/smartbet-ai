@@ -1,0 +1,35 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const workflow = fs.readFileSync(
+  path.join(__dirname, '../../.github/workflows/ios-testflight.yml'), 'utf8');
+
+test('B71: TestFlight cannot upload on ordinary feature pushes', () => {
+  assert.match(workflow, /^      - release\/b71-testflight$/m);
+  assert.doesNotMatch(workflow, /^      - feature\/b71-italian-calendar-default-odds-cooldown$/m);
+  assert.equal((workflow.match(/github\.ref != 'refs\/heads\/release\/b71-testflight'/g)||[]).length, 2);
+  assert.match(workflow,
+    /github\.ref == 'refs\/heads\/release\/b71-testflight' &&\s*github\.event\.head_commit\.message == 'release\(build71\): authorize TestFlight upload'/);
+  assert.match(workflow,
+    /elif \[\[ "\$GITHUB_REF" == "refs\/heads\/release\/b71-testflight" \]\]; then\s*grep -qx 'version: 1\.2\.5\+71' pubspec\.yaml/);
+  assert.match(workflow, /BUILD_NUMBER="71"/);
+});
+
+test('B71: full regression must finish before signing/upload', () => {
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71 full Flutter regression before signing');
+  const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
+  assert.ok(backend > 0 && flutter > backend && signing > flutter);
+  assert.match(workflow.slice(backend, flutter), /npm --prefix backend test/);
+  assert.match(workflow.slice(flutter, signing), /flutter test --no-pub --reporter compact/);
+  assert.match(workflow.slice(backend, flutter), /release\/b71-testflight/);
+  assert.match(workflow.slice(flutter, signing), /release\/b71-testflight/);
+});
+
+test('B71: feature version is base build 70 and release is pinned separately', () => {
+  const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:70|71)$/m);
+});
