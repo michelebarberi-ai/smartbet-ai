@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../models/analysis_result.dart';
 import 'diego_ai_service.dart';
+import 'goalvdline_third_brain_own_input_service.dart';
 import 'smartbet_match_simulation_service.dart';
 
 /// Prognosi del terzo motore: distribuzione dei punteggi Poisson bivariata.
@@ -22,6 +23,7 @@ class GoalVdLineThirdBrainMarket {
 
 class GoalVdLineThirdBrainReport {
   final String inputSource;
+  final String modelVersion;
   final int? dataConfidence;
   final double homeExpectedGoals;
   final double awayExpectedGoals;
@@ -31,6 +33,7 @@ class GoalVdLineThirdBrainReport {
 
   const GoalVdLineThirdBrainReport({
     required this.inputSource,
+    required this.modelVersion,
     required this.dataConfidence,
     required this.homeExpectedGoals,
     required this.awayExpectedGoals,
@@ -62,21 +65,29 @@ class GoalVdLineThirdBrainService {
   GoalVdLineThirdBrainReport? evaluate({
     required AnalysisResult smartBet,
     DiegoAiAnalysis? diego,
+    GoalVdLineThirdBrainOwnInput? ownInput,
   }) {
+    final independent = ownInput != null &&
+        _usable(ownInput.expectedHomeGoals, ownInput.expectedAwayGoals) &&
+        ownInput.dataConfidence >= 40;
+
     // Preferisci xG SmartBet se l'analisi è realmente disponibile:
     // la simulazione non duplica in questo caso gli input di Diego.
     final useSmartBet = smartBet.smartScore > 0 &&
         _usable(smartBet.expectedHomeGoals, smartBet.expectedAwayGoals);
     final useDiego = diego != null &&
         _usable(diego.expectedHomeGoals, diego.expectedAwayGoals);
-    if (!useSmartBet && !useDiego) return null;
+    if (!independent && !useSmartBet && !useDiego) return null;
 
-    final h = useSmartBet
-        ? smartBet.expectedHomeGoals : diego!.expectedHomeGoals;
-    final a = useSmartBet
-        ? smartBet.expectedAwayGoals : diego!.expectedAwayGoals;
-    final quality = useSmartBet
-        ? smartBet.dataConfidence : diego!.dataConfidence;
+    // Input proprio: calcolato da risultati FT grezzi per campo.
+    // Quando non disponibile, mantieni la compatibilita' con la
+    // sorgente ereditata, ma dichiarandola esplicitamente.
+    final h = independent ? ownInput.expectedHomeGoals :
+        useSmartBet ? smartBet.expectedHomeGoals : diego!.expectedHomeGoals;
+    final a = independent ? ownInput.expectedAwayGoals :
+        useSmartBet ? smartBet.expectedAwayGoals : diego!.expectedAwayGoals;
+    final quality = independent ? ownInput.dataConfidence :
+        useSmartBet ? smartBet.dataConfidence : diego!.dataConfidence;
     // Correlazione condivisa prudente, non calibrata: scenario di prova.
     final common = math.min(0.10, math.min(h, a) * 0.10);
     final simulation = const SmartBetMatchSimulationService();
@@ -116,11 +127,14 @@ class GoalVdLineThirdBrainService {
         return p != 0 ? p : x.market.compareTo(y.market);
       });
     return GoalVdLineThirdBrainReport(
-      inputSource: useSmartBet ? 'SmartBet AI' : 'Diego AI',
+      inputSource: independent ? ownInput.source :
+          useSmartBet ? 'SmartBet AI' : 'Diego AI',
+      modelVersion: independent ? ownInput.modelVersion :
+          'third-brain-${SmartBetMatchSimulationService.modelVersion}',
       dataConfidence: quality > 0 ? quality : null,
       homeExpectedGoals: h,
       awayExpectedGoals: a,
-      sharesDiegoInputs: !useSmartBet,
+      sharesDiegoInputs: !independent && !useSmartBet,
       markets: List.unmodifiable(markets),
       likelyScores: List.unmodifiable(central.topExactScores()),
     );
