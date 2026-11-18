@@ -18,6 +18,10 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
 
   const mobileEnabled = configured && env.LEARNING_MOBILE_INGEST_ENABLED === 'true';
   const historicalEnabled = mobileEnabled && env.LEARNING_RETRO_INGEST_ENABLED === 'true';
+  // Requires a separately reviewed schema migration and explicit enablement.
+  const simulatorEnabled = mobileEnabled &&
+    env.LEARNING_SIMULATOR_SCHEMA_READY === 'true' &&
+    env.LEARNING_SIMULATOR_INGEST_ENABLED === 'true';
   const autoCouponPrefsEnabled = mobileEnabled && env.AUTO_COUPON_PREFERENCES_ENABLED === 'true';
   const pushRegistrationEnabled = autoCouponPrefsEnabled && registrationReady(env);
   // Worker requires both an explicit flag and a verified official engine adapter.
@@ -34,6 +38,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     return res.json({service: 'SmartBet Central Learning', version: 1,
       enabled: configured, mobileIngestEnabled: mobileEnabled,
       retrospectiveIngestEnabled: historicalEnabled,
+      simulatorIngestEnabled: simulatorEnabled,
       autoCouponPreferencesEnabled: autoCouponPrefsEnabled,
       autoCouponGenerationEnabled: false, autoCouponPushEnabled: false,
       autoCouponWorkerReady: workerReady,
@@ -91,6 +96,7 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     const repository = new LearningRepository(pool);
     service = new LearningService({
       repository, subjectSalt: env.LEARNING_SUBJECT_SALT, now,
+      allowSimulator: simulatorEnabled,
       fetchFixture: async fixtureId => {
         const result = await requestApiFootball({
           path: '/fixtures', query: {id: fixtureId}, ttlMs: 5 * 60 * 1000,
@@ -111,6 +117,9 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
 
   // Staging endpoints are ADMIN ONLY. Never embed LEARNING_ADMIN_TOKEN in Flutter.
   app.post('/learning/v1/predictions', authorize, (req, res) => handle(async () => {
+    if (!simulatorEnabled && req.body?.predictions?.some?.(p => p?.engine === 'simulator')) {
+      return res.status(503).json({success:false, error:'Simulatore non abilitato.'});
+    }
     const result = await getService().ingest(req.body);
     return res.status(result.status).json(result.body);
   }, res));
@@ -134,6 +143,9 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
     if (!req.body || Object.prototype.hasOwnProperty.call(req.body, 'clientId') ||
         Object.prototype.hasOwnProperty.call(req.body, 'historical')) {
       return res.status(400).json({success: false, error: 'Payload non valido.'});
+    }
+    if (!simulatorEnabled && req.body.predictions?.some?.(p => p?.engine === 'simulator')) {
+      return res.status(503).json({success:false, error:'Simulatore non abilitato.'});
     }
     const result = await getService().ingest({
       clientId: req.learningClientId, predictions: req.body.predictions,
