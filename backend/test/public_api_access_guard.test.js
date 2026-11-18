@@ -106,14 +106,16 @@ test('database verifier queries hashed existing credential, not its plaintext', 
     env: {PUBLIC_API_AUTH_DATABASE_URL: 'postgresql://tests'},
     now: () => new Date('2026-11-18T00:00:00Z'),
     poolFactory: () => ({
-      query: async (_sql, args) => {
+      query: async (sql, args) => {
         queryArgs = args;
+        assert.match(sql, /token_scopes/);
         return {rows: [{client_id: 'real-install-42'}]};
       },
     }),
   });
   assert.equal(await verifier(token), 'real-install-42');
   assert.equal(queryArgs[0], crypto.createHash('sha256').update(token).digest('hex'));
+  assert.equal(queryArgs[2], 'ai:analyze');
   assert.equal(queryArgs[0].includes(token), false);
   assert.equal(await verifier('bad'), null);
 });
