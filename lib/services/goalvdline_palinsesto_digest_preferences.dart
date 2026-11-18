@@ -44,7 +44,9 @@ class GoalVdLinePalinsestoDigestPreferences {
     if (json is! Map<String, dynamic> ||
         json['requested'] is! bool ||
         json['hour'] is! int ||
-        json['minute'] is! int) return null;
+        json['minute'] is! int) {
+      return null;
+    }
     final result = GoalVdLinePalinsestoDigestPreferences(
       requested: json['requested'] as bool,
       hour: json['hour'] as int,
@@ -81,7 +83,9 @@ class GoalVdLinePalinsestoDigestPreferencesStore {
   Future<bool> save(GoalVdLinePalinsestoDigestPreferences value) async {
     if (!value.isValid) return false;
     try {
-      return (await _prefs()).setString(storageKey, jsonEncode(value.toJson()));
+      return await (await _prefs()).setString(
+        storageKey, jsonEncode(value.toJson()),
+      );
     } catch (_) {
       return false;
     }
