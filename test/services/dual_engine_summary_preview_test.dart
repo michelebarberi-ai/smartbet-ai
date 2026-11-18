@@ -57,7 +57,7 @@ void main() {
       ),
     );
     expect(find.text('RAFFRONTO TRA LE DUE IA'), findsOneWidget);
-    expect(find.text('AUDITOR SPORTIVO NON ESEGUITO'), findsOneWidget);
+    expect(find.text('AUDITOR SPORTIVO AVANZATO NON ESEGUITO'), findsOneWidget);
     expect(find.text('HANDICAP EUROPEO · CASA -2 · ESITO 2'), findsOneWidget);
   });
 
@@ -81,7 +81,7 @@ void main() {
     expect(find.text('84%'), findsOneWidget);
     expect(find.text('OVER 1.5'), findsNWidgets(2));
     expect(find.textContaining('Stesso mercato statistico'), findsOneWidget);
-    expect(find.text('AUDITOR SPORTIVO NON ESEGUITO'), findsOneWidget);
+    expect(find.text('AUDITOR SPORTIVO AVANZATO NON ESEGUITO'), findsOneWidget);
     expect(find.text('STESSO MERCATO'), findsNothing);
   });
 
