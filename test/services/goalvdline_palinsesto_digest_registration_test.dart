@@ -7,8 +7,8 @@ import 'package:smartbet_ai_new/services/goalvdline_palinsesto_digest_registrati
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final token = 'A' * 43;
-  final device = 'b' * 64;
+  final token = List.filled(43, 'A').join();
+  final device = List.filled(64, 'b').join();
   const origin = 'https://learning.example.org';
 
   test('B73: subscribe only after explicit opt-in and enabled server gate', () async {
