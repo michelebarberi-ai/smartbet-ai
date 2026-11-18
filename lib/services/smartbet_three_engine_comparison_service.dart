@@ -76,6 +76,8 @@ class SmartBetThreeEngineComparisonService {
     var accepted = 0;
 
     for (final record in records) {
+      // Meta AI is an ensemble outcome, not one of its own source engines.
+      if (record.engine == SmartBetAnalysisEngine.metaAi) continue;
       final market = normalizeAnalysisMarket(record.market);
       final known = record.outcomeKnownBy?.toUtc();
       final start = record.matchDate.toUtc();
