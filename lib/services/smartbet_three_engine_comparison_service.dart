@@ -124,10 +124,13 @@ class SmartBetThreeEngineComparisonService {
       final smartBet = perEngine[SmartBetAnalysisEngine.smartBet];
       final diego = perEngine[SmartBetAnalysisEngine.diego];
       if (smartBet == null && diego == null) continue;
-      final market = normalizeAnalysisMarket(simulator.market);
-      final bucket = buckets.putIfAbsent(market, () => _ThreeEngineBucket());
       final smartValid = smartBet != null && _sameOutcome(simulator, smartBet);
       final diegoValid = diego != null && _sameOutcome(simulator, diego);
+      // A contradictory outcome is not a valid pair. Do not render an
+      // empty market bucket as though a real comparison existed.
+      if (!smartValid && !diegoValid) continue;
+      final market = normalizeAnalysisMarket(simulator.market);
+      final bucket = buckets.putIfAbsent(market, () => _ThreeEngineBucket());
       if (smartValid) bucket.addSmartBet(simulator, smartBet);
       if (diegoValid) bucket.addDiego(simulator, diego);
       if (smartValid && diegoValid) bucket.triplets++;
