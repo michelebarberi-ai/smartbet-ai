@@ -12,6 +12,7 @@ import 'smartbet_frozen_model_registration_store.dart';
 import 'smartbet_simulation_shadow_capture_service.dart';
 import 'smartbet_simulation_shadow_store.dart';
 import 'goalvdline_central_learning_outbox.dart';
+import 'smartbet_third_brain_capture_service.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -116,6 +117,24 @@ class SmartBetAnalysisRegistrationService {
           recordedAt: recordedAt,
         );
       }
+    }
+
+    // ============================================================
+    // B66: THIRD ENGINE (prospective, outcome-verifiable, no live selection)
+    // ============================================================
+    // Capture even when no qualified Diego pick exists: the mathematical
+    // simulator can use the legitimate pre-match SmartBet xG on its own.
+    try {
+      await SmartBetThirdBrainCaptureService(store: _store).capture(
+        match: match,
+        smartBet: smartBet,
+        diego: nativeDiego,
+        source: source,
+        recordedAt: recordedAt,
+      );
+    } catch (error) {
+      // A simulator/history issue must not block the official two engines.
+      debugPrint('GoalVdLine simulator history unavailable: $error');
     }
 
     // ============================================================
