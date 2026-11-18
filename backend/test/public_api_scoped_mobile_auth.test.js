@@ -40,7 +40,7 @@ test('legacy default scope stays learning-only', async () => {
     expiresAt: new Date('2026-12-20T00:00:00Z'),
   });
   assert.equal(entries[0].args[3], 'learning:predictions');
-  assert.throws(() => repository.insertClientCredential({
+  await assert.rejects(repository.insertClientCredential({
     clientId: 'invalid', tokenHash: 'x'.repeat(64), expiresAt: new Date(),
     scopes: 'ai:analyze owner:admin',
   }));
