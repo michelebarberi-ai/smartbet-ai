@@ -38,6 +38,8 @@ jobs:
             test/widgets/goalvdline_three_brains_expansion_test.dart \
             test/services/goalvdline_fourth_brain_service_test.dart \
             test/services/goalvdline_odds_lookup_diagnostics_test.dart \
-            test/services/goalvdline_odds_scan_guard_test.dart
+            test/services/goalvdline_odds_scan_guard_test.dart \
+            test/services/goalvdline_coupon_screening_policy_test.dart \
+            test/services/italy_schedule_filter_test.dart
       - name: Full Flutter regression
         run: flutter test --no-pub --reporter compact
