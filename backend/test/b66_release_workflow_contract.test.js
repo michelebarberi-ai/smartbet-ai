@@ -27,8 +27,8 @@ test('B66: GitHub upload is restricted to authorized release branch only', () =>
 });
 
 test('B66: backend and Flutter regressions run before signing in release job', () => {
-  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70 full backend regression before signing');
-  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70 full Flutter regression before signing');
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71 full Flutter regression before signing');
   const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend >= 0);
   assert.ok(flutter > backend);
@@ -44,5 +44,5 @@ test('B66: feature build 65 and release build 66 have valid version metadata', (
     path.join(__dirname, '../../pubspec.yaml'),
     'utf8',
   );
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:65|66|67|68|69|70)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:65|66|67|68|69|70|71)$/m);
 });
