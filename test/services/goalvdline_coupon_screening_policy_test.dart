@@ -57,6 +57,7 @@ AnalysisResult analysis({
   prediction: '1',
   valueBet: '',
   risk: 'Medio',
+  explanation: 'Test screening',
   expectedHomeGoals: 1.65,
   expectedAwayGoals: 1.10,
 );
