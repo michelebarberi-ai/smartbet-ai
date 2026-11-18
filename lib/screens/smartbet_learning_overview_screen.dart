@@ -10,6 +10,7 @@ import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_market_ease_index_service.dart';
 import '../widgets/smartbet_market_ease_index_panel.dart';
 import '../services/goalvdline_three_engine_paired_comparison_service.dart';
+import '../services/goalvdline_three_engine_benchmark_store.dart';
 import '../widgets/goalvdline_three_engine_paired_comparison_panel.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
@@ -34,6 +35,8 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
   SmartBetMarketEaseIndexReport? _marketEaseIndexReport;
   GoalVdLinePairedThreeEngineReport? _threeEngineReport;
+  GoalVdLinePairedThreeEngineReport? _fixedBenchmarkReport;
+  int _frozenBenchmarkFixtures = 0;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -80,6 +83,18 @@ class _SmartBetLearningOverviewScreenState
         records: markets.records,
         asOf: DateTime.now().toUtc(),
       );
+      // B65: fixed-market SHADOW is a separate local store. Outcomes are
+      // joined read-only from already verified history: no new network calls.
+      final benchmark = GoalVdLineThreeEngineBenchmarkStore();
+      await benchmark.initialize();
+      final fixedBenchmarkReport =
+          const GoalVdLineThreeEnginePairedComparisonService().evaluate(
+        records: benchmark.verifiedPairedRecords(
+          resultHistory: markets.records,
+          asOf: DateTime.now().toUtc(),
+        ),
+        asOf: DateTime.now().toUtc(),
+      );
       // B56: purely read-only historical quoted-pick audit.
       final quoteLabReport = const QuoteLabHistoricalService().evaluate(
         history: markets.records,
@@ -90,6 +105,8 @@ class _SmartBetLearningOverviewScreenState
         _shadowMarketReport = shadowReport;
         _marketEaseIndexReport = marketEaseReport;
         _threeEngineReport = threeEngineReport;
+        _fixedBenchmarkReport = fixedBenchmarkReport;
+        _frozenBenchmarkFixtures = benchmark.snapshots.length;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -235,6 +252,12 @@ class _SmartBetLearningOverviewScreenState
                   if (_threeEngineReport != null)
                     GoalVdLineThreeEnginePairedComparisonPanel(
                       report: _threeEngineReport!,
+                    ),
+                  if (_fixedBenchmarkReport != null)
+                    GoalVdLineThreeEnginePairedComparisonPanel(
+                      report: _fixedBenchmarkReport!,
+                      fixedBenchmark: true,
+                      frozenFixtures: _frozenBenchmarkFixtures,
                     ),
                 ],
                 if (_quoteLabReport != null)
