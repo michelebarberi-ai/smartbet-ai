@@ -17,12 +17,25 @@ ALTER TABLE public.sb_learning_predictions_v1
   ADD CONSTRAINT sb_learning_predictions_v1_engine_check
   CHECK (engine IN ('smartBet','diego','simulator'));
 
-ALTER TABLE public.sb_learning_predictions_v1
-  ADD CONSTRAINT sb_learning_simulator_source_b66_check
-  CHECK (
-    (engine = 'simulator' AND simulator_input_source IN ('smartBet','diego'))
-    OR (engine <> 'simulator' AND simulator_input_source IS NULL)
-  );
+-- Run-once constraint creation that allows safe re-review of the SQL file.
+DO $b66$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.sb_learning_predictions_v1'::regclass
+      AND conname = 'sb_learning_simulator_source_b66_check'
+  ) THEN
+    ALTER TABLE public.sb_learning_predictions_v1
+      ADD CONSTRAINT sb_learning_simulator_source_b66_check
+      CHECK (
+        (engine = 'simulator'
+          AND simulator_input_source IS NOT NULL
+          AND simulator_input_source IN ('smartBet','diego'))
+        OR (engine <> 'simulator' AND simulator_input_source IS NULL)
+      );
+  END IF;
+END
+$b66$;
 
 COMMIT;
 
