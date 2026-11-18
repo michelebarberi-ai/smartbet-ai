@@ -9,6 +9,26 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
+// Budget di sicurezza applicati prima dei router costosi. Il controllo
+// iniziale resta compatibile con le Build iOS gia distribuite.
+// L'autenticazione mobile si puo' rendere obbligatoria con flag SOLO
+// dopo l'aggiornamento e l'approvvigionamento dei client.
+const {
+  createPublicApiGuard,
+  createLearningMobileAuthenticator,
+} = require('./public_api_access_guard');
+const verifyMobileToken = createLearningMobileAuthenticator();
+app.use(['/analyze', '/audit'], createPublicApiGuard({
+  group: 'ai',
+  tokenMode: process.env.PUBLIC_AI_MOBILE_TOKEN_MODE || 'off',
+  authenticate: verifyMobileToken,
+}));
+app.use('/football', createPublicApiGuard({
+  group: 'football',
+  tokenMode: process.env.PUBLIC_FOOTBALL_MOBILE_TOKEN_MODE || 'off',
+  authenticate: verifyMobileToken,
+}));
+
 // ============================================================
 // OPENAI
 // ============================================================
