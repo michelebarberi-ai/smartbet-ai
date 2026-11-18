@@ -164,7 +164,7 @@ function createPublicApiGuard({
 
     const result = takeSlot(identity, Number(now()));
     if (!result.release) {
-      return denied(res, 429, 'PUBLIC_API_RATE_LIMITED', result.retry);
+      return denied(res, 429, isAi ? 'AI_RATE_LIMITED' : 'FOOTBALL_RATE_LIMITED', result.retry);
     }
     let released = false;
     const release = () => {
