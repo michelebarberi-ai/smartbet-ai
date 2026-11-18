@@ -1,0 +1,51 @@
+name: GoalVdLine AI provider hotfix QA (no deploy)
+
+on:
+  push:
+    branches:
+      - feature/b65-ai-football-hotfix
+      - feature/b65-ai-production-candidate
+      - feature/api
+    paths:
+      - 'backend/server.js'
+      - 'backend/football_provider_gate.js'
+      - 'backend/football_upstream_diagnostics.js'
+      - 'backend/test/football_*'
+      - 'backend/test/fixtures/football_server_mock_preload.js'
+      - '.github/workflows/b65-ai-proxy-hotfix-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b65-hotfix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-proxy-hotfix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend dependencies
+        run: npm --prefix backend ci --no-audit --no-fund
+      - name: Syntax checks
+        run: |
+          node --check backend/server.js
+          node --check backend/football_upstream_diagnostics.js
+          node --check backend/football_provider_gate.js
+          node --check backend/test/fixtures/football_server_mock_preload.js
+      - name: Actual backend Express HTTP staging, all sports providers mocked
+        run: |
+          node --test \
+            backend/test/football_server_e2e_mock.test.js \
+            backend/test/football_provider_staging_simulation.test.js \
+            backend/test/football_provider_gate.test.js \
+            backend/test/football_upstream_diagnostics.test.js
+        env:
+          GOALVDLINE_LOCAL_STAGING_ONLY: 'true'
+          CI: 'true'

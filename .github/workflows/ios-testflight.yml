@@ -5,9 +5,16 @@ on:
   push:
     branches:
       - feature/api
+    # Backend-only patches are released without a TestFlight build.
+    paths-ignore:
+      - 'backend/**'
+      - '.github/workflows/ios-testflight.yml'
+      - '.github/workflows/b65-ai-proxy-hotfix-qa.yml'
 
 jobs:
   build-ios:
+    # Independent guard for explicit backend maintenance commits.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ios]') }}
     runs-on: macos-26
 
     steps:
