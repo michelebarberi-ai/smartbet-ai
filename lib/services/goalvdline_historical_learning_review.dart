@@ -281,6 +281,12 @@ class GoalVdLineHistoricalLearningReview {
     SmartBetAnalysisRecord record,
     DateTime now,
   ) {
+    // B66: legacy retrospective storage accepts only the original two
+    // engines. Mathematical simulator snapshots use the separate, consented
+    // prospective pipeline. Never put them into unsupported historic drafts.
+    if (record.engine == SmartBetAnalysisEngine.simulator) {
+      return _HistoricEligibility.excluded;
+    }
     if (record.matchDate.toUtc().isAfter(now)) {
       return _HistoricEligibility.future;
     }
