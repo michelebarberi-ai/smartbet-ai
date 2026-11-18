@@ -55,10 +55,19 @@ test('upstream HTTP 500 remains an upstream 502 with safe reason code', async ()
   );
 });
 
-test('HTTP 200 with errors object is classified separately from HTTP error', async () => {
+test('HTTP 200 quota-exhausted response is treated as provider rate limiting', async () => {
   await assert.rejects(
     fetchFootballJson({url, apiKey, fetchImpl: fake(JSON.stringify({
-      errors: {requests: 'quota reached', token: apiKey},
+      errors: {requests: 'Daily quota limit reached', token: apiKey},
+    }))}),
+    {code: 'FOOTBALL_PROVIDER_RATE_LIMIT', statusCode: 502, upstreamStatus: 200},
+  );
+});
+
+test('HTTP 200 other provider error does NOT open a rate-limit cooldown', async () => {
+  await assert.rejects(
+    fetchFootballJson({url, apiKey, fetchImpl: fake(JSON.stringify({
+      errors: {parameters: 'Missing required season'},
     }))}),
     {code: 'FOOTBALL_PROVIDER_REPORTED_ERROR', statusCode: 502, upstreamStatus: 200},
   );
