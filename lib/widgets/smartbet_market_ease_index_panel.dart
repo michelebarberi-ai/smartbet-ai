@@ -49,6 +49,7 @@ class SmartBetMarketEaseIndexPanel extends StatelessWidget {
             final engine = switch (s.engine.name) {
               'diego' => 'Diego AI',
               'simulator' => 'Simulatore',
+              'metaAi' => 'Quarto cervello (SHADOW)',
               _ => 'SmartBet AI',
             };
             final label = entry.score == null
