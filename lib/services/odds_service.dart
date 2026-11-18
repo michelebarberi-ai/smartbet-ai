@@ -151,6 +151,9 @@ enum OddsLookupStatus {
   upstreamUnavailable,
   quotaOrRateLimit,
   networkError,
+  proxyConfigurationError,
+  proxyAccessDenied,
+  proxyRouteUnavailable,
 }
 
 class OddsLookupDiagnostic {
@@ -185,9 +188,33 @@ class OddsService {
   final Map<String, OddsLookupDiagnostic> _lastLookupDiagnostics = {};
 
   static bool _isRateLimit(String body) {
-    final sample = body.length > 1200 ? body.substring(0, 1200) : body;
-    return RegExp(r'quota|rate.?limit|daily.?limit|too many requests|'
-      r'requests.*(?:limit|reached)', caseSensitive: false).hasMatch(sample);
+    // Inspect the bounded error envelope, including nested API-SPORTS
+    // diagnostics. Never display/retain a provider's raw response body.
+    final sample = body.length > 4000 ? body.substring(0, 4000) : body;
+    return RegExp(
+      r'quota|rate.?limit|daily.?limit|too many requests|'
+      r'requests.*(?:limit|reached|exceeded)|'
+      r'limit.*requests|maximum.*requests|'
+      r'you have reached.*requests',
+      caseSensitive: false,
+    ).hasMatch(sample);
+  }
+
+  static OddsLookupStatus _httpFailureStatus(int status, String body) {
+    if (status == 429 || _isRateLimit(body)) {
+      return OddsLookupStatus.quotaOrRateLimit;
+    }
+    if (status == 503 &&
+        body.toUpperCase().contains('FOOTBALL_API_KEY NON CONFIGURATA')) {
+      return OddsLookupStatus.proxyConfigurationError;
+    }
+    if (status == 401 || status == 403) {
+      return OddsLookupStatus.proxyAccessDenied;
+    }
+    if (status == 404) {
+      return OddsLookupStatus.proxyRouteUnavailable;
+    }
+    return OddsLookupStatus.upstreamUnavailable;
   }
 
   String _lookupKey({
@@ -287,10 +314,9 @@ class OddsService {
 
       if (response.statusCode != 200) {
         _setDiagnostic(cacheKey, OddsLookupDiagnostic(
-          status: response.statusCode == 429 ||
-                  _isRateLimit(response.body)
-              ? OddsLookupStatus.quotaOrRateLimit
-              : OddsLookupStatus.upstreamUnavailable,
+          status: _httpFailureStatus(
+            response.statusCode, response.body,
+          ),
           httpStatus: response.statusCode,
         ));
         return null;
@@ -951,11 +977,18 @@ class OddsService {
       _marketCache[cacheKey] = result;
       _marketCacheTime[cacheKey] = _now();
       return result;
+    } on FormatException {
+      _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
+        status: OddsLookupStatus.invalidPayload,
+      ));
+      debugPrint('SMARTBET ODDS INVALID JSON for fixture $fixtureId');
+      return null;
     } catch (e) {
       _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
         status: OddsLookupStatus.networkError,
       ));
-      debugPrint('SMARTBET ODDS EXCEPTION for fixture $fixtureId: $e');
+      // Avoid printing raw error bodies or arbitrary network/URI secrets.
+      debugPrint('SMARTBET ODDS NETWORK ERROR for fixture $fixtureId');
       return null;
     }
   }
