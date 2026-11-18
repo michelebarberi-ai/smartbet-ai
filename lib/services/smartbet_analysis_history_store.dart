@@ -8,7 +8,7 @@ import 'smartbet_asian_handicap_accounting_service.dart';
 import 'smartbet_asian_handicap_market_settlement_service.dart';
 import 'smartbet_asian_handicap_settlement_service.dart';
 
-enum SmartBetAnalysisEngine { smartBet, diego, simulator }
+enum SmartBetAnalysisEngine { smartBet, diego, simulator, metaAi }
 
 enum SmartBetAnalysisSource { analysis, aiCoupon, combinations, dailyResults }
 
