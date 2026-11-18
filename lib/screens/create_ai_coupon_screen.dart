@@ -249,6 +249,68 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _couponDeepCount = 0;
   int _couponQuotedCount = 0;
   int _couponAuditRejected = 0;
+  final Map<int, OddsLookupDiagnostic> _couponQuoteDiagnostics = {};
+  final Set<int> _couponFixturesWithEligibleQuotes = {};
+
+  void _recordCouponOddsLookup(int fixtureId, FixtureMarketOdds? odds) {
+    final diagnosis = _oddsService.diagnosticFor(
+      fixtureId: fixtureId,
+      italianBookmakerOnly: _italyScheduleOnly,
+    );
+    if (diagnosis != null) _couponQuoteDiagnostics[fixtureId] = diagnosis;
+    if (_hasRealQuotedMarket(odds)) {
+      _couponFixturesWithEligibleQuotes.add(fixtureId);
+    }
+  }
+
+  String get _couponOddsDiagnosticText {
+    final diagnoses = _couponQuoteDiagnostics.values.toList();
+    int count(OddsLookupStatus status) =>
+        diagnoses.where((item) => item.status == status).length;
+    final errors = count(OddsLookupStatus.quotaOrRateLimit) +
+        count(OddsLookupStatus.upstreamUnavailable) +
+        count(OddsLookupStatus.providerError) +
+        count(OddsLookupStatus.networkError) +
+        count(OddsLookupStatus.invalidPayload);
+    final withoutCoverage = count(OddsLookupStatus.noFeedRows) +
+        count(OddsLookupStatus.noBookmakers);
+    final filtered = count(OddsLookupStatus.noItalianBookmakers) +
+        count(OddsLookupStatus.unsupportedMarkets);
+    final insufficientPrice = count(OddsLookupStatus.available) -
+        _couponFixturesWithEligibleQuotes.length;
+    final possibleQuota = count(OddsLookupStatus.quotaOrRateLimit);
+    return 'QUOTE REALI — partite interrogate: ${diagnoses.length} • '
+        'con mercati quotati >1,20: ${_couponFixturesWithEligibleQuotes.length} • '
+        'senza offerte dal feed: $withoutCoverage • '
+        'bookmaker o mercati non utilizzabili: $filtered • '
+        'quote presenti ma non idonee: ${math.max(0, insufficientPrice)} • '
+        'errori del servizio: $errors'
+        '${possibleQuota > 0 ? ' (possibile limite API: $possibleQuota)' : ''}.';
+  }
+
+  String get _couponNoOddsExplanation {
+    final diagnoses = _couponQuoteDiagnostics.values;
+    if (diagnoses.any((d) =>
+        d.status == OddsLookupStatus.quotaOrRateLimit)) {
+      return 'Il servizio quote segnala un possibile limite di richieste. '
+          'Non significa che le partite non siano quotate. '
+          'Verifica la disponibilità del provider prima di riprovare.';
+    }
+    if (diagnoses.any((d) =>
+        d.status == OddsLookupStatus.upstreamUnavailable ||
+        d.status == OddsLookupStatus.providerError ||
+        d.status == OddsLookupStatus.networkError ||
+        d.status == OddsLookupStatus.invalidPayload)) {
+      return 'Alcune richieste di quote sono fallite. '
+          'Non possiamo stabilire se queste partite siano giocabili.';
+    }
+    if (_couponFixturesWithEligibleQuotes.isEmpty) {
+      return 'Non sono state trovate quote reali superiori a 1,20 '
+          'nei mercati supportati per le partite esaminate.';
+    }
+    return 'Le quote trovate non hanno superato anche i requisiti '
+        'sportivi e i controlli richiesti.';
+  }
 
   String? _error;
   String? _notice;
@@ -1222,6 +1284,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _couponDeepCount = 0;
       _couponQuotedCount = 0;
       _couponAuditRejected = 0;
+      _couponQuoteDiagnostics.clear();
+      _couponFixturesWithEligibleQuotes.clear();
     });
 
     try {
@@ -1520,6 +1584,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 italianBookmakerOnly: _italyScheduleOnly,
               );
 
+              _recordCouponOddsLookup(candidate.match.fixtureId, odds);
               if (_hasRealQuotedMarket(odds)) {
                 quoteCache[candidate.match.fixtureId] = odds;
               }
@@ -1896,6 +1961,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     italianBookmakerOnly: _italyScheduleOnly,
                   );
 
+              _recordCouponOddsLookup(fixtureId, odds);
               if (!_hasRealQuotedMarket(odds)) continue;
 
               // La funzione prova i mercati in ordine
@@ -2014,13 +2080,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           _results.clear();
           _loading = false;
           _phase = '';
-          _error = quoteCache.isEmpty
-              ? 'Il feed non ha fornito quote reali utilizzabili per le '
-                  'partite analizzate. Non è possibile costruire una '
-                  'schedina con quota verificata.'
-              : 'Non ci sono abbastanza selezioni che rispettino insieme '
-                  'soglia di probabilità, controlli di qualità e quote '
-                  'reali superiori a 1,20.';
+          _couponAuditRejected = auditRejected;
+          _error = _couponNoOddsExplanation;
         });
 
         return;
@@ -4598,6 +4659,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 color: Colors.white54, fontSize: 11, height: 1.4,
               ),
             ),
+            if (_couponQuoteDiagnostics.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                _couponOddsDiagnosticText,
+                key: const Key('b68-coupon-quote-diagnostics'),
+                style: const TextStyle(
+                  color: Colors.orangeAccent, fontSize: 11, height: 1.4,
+                ),
+              ),
+            ],
           ],
           if (_mode == _CouponMode.automatic &&
               !_loading &&
