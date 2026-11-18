@@ -39,6 +39,11 @@ void main() {
     expect(find.text('SmartBet AI'), findsOneWidget);
     expect(find.text('Simulatore'), findsOneWidget);
     expect(find.text('Poisson bivariata'), findsOneWidget);
+    expect(find.text('4° Meta AI'), findsOneWidget);
+    expect(
+      find.text('Non disponibile: Diego AI senza dati per questa analisi'),
+      findsOneWidget,
+    );
     expect(find.text('UNDER 5.5'), findsOneWidget);
     expect(find.textContaining('quote non entrano'), findsOneWidget);
   });
