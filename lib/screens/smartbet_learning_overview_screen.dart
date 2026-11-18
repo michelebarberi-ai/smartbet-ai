@@ -9,6 +9,7 @@ import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_market_ease_index_service.dart';
 import '../services/smartbet_three_engine_comparison_service.dart';
+import '../services/goalvdline_fourth_brain_validation_service.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
@@ -37,6 +38,7 @@ class _SmartBetLearningOverviewScreenState
   int _metaRecorded = 0;
   int _metaResolved = 0;
   int _metaDistinctFixtures = 0;
+  GoalVdLineFourthBrainValidationReport? _metaValidation;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -82,6 +84,8 @@ class _SmartBetLearningOverviewScreenState
           (r.status == SmartBetAnalysisStatus.correct ||
            r.status == SmartBetAnalysisStatus.wrong) &&
           r.outcomeKnownBy != null).length;
+      final metaValidation = const GoalVdLineFourthBrainValidationService()
+          .evaluate(history: markets.records, asOf: DateTime.now().toUtc());
       final threeEngineReport = const SmartBetThreeEngineComparisonService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       // B56: purely read-only historical quoted-pick audit.
@@ -97,6 +101,7 @@ class _SmartBetLearningOverviewScreenState
         _metaRecorded = metaHistory.length;
         _metaResolved = metaResolved;
         _metaDistinctFixtures = metaHistory.map((r) => r.fixtureId).toSet().length;
+        _metaValidation = metaValidation;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -231,6 +236,28 @@ class _SmartBetLearningOverviewScreenState
                   _stat('Previsioni sintetizzate', '$_metaRecorded'),
                   _stat('Partite distinte', '$_metaDistinctFixtures'),
                   _stat('Pronostici con esito osservato', '$_metaResolved'),
+                  if (_metaValidation != null) ...[
+                    _stat('Confronti completi stessa partita e mercato',
+                        '${_metaValidation!.completeTriplets}'),
+                    _stat('Giornate comparabili',
+                        '${_metaValidation!.distinctMatchDays}'),
+                    _stat('Brier SmartBet',
+                        _metaValidation!.smartBetBrier?.toStringAsFixed(4) ?? 'N/D'),
+                    _stat('Brier Diego',
+                        _metaValidation!.diegoBrier?.toStringAsFixed(4) ?? 'N/D'),
+                    _stat('Brier quarto cervello',
+                        _metaValidation!.metaBrier?.toStringAsFixed(4) ?? 'N/D'),
+                    if (!_metaValidation!.researchSample)
+                      const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Text(
+                          'Confronto esplorativo: per valutare un vantaggio '
+                          'servono almeno 100 partite abbinate su 14 giornate. '
+                          'Anche dopo la soglia serve una verifica prospettica '
+                          'separata: nessuna attivazione automatica.',
+                        ),
+                      ),
+                  ],
                   const Padding(
                     padding: EdgeInsets.all(10),
                     child: Text(
