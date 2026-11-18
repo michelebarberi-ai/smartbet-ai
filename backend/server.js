@@ -582,7 +582,13 @@ const footballInFlight = new Map();
 
 // One shared upstream budget across fixtures, odds, injury, lineups and
 // statistics. Cache hits are unaffected and no stale response is returned.
-const footballProviderGate = createFootballProviderGate();
+const footballProviderGate = createFootballProviderGate({
+  // A short, bounded queue avoids rejecting normal multi-fixture analyses.
+  // With a slow provider the queue times out rather than growing forever.
+  maxConcurrent: 4,
+  maxQueue: 32,
+  maxWaitMs: 8000,
+});
 
 const FIXTURES_TTL_MS = 15 * 60 * 1000;
 const ODDS_TTL_MS = 5 * 60 * 1000;
