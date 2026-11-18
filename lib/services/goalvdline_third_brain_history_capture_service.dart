@@ -47,6 +47,39 @@ class GoalVdLineThirdBrainHistoryCaptureService {
       return const [];
     }
 
+    // Blocca la scelta delle famiglie sulla PRIMA lettura della fixture.
+    // Un aggiornamento degli xG nella stessa partita non deve creare un
+    // sesto mercato o scegliere retrospettivamente quello piu' facile.
+    // Si accodano solo le fonti, mantenendo probabilita' e metadati originali.
+    await _store.initialize();
+    final frozen = _store.records
+        .where((r) => r.engine == SmartBetAnalysisEngine.thirdBrain &&
+            r.fixtureId == match.fixtureId)
+        .toList(growable: false);
+    if (frozen.isNotEmpty) {
+      final linked = <SmartBetAnalysisRecord>[];
+      for (final previous in frozen) {
+        final updated = await _store.registerAnalysis(
+          engine: SmartBetAnalysisEngine.thirdBrain,
+          source: source,
+          fixtureId: match.fixtureId,
+          homeTeam: previous.homeTeam,
+          awayTeam: previous.awayTeam,
+          league: previous.league,
+          country: previous.country,
+          matchDate: previous.matchDate,
+          market: previous.market,
+          probability: previous.probability,
+          confidence: previous.confidence,
+          inputSource: previous.inputSource,
+          modelVersion: previous.modelVersion,
+          recordedAt: now,
+        );
+        if (updated != null) linked.add(updated);
+      }
+      return List.unmodifiable(linked);
+    }
+
     final report = const GoalVdLineThirdBrainService().evaluate(
       smartBet: smartBet,
       diego: diego,
