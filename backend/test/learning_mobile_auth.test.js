@@ -31,8 +31,8 @@ function makeService(now = new Date('2026-11-04T11:00:00Z')) {
   const state = {clients: new Map(), inserted: [], removed: []};
   const repository = {
     async initialize() {},
-    async insertClientCredential({clientId, tokenHash, expiresAt}) {
-      state.clients.set(tokenHash, {clientId, expiresAt, revoked: false});
+    async insertClientCredential({clientId, tokenHash, expiresAt, scopes}) {
+      state.clients.set(tokenHash, {clientId, expiresAt, scopes, revoked: false});
     },
     async findValidClient(hash, timestamp) {
       const client = state.clients.get(hash);
@@ -142,4 +142,47 @@ test('erase revokes remote identity by token without altering client local histo
   assert.equal(state.removed.length, 1);
   assert.equal(state.removed[0].clientId, creds.clientId);
   // Repository revokes token inside the same SQL transaction in production.
+});
+
+test('legacy learning tokens never receive paid AI scope implicitly', async () => {
+  const {service, state} = makeService();
+  const token = await service.provisionMobileClient();
+  assert.equal(token.scope, 'learning:predictions');
+  assert.equal(state.clients.get(mobileTokenHash(token.token)).scopes,
+    'learning:predictions');
+  const ai = await service.provisionMobileClient({aiAccess: true});
+  assert.equal(ai.scope, 'learning:predictions ai:analyze');
+  assert.equal(state.clients.get(mobileTokenHash(ai.token)).scopes,
+    'learning:predictions ai:analyze');
+  assert.notEqual(ai.token, token.token);
+});
+
+test('AI-scoped token issuance is disabled without dedicated admin feature gate', async () => {
+  const {service} = makeService();
+  const app = fakeApp();
+  registerLearningRoutes(app, {env: environment, learningService: service});
+  const handlers = app.routes.get('POST /learning/v1/clients/provision-ai');
+  const user = fakeRes();
+  await handlers[0](fakeRequest(), user, () => assert.fail('must reject anonymous'));
+  assert.equal(user.code, 401);
+  const res = fakeRes();
+  const req = fakeRequest({adminToken: ADMIN});
+  await handlers[0](req, res, () => handlers[1](req, res));
+  assert.equal(res.code, 503);
+});
+
+test('AI-scoped token can only be issued by admin when separately enabled', async () => {
+  const {service, state} = makeService();
+  const app = fakeApp();
+  registerLearningRoutes(app, {env: {...environment,
+    LEARNING_AI_SCOPE_PROVISION_ENABLED: 'true'}, learningService: service});
+  const handlers = app.routes.get('POST /learning/v1/clients/provision-ai');
+  const req = fakeRequest({adminToken: ADMIN});
+  const res = fakeRes();
+  await handlers[0](req, res, () => handlers[1](req, res));
+  assert.equal(res.code, 201);
+  assert.equal(res.payload.scope, 'learning:predictions ai:analyze');
+  assert.equal(state.clients.get(mobileTokenHash(res.payload.token)).scopes,
+    'learning:predictions ai:analyze');
+  assert.equal(res.headers['Cache-Control'], 'no-store');
 });
