@@ -236,6 +236,22 @@ class SmartBetAiService {
     }
     return headers;
   }
+  // L'header Bearer non deve mai essere inoltrato automaticamente
+  // a un host diverso tramite redirect HTTP 301/302/307/308.
+  Future<http.Response> _sendAiPost(Uri uri, String jsonBody) async {
+    if (uri.scheme != 'https' ||
+        uri.origin != Uri.parse(backendUrl).origin ||
+        !const {'/analyze', '/audit'}.contains(uri.path)) {
+      throw const FormatException('Host API AI non autorizzato.');
+    }
+    final request = http.Request('POST', uri)
+      ..followRedirects = false
+      ..body = jsonBody;
+    request.headers.addAll(await _aiRequestHeaders());
+    final response = await _client.send(request);
+    return http.Response.fromStream(response);
+  }
+
   // ============================================================
   // ANALISI PARTITA
   // ============================================================
@@ -473,11 +489,7 @@ class SmartBetAiService {
 
       print('========================================');
 
-      final response = await _client.post(
-        uri,
-        headers: await _aiRequestHeaders(),
-        body: body,
-      );
+      final response = await _sendAiPost(uri, body);
 
       print('');
 
@@ -697,17 +709,13 @@ class SmartBetAiService {
     try {
       final uri = Uri.parse('$backendUrl/audit');
 
-      final response = await _client.post(
-        uri,
-        headers: await _aiRequestHeaders(),
-        body: jsonEncode({
-          'homeTeam': match.homeTeam,
-          'awayTeam': match.awayTeam,
-          'matchDate': match.date,
-          'dossier': dossier,
-          'analysis': analysis,
-        }),
-      );
+      final response = await _sendAiPost(uri, jsonEncode({
+        'homeTeam': match.homeTeam,
+        'awayTeam': match.awayTeam,
+        'matchDate': match.date,
+        'dossier': dossier,
+        'analysis': analysis,
+      }));
 
       if (response.statusCode != 200) {
         print('SMARTBET AUDITOR: fallback neutro (${response.statusCode})');
