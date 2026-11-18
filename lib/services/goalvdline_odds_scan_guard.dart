@@ -8,6 +8,7 @@ class GoalVdLineOddsScanGuard {
   static bool isSystemicFailure(OddsLookupDiagnostic diagnosis) =>
       switch (diagnosis.status) {
         OddsLookupStatus.quotaOrRateLimit ||
+        OddsLookupStatus.providerCooldownActive ||
         OddsLookupStatus.proxyConfigurationError ||
         OddsLookupStatus.proxyAccessDenied ||
         OddsLookupStatus.proxyRouteUnavailable ||
@@ -33,6 +34,7 @@ class GoalVdLineOddsScanGuard {
     if (!fullOutageBatch(diagnostics)) return false;
     final terminal = diagnostics.every((d) =>
         d.status == OddsLookupStatus.quotaOrRateLimit ||
+        d.status == OddsLookupStatus.providerCooldownActive ||
         d.status == OddsLookupStatus.proxyConfigurationError ||
         d.status == OddsLookupStatus.proxyAccessDenied ||
         d.status == OddsLookupStatus.proxyRouteUnavailable);
