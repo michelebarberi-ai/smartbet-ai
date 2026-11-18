@@ -3,6 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const OpenAI = require("openai");
+const {
+  fetchFootballJson,
+  respondFootballFailure,
+} = require('./football_upstream_diagnostics');
 
 const app = express();
 
@@ -633,7 +637,7 @@ async function requestApiFootball({
 
   if (cached !== null) {
     console.log(
-      `[API-FOOTBALL CACHE HIT] ${cacheKey}`,
+      `[API-FOOTBALL CACHE HIT] ${path}`,
     );
 
     return {
@@ -647,7 +651,7 @@ async function requestApiFootball({
 
   if (existingRequest) {
     console.log(
-      `[API-FOOTBALL SINGLE-FLIGHT] ${cacheKey}`,
+      `[API-FOOTBALL SINGLE-FLIGHT] ${path}`,
     );
 
     const data = await existingRequest;
@@ -664,51 +668,13 @@ async function requestApiFootball({
       `?${params.toString()}`;
 
     console.log(
-      `[API-FOOTBALL REQUEST] ${cacheKey}`,
+      `[API-FOOTBALL REQUEST] ${path}`,
     );
 
-    const response = await fetch(url, {
-      headers: {
-        "x-apisports-key": footballApiKey,
-      },
+    const data = await fetchFootballJson({
+      url,
+      apiKey: footballApiKey,
     });
-
-    const text = await response.text();
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch (_) {
-      const error = new Error(
-        `Risposta API-Football non valida (${response.status}).`,
-      );
-      error.statusCode = 502;
-      throw error;
-    }
-
-    if (!response.ok) {
-      const error = new Error(
-        `API-Football HTTP ${response.status}`,
-      );
-      error.statusCode = 502;
-      error.apiResponse = data;
-      throw error;
-    }
-
-    if (
-      data &&
-      data.errors &&
-      typeof data.errors === "object" &&
-      Object.keys(data.errors).length > 0
-    ) {
-      const error = new Error(
-        "API-Football ha restituito un errore.",
-      );
-      error.statusCode = 502;
-      error.apiResponse = data;
-      throw error;
-    }
 
     setFootballCache(
       cacheKey,
@@ -769,13 +735,7 @@ app.get("/football/leagues", async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600");
     return res.json({ success: true, response: leagues, results: leagues.length });
   } catch (error) {
-    console.error("SMARTBET FOOTBALL LEAGUES ERROR:", {
-      status: error?.statusCode || 500,
-      message: String(error?.message || "error").slice(0, 200),
-    });
-    return res.status(error.statusCode || 500).json({
-      success: false, error: "Catalogo competizioni temporaneamente non disponibile.",
-    });
+    return respondFootballFailure(res, error, '/leagues');
   }
 });
 
@@ -820,21 +780,7 @@ app.get("/football/fixtures", async (req, res) => {
 
     return res.json(result.data);
   } catch (error) {
-    console.error(
-      "SMARTBET FOOTBALL FIXTURES ERROR:",
-      error,
-    );
-
-    return res
-      .status(error.statusCode || 500)
-      .json({
-        success: false,
-        error:
-          error.message ||
-          "Errore caricamento fixtures.",
-        apiResponse:
-          error.apiResponse || undefined,
-      });
+    return respondFootballFailure(res, error, '/fixtures');
   }
 });
 
@@ -874,21 +820,7 @@ app.get("/football/odds", async (req, res) => {
 
     return res.json(result.data);
   } catch (error) {
-    console.error(
-      "SMARTBET FOOTBALL ODDS ERROR:",
-      error,
-    );
-
-    return res
-      .status(error.statusCode || 500)
-      .json({
-        success: false,
-        error:
-          error.message ||
-          "Errore caricamento quote.",
-        apiResponse:
-          error.apiResponse || undefined,
-      });
+    return respondFootballFailure(res, error, '/odds');
   }
 });
 
@@ -994,21 +926,7 @@ app.get(/^\/football\/api\/(.+)$/, async (req, res) => {
 
     return res.json(result.data);
   } catch (error) {
-    console.error(
-      "SMARTBET GENERIC FOOTBALL ERROR:",
-      error,
-    );
-
-    return res
-      .status(error.statusCode || 500)
-      .json({
-        success: false,
-        error:
-          error.message ||
-          "Errore API-Football.",
-        apiResponse:
-          error.apiResponse || undefined,
-      });
+    return respondFootballFailure(res, error, '/football/api');
   }
 });
 
