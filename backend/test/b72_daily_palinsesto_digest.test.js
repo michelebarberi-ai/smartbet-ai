@@ -35,7 +35,7 @@ test('B72: counts distinct future Saturday fixtures and actual leagues', () => {
 test('B72: 8am Rome follows DST, never UTC calendar rollover', () => {
   const summerNow=new Date('2026-07-04T06:00:00Z');
   const digest=normalizeFixtureDigest({response:[
-    fixture(200,'Bundesliga',78,'2026-07-04T21:30:00Z'),
+    fixture(200,'Bundesliga',78,'2026-07-04T22:30:00Z'),
     fixture(201,'Bundesliga',78,'2026-07-04T20:30:00Z'),
   ]},{dayKey:'2026-07-04',now:summerNow});
   assert.equal(digest.fixtureCount,1); // 20:30 UTC = 22:30 Rome
