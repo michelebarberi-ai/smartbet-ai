@@ -16,10 +16,20 @@
 
 ### Stato verificato
 - Il codice `backend/public_api_access_guard.js` e la registrazione del middleware in `backend/server.js` esistono sul ramo di sviluppo. I limiti sono **per processo**, non condivisi fra istanze; senza deployment non proteggono Render.
-- `/analyze`, `/audit`, `/football/*` possono richiedere token solo tramite feature flag: modalità predefinita `off`, per non interrompere la Build 64.
+- `/analyze`, `/audit`, `/football/*` possono utilizzare token solo tramite feature flag: modalità predefinita `off`, per non interrompere la Build 64.
+- B65: il middleware supporta una modalità intermedia `prefer`: i client con token mobile valido, verificato in Neon, ricevono un budget per installazione; quelli privi di token rimangono anonimi con limiti ridotti. Un token errato viene rifiutato, non convertito in anonimo. Sono previsti anche limiti ai tentativi di autenticazione prima della query al DB.
+- In `prefer` le impostazioni predefinite aggiuntive (per processo) sono: AI anonime 20/ora per IP e 200/giorno globali; football anonime 60/minuto per IP e 5000/giorno globali; verifiche token 60/minuto per IP. Queste soglie devono essere adeguate sul traffico reale PRIMA di una distribuzione: molti iPhone potrebbero condividere lo stesso IP del reverse proxy.
+- La modalità `require` conserva il blocco totale delle installazioni senza token. NON va attivata senza onboarding credenziale per tutti e privacy aggiornata.
 - `app.use(cors())` resta aperto: restringerlo può ridurre chiamate dal browser, ma NON sostituisce l'autenticazione.
 - Esiste una credenziale mobile sul learning backend/Keychain; vanno coordinati policy/privacy, distribuzione client e verifica della credenziale sul server di analisi.
 - I limiti di traffico non garantiscono da soli un tetto monetario ai consumi OpenAI.
+
+### Modalità rollout senza interruzioni
+
+1. `off` (default): nessuna nuova autenticazione, limiti per IP/per processo già esistenti; nessuna trasmissione del token learning verso il servizio AI.
+2. `prefer` **solo dopo deploy coordinato**: verifica Bearer opzionale e limiti anonimi ridotti; il client Flutter deve essere compilato con `--dart-define=GOALVDLINE_AI_MOBILE_AUTH=true` e ricevere una credenziale valida. Attenzione: il token attuale è provisionato dall'amministratore, non automaticamente disponibile su ogni dispositivo. Non affermare che sia universale.
+3. `require` (futuro): tutti i client devono inviare un token, dopo un percorso sicuro di provisioning per installazione. Un endpoint di emissione token pubblico e non attestato NON è una protezione (consentirebbe l'emissione illimitata). Servono strategie di attestazione/controllo e migrazione.
+4. Limitazioni: memoria per processo e reverse proxy possono compromettere equità dei budget; monitorare prima di prod. Prevedere in seguito un contatore condiviso e un limite reale di spesa provider, senza acquistare servizi nuovi senza consenso.
 
 ### Prossimi passi
 1. Inventario di tutti i percorsi AI/football usati dal client, compresi eventuali proxy, doppi servizi Render e fallback.
