@@ -2,8 +2,8 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import 'diego_ai_service.dart';
 import 'goalvdline_third_brain_service.dart';
+import 'goalvdline_third_brain_own_input_service.dart';
 import 'smartbet_analysis_history_store.dart';
-import 'smartbet_match_simulation_service.dart';
 
 /// Raccolta prospettica SHADOW del terzo motore, separata dalla scelta
 /// SmartBet e da Diego. Registra solo mercati binari liquidabili,
@@ -36,6 +36,7 @@ class GoalVdLineThirdBrainHistoryCaptureService {
     required MatchModel match,
     required AnalysisResult smartBet,
     DiegoAiAnalysis? diego,
+    GoalVdLineThirdBrainOwnInput? ownInput,
     required SmartBetAnalysisSource source,
     DateTime? recordedAt,
   }) async {
@@ -80,9 +81,14 @@ class GoalVdLineThirdBrainHistoryCaptureService {
       return List.unmodifiable(linked);
     }
 
+    final historicalInput = ownInput ??
+        const GoalVdLineThirdBrainOwnInputService().fromCachedFixtureHistory(
+          match: match, observedAt: now,
+        );
     final report = const GoalVdLineThirdBrainService().evaluate(
       smartBet: smartBet,
       diego: diego,
+      ownInput: historicalInput,
     );
     if (report == null || report.dataConfidence == null ||
         report.dataConfidence! < minimumDataConfidence) {
@@ -117,7 +123,7 @@ class GoalVdLineThirdBrainHistoryCaptureService {
         probability: best.probability,
         confidence: report.dataConfidence,
         inputSource: report.inputSource,
-        modelVersion: 'third-brain-${SmartBetMatchSimulationService.modelVersion}',
+        modelVersion: report.modelVersion,
         // Nessuna quota inventata e nessuna esecuzione di schedina.
         quotedOdd: null,
         recordedAt: now,
