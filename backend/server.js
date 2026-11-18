@@ -1,6 +1,8 @@
 require("dotenv").config();
 
 const express = require("express");
+const {localClock} = require('./auto_coupon/daily_schedule');
+const {normalizeFixtureDigest} = require('./daily_palinsesto/digest');
 const cors = require("cors");
 const OpenAI = require("openai");
 
@@ -732,6 +734,34 @@ app.get("/football/leagues", async (req, res) => {
     });
     return res.status(error.statusCode || 500).json({
       success: false, error: "Catalogo competizioni temporaneamente non disponibile.",
+    });
+  }
+});
+
+// ------------------------------------------------------------
+// RIEPILOGO DEL PALINSESTO (solo calendario, NO schedine)
+// ------------------------------------------------------------
+// Uses the SAME cached /fixtures?date=... provider request as the app.
+// Once per fetch TTL per instance, no bookmaker odds or AI execution.
+// No cron is started by this route: push requires separate APNs setup.
+app.get('/football/palinsesto/oggi', async (_req, res) => {
+  const now = new Date();
+  const dayKey = localClock(now, 'Europe/Rome').dayKey;
+  try {
+    const response = await requestApiFootball({
+      path: '/fixtures',
+      query: {date: dayKey, timezone: 'Europe/Rome'},
+      ttlMs: FIXTURES_TTL_MS,
+    });
+    const digest = normalizeFixtureDigest(response.data, {dayKey, now});
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-SmartBet-Cache', response.cache);
+    return res.json({success: true, ...digest});
+  } catch (error) {
+    // A provider 429/503 is UNKNOWN availability, never "0 fixtures".
+    return res.status(error?.statusCode || 503).json({
+      success: false,
+      error: 'Palinsesto temporaneamente non disponibile.',
     });
   }
 });
