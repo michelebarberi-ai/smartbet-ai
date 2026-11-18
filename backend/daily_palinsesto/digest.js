@@ -2,7 +2,7 @@
 
 // B72: truthful, read-only daily fixture digest. Never runs prediction engines,
 // builds a coupon, fetches bookmaker odds, or claims betting availability.
-const {localClock} = require('../auto_coupon/daily_schedule');
+const {romeDayKey} = require('./rome_clock');
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const LIVE_OR_FINISHED = new Set([
@@ -34,7 +34,7 @@ function normalizeFixtureDigest(providerData, {
     if (!Number.isSafeInteger(fixtureId) || fixtureId <= 0 ||
         !Number.isSafeInteger(leagueId) || leagueId <= 0 ||
         !Number.isFinite(date.getTime()) || date <= now ||
-        localClock(date, timeZone).dayKey !== dayKey ||
+        romeDayKey(date) !== dayKey ||
         !['NS','TBD'].includes(short) || !leagueName ||
         LIVE_OR_FINISHED.has(short) || ids.has(fixtureId)) continue;
     ids.add(fixtureId);
