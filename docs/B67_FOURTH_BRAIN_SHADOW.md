@@ -1,8 +1,9 @@
 # Build 67 — Quarto cervello Meta AI (SHADOW)
 
-**State:** feature code and tests only. Build 66 is the last authorized
-TestFlight release. No Render deployment, Neon migration, paid service, new
-push notification, or automatic coupon modification.
+**State:** fourth-brain SHADOW code is built and tested on the feature branch.
+The separate `release/b67-testflight` is the only permitted deployment path;
+feature pushes do not upload to TestFlight. No Render deployment, Neon
+migration, paid service, new push notification, or automatic coupon change.
 
 ## What it actually is
 
@@ -40,6 +41,17 @@ cannot pick a coupon in production. The UI must say SHADOW.
 8. The existing MEI pipeline can then observe Meta AI's genuine future
    outcomes. Do not reinterpret retrospective copies as prospective validation.
 
+## Paired historical validation
+
+`GoalVdLineFourthBrainValidationService` compares Meta AI, SmartBet
+and Diego on exactly the same fixture and market. It requires pre-kickoff
+snapshots, reconciled final scores and outcomes known before the requested
+cutoff. A Brier improvement is descriptive until prospective out-of-sample
+research has enough observations. Research-level sample is at least
+100 paired forecasts across 14 distinct match days, not an activation signal.
+The learning screen shows actual paired sample size and per-engine Brier
+rather than inventing a win rate.
+
 ## Guardrails
 
 - Historical records used for training weights must have coherent
@@ -73,5 +85,8 @@ cannot pick a coupon in production. The UI must say SHADOW.
 
 The feature QA is at
 `.github/workflows/b67-fourth-brain-shadow-qa.yml`. It cannot upload
-an iOS build to TestFlight. A separate GitHub release branch, version bump,
-full release gates and explicit release authorization remain necessary.
+an iOS build to TestFlight. GitHub-only TestFlight release preparation requires the `release/b67-testflight`
+branch, `version: 1.2.5+67`, full regressions and the exact commit message
+`release(build67): authorize TestFlight upload`. The feature branch
+never triggers this upload. The latest authorized iOS workflow run,
+not the feature QA, determines actual TestFlight publication status.
