@@ -13,6 +13,7 @@ import 'smartbet_simulation_shadow_capture_service.dart';
 import 'smartbet_simulation_shadow_store.dart';
 import 'goalvdline_central_learning_outbox.dart';
 import 'smartbet_third_brain_capture_service.dart';
+import 'goalvdline_fourth_brain_service.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -138,6 +139,24 @@ class SmartBetAnalysisRegistrationService {
     } catch (error) {
       // A simulator/history issue must not block the official two engines.
       debugPrint('GoalVdLine simulator history unavailable: $error');
+    }
+
+    // ============================================================
+    // B67: FOURTH BRAIN / dependent ensemble (strictly SHADOW)
+    // ============================================================
+    // Uses both independent sporting distributions and, if available,
+    // a dependency-aware simulator estimate. Does not touch official picks.
+    try {
+      await const GoalVdLineFourthBrainService().capture(
+        store: _store,
+        match: match,
+        smartBet: smartBet,
+        diego: nativeDiego,
+        source: source,
+        recordedAt: recordedAt,
+      );
+    } catch (error) {
+      debugPrint('GoalVdLine meta AI shadow unavailable: $error');
     }
 
     // ============================================================
