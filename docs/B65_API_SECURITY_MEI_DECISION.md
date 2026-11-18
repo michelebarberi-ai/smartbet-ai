@@ -20,7 +20,7 @@
 e NON autorizza chiamate a OpenAI. Un token con permesso `ai:analyze` può
 essere emesso soltanto da un endpoint amministrativo protetto e separato.
 
-- `backend/learning/learning_schema.sql` include una **migrazione additiva** `token_scopes`, con default `learning:predictions` per preservare il principio del minimo privilegio. **Non è stata eseguita in Neon di produzione.**
+- La migrazione additiva `token_scopes` è stata **separata** dall'avvio automatico in `backend/learning/migrations/2026_11_mobile_ai_scopes.sql`. `LearningRepository.initialize()` applica soltanto `learning_schema.sql` e **non modifica implicitamente la colonna dei permessi**. Lo schema Neon produzione è ancora quello legacy, senza `token_scopes`. Le chiamate learning e il provisioning learning-only restano compatibili, mentre emissione e verifica `ai:analyze` richiedono la migrazione approvata separatamente e falliscono in modo chiuso quando manca.
 - `LearningRepository.findValidClientForScope(..., 'ai:analyze')` verifica scope, hash, scadenza e revoca. Gli altri scope sono rifiutati dalla nuova API.
 - `POST /learning/v1/clients/provision-ai` è accessibile SOLO al server amministrativo, richiede `LEARNING_AI_SCOPE_PROVISION_ENABLED=true`, che è **disattivato di default**. I client iOS non possiedono la chiave amministrativa e non possono autoassegnarsi privilegi.
 - I nuovi token hanno la forma opaca già prevista e scadono secondo la durata del servizio learning (30 giorni). Serve un piano di rinnovo che NON ricorra all'emissione anonima.
