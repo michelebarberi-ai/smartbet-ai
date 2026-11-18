@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/goalvdline_palinsesto_digest_preferences.dart';
+import '../services/goalvdline_palinsesto_digest_registration.dart';
 
 /// Configuration for the future server-sent daily *fixture* digest.
 /// Never schedules a coupon or claims that APNs is activated by a local save.
@@ -19,6 +20,8 @@ class _GoalVdLinePalinsestoDigestSettingsCardState
       const GoalVdLinePalinsestoDigestPreferences();
   bool _loading = true;
   bool _saving = false;
+  bool _remoteConfirmed = false;
+  String? _remoteMessage;
 
   @override
   void initState() {
@@ -38,16 +41,40 @@ class _GoalVdLinePalinsestoDigestSettingsCardState
   Future<void> _save(GoalVdLinePalinsestoDigestPreferences value) async {
     if (_loading || _saving) return;
     setState(() => _saving = true);
+    final wasRequested = _preferences.requested;
     final success = await _store.save(value);
     if (!mounted) return;
-    setState(() {
-      if (success) _preferences = value;
-      _saving = false;
-    });
     if (!success) {
+      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Impossibile salvare la preferenza di notifica.'),
       ));
+      return;
+    }
+    setState(() => _preferences = value);
+
+    // No remote action without a user opt-in or explicit cancellation.
+    GoalVdLinePalinsestoRegistrationResult? remote;
+    if (value.requested || wasRequested) {
+      final registration = GoalVdLinePalinsestoDigestRegistration();
+      try {
+        remote = value.requested
+            ? await registration.subscribe(hour: value.hour, minute: value.minute)
+            : await registration.unsubscribe();
+      } finally {
+        registration.dispose();
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _remoteConfirmed = remote?.pushActive == true;
+      _remoteMessage = remote?.message;
+      _saving = false;
+    });
+    if (remote != null && !remote.success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(remote.message)),
+      );
     }
   }
 
@@ -110,12 +137,20 @@ class _GoalVdLinePalinsestoDigestSettingsCardState
               ),
               onTap: _loading || _saving ? null : _chooseTime,
             ),
-            const Text(
-              'Configurazione in preparazione: il salvataggio su iPhone '
-              'non attiva ancora la notifica push. Occorre completare '
-              'la registrazione APNs e il servizio remoto.',
-              key: Key('b72-digest-push-not-yet-active'),
-              style: TextStyle(fontSize: 11, color: Colors.amberAccent),
+            Text(
+              _remoteConfirmed
+                  ? 'Registrazione remota confermata: riepilogo mattutino attivo.'
+                  : (_remoteMessage ??
+                    'Configurazione in preparazione: il salvataggio su iPhone '
+                    'non attiva ancora la notifica push. Occorre completare '
+                    'la registrazione APNs e il servizio remoto.'),
+              key: const Key('b72-digest-push-not-yet-active'),
+              style: TextStyle(
+                fontSize: 11,
+                color: _remoteConfirmed
+                    ? const Color(0xFF00C853)
+                    : Colors.amberAccent,
+              ),
             ),
             if (_saving || _loading) const LinearProgressIndicator(),
           ],
