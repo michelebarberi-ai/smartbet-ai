@@ -7,6 +7,8 @@ import '../services/smartbet_device_learning_preferences.dart';
 import '../services/smartbet_learning_overview_service.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_league_market_shadow_service.dart';
+import '../services/smartbet_market_ease_index_service.dart';
+import '../widgets/smartbet_market_ease_index_panel.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
@@ -28,6 +30,7 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLearningOverview? _summary;
   SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
+  SmartBetMarketEaseIndexReport? _marketEaseIndexReport;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -61,6 +64,12 @@ class _SmartBetLearningOverviewScreenState
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       final shadowReport = const SmartBetLeagueMarketShadowService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
+      // B65: indice MEI indipendente, calcolato solo sullo storico locale
+      // degli ultimi 12 mesi; non interviene mai sui coupon.
+      final marketEaseReport = const SmartBetMarketEaseIndexService().evaluate(
+        records: markets.records,
+        asOf: DateTime.now().toUtc(),
+      );
       // B56: purely read-only historical quoted-pick audit.
       final quoteLabReport = const QuoteLabHistoricalService().evaluate(
         history: markets.records,
@@ -69,6 +78,7 @@ class _SmartBetLearningOverviewScreenState
       if (!mounted) return;
       setState(() {
         _shadowMarketReport = shadowReport;
+        _marketEaseIndexReport = marketEaseReport;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -207,6 +217,10 @@ class _SmartBetLearningOverviewScreenState
                     report: _leagueMarketReport!,
                     shadowReport: _shadowMarketReport,
                   ),
+                  if (_marketEaseIndexReport != null)
+                    SmartBetMarketEaseIndexPanel(
+                      report: _marketEaseIndexReport!,
+                    ),
                 ],
                 if (_quoteLabReport != null)
                   QuoteLabHistoricalPanel(report: _quoteLabReport!),
