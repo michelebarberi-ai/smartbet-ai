@@ -185,6 +185,11 @@ class SmartBetLeagueMarketShadowService {
   }
 
   bool _eligible(SmartBetAnalysisRecord r, DateTime cutoff) {
+    // B65: il terzo cervello e' ora misurabile in Wilson/MEI, ma condivide
+    // xG con SmartBet/Diego e NON e' abilitato al trial/calibrazione.
+    // Finche' non esiste una validazione specifica, escluderlo da questa
+    // simulazione di promozione shadow evita falsi segnali di indipendenza.
+    if (r.engine == SmartBetAnalysisEngine.thirdBrain) return false;
     final firstSeen = r.firstSeenAt.toUtc();
     final kickoff = r.matchDate.toUtc();
     final known = r.outcomeKnownBy?.toUtc();
