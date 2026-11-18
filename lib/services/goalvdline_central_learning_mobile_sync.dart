@@ -50,7 +50,9 @@ class GoalVdLineCentralLearningMobileSync {
   static Uri _endpoint(Uri origin, String path) =>
       origin.replace(path: path, query: null, fragment: null);
 
-  Future<bool> mobileAvailable(String baseUrl) async {
+  /// Read-only server capabilities. Simulator uploads require a distinct
+  /// server-side schema/feature gate; legacy mobile ingestion is unaffected.
+  Future<Map<String, dynamic>?> _mobileCapabilities(String baseUrl) async {
     final origin = serverOrigin(baseUrl);
     try {
       final request = http.Request(
@@ -62,16 +64,22 @@ class GoalVdLineCentralLearningMobileSync {
       final response = await http.Response.fromStream(
         streamed,
       ).timeout(_timeout);
-      if (response.statusCode != 200) return false;
+      if (response.statusCode != 200) return null;
       final decoded = jsonDecode(response.body);
-      return decoded is Map &&
-          decoded['enabled'] == true &&
-          decoded['mobileIngestEnabled'] == true &&
-          decoded['liveCalibration'] == false;
+      if (decoded is! Map<String, dynamic> ||
+          decoded['enabled'] != true ||
+          decoded['mobileIngestEnabled'] != true ||
+          decoded['liveCalibration'] != false) {
+        return null;
+      }
+      return decoded;
     } catch (_) {
-      return false;
+      return null;
     }
   }
+
+  Future<bool> mobileAvailable(String baseUrl) async =>
+      await _mobileCapabilities(baseUrl) != null;
 
   /// Un invio al massimo: 20 previsioni, su non più di 5 partite.
   /// Unicamente un success=true con accepted+duplicates==inviate autorizza
@@ -97,7 +105,8 @@ class GoalVdLineCentralLearningMobileSync {
         'Non ci sono nuove previsioni in coda.',
       );
     }
-    if (!await mobileAvailable(baseUrl)) {
+    final capabilities = await _mobileCapabilities(baseUrl);
+    if (capabilities == null) {
       return const GoalVdLineUploadResult(
         'Server non disponibile o invio mobile disattivato.',
       );
@@ -106,7 +115,13 @@ class GoalVdLineCentralLearningMobileSync {
     final selected = <GoalVdLineLearningDraft>[];
     final fixtures = <int>{};
     var unsupported = 0;
+    var waitingSimulator = 0;
+    final simulatorEnabled = capabilities['simulatorIngestEnabled'] == true;
     for (final draft in drafts) {
+      if (draft.engine == 'simulator' && !simulatorEnabled) {
+        waitingSimulator++;
+        continue;
+      }
       if (!isSupportedMarket(draft.market)) {
         unsupported++;
         continue;
@@ -118,7 +133,10 @@ class GoalVdLineCentralLearningMobileSync {
     }
     if (selected.isEmpty) {
       return GoalVdLineUploadResult(
-        'Nessun mercato compatibile con il server. ${drafts.length} previsioni restano in coda.',
+        waitingSimulator > 0
+            ? 'Simulatore non ancora abilitato sul server. '
+              'Le $waitingSimulator previsioni rimangono in coda locale.'
+            : 'Nessun mercato compatibile con il server. ${drafts.length} previsioni restano in coda.',
         unsupported: unsupported,
       );
     }
@@ -131,6 +149,8 @@ class GoalVdLineCentralLearningMobileSync {
               'engine': draft.engine,
               'market': draft.market,
               'probability': draft.probability,
+              if (draft.engine == 'simulator')
+                'inputSource': draft.inputSource,
             },
           )
           .toList(),
