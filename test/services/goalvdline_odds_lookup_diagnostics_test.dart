@@ -158,4 +158,48 @@ void main() {
       reply: () => http.Response(jsonEncode({'response': 'not a list'}), 200));
     expect(result?.status, OddsLookupStatus.invalidPayload);
   });
+
+  test('B69: broken JSON is invalid payload, not a network outage', () async {
+    final result = await check(fixture: 980010,
+      reply: () => http.Response('<html>Bad Gateway</html>', 200));
+    expect(result?.status, OddsLookupStatus.invalidPayload);
+  });
+
+  test('B69: missing backend football key is a configuration issue', () async {
+    final result = await check(fixture: 980011,
+      reply: () => http.Response(
+        jsonEncode({'success': false,
+          'error': 'FOOTBALL_API_KEY non configurata sul backend.'}),
+        503,
+      ));
+    expect(result?.status, OddsLookupStatus.proxyConfigurationError);
+    expect(result?.httpStatus, 503);
+  });
+
+  test('B69: server HTTP 503 without explicit key diagnostic stays upstream', () async {
+    final result = await check(fixture: 980012,
+      reply: () => http.Response('Service Unavailable', 503));
+    expect(result?.status, OddsLookupStatus.upstreamUnavailable);
+  });
+
+  test('B69: proxy credentials and missing route are distinct from no odds', () async {
+    final auth = await check(fixture: 980013,
+      reply: () => http.Response('Forbidden', 403));
+    expect(auth?.status, OddsLookupStatus.proxyAccessDenied);
+    final route = await check(fixture: 980014,
+      reply: () => http.Response('Not Found', 404));
+    expect(route?.status, OddsLookupStatus.proxyRouteUnavailable);
+  });
+
+  test('B69: quota hidden inside backend nested provider response is visible', () async {
+    final result = await check(fixture: 980015,
+      reply: () => http.Response(jsonEncode({
+        'success': false, 'error': 'API-Football ha restituito un errore.',
+        'apiResponse': {'errors': {
+          'requests': 'You have reached your requests limit.',
+        }},
+      }), 502));
+    expect(result?.status, OddsLookupStatus.quotaOrRateLimit);
+    expect(result?.httpStatus, 502);
+  });
 }
