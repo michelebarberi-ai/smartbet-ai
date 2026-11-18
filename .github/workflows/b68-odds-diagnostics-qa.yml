@@ -1,0 +1,45 @@
+name: GoalVdLine B68 odds diagnostics QA
+
+# Feature branch is read-only UI instrumentation. No iOS upload,
+# Render/Neon deployment, odds synthesis or paid services.
+on:
+  push:
+    branches:
+      - feature/b68-odds-diagnostics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b68-odds-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  odds-diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend tests
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Dependencies
+        run: flutter pub get
+      - name: Full Flutter analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Odds diagnostics plus original quote coverage
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_odds_lookup_diagnostics_test.dart \
+            test/services/goalvdline_multi_bookmaker_odds_test.dart \
+            test/services/sisal_odds_service_coverage_test.dart \
+            test/services/smartbet_standard_odds_test.dart \
+            test/services/goalvdline_fourth_brain_service_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
