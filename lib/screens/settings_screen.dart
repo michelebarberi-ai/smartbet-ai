@@ -8,7 +8,7 @@ import '../widgets/smartbet_learning_settings_card.dart';
 import '../services/goalvdline_ui_edition.dart';
 import 'goalvdline_owner_access_screen.dart';
 import '../widgets/goalvdline_public_participation_card.dart';
-import '../widgets/goalvdline_auto_coupon_settings_card.dart';
+import '../widgets/goalvdline_palinsesto_digest_settings_card.dart';
 import '../widgets/goalvdline_coupon_ready_notification_card.dart';
 
 Future<void> _editSmartBetUserName(BuildContext context) async {
@@ -372,8 +372,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 24),
 
-              _sectionTitle('AutoSchedina AI quotidiana (non attiva)'),
-              const GoalVdLineAutoCouponSettingsCard(),
+              _sectionTitle('Riepilogo mattutino del palinsesto'),
+              const GoalVdLinePalinsestoDigestSettingsCard(),
 
               const SizedBox(height: 24),
 
