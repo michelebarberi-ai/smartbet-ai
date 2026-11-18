@@ -125,13 +125,16 @@ class SmartBetAnalysisRegistrationService {
     // Capture even when no qualified Diego pick exists: the mathematical
     // simulator can use the legitimate pre-match SmartBet xG on its own.
     try {
-      await SmartBetThirdBrainCaptureService(store: _store).capture(
+      final simulatorRecords =
+          await SmartBetThirdBrainCaptureService(store: _store).capture(
         match: match,
         smartBet: smartBet,
         diego: nativeDiego,
         source: source,
         recordedAt: recordedAt,
       );
+      // Opt-in, local and atomic: a failure does not block official picks.
+      await _centralOutbox.captureBatchIfEligible(simulatorRecords);
     } catch (error) {
       // A simulator/history issue must not block the official two engines.
       debugPrint('GoalVdLine simulator history unavailable: $error');
