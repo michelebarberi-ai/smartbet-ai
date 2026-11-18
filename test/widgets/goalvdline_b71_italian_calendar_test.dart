@@ -29,7 +29,7 @@ void main() {
       ],
       home: const Scaffold(body: Text('Calendario')),
     ));
-    expect(MaterialLocalizations.of(tester.element(find.text('Calendario')))
-        .localeName, startsWith('it'));
+    expect(Localizations.localeOf(tester.element(find.text('Calendario')))
+        .languageCode, 'it');
   });
 }
