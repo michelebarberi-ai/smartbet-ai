@@ -1,0 +1,52 @@
+name: GoalVdLine B66 three-engine Neon sync QA
+
+# Validates opt-in code without production DB writes, Render deploy,
+# TestFlight upload, background sync, or paid services.
+on:
+  push:
+    branches:
+      - feature/b66-three-engine-neon-sync
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b66-neon-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-and-flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend syntax
+        run: |
+          node --check backend/learning/learning_core.js
+          node --check backend/learning/learning_service.js
+          node --check backend/learning/learning_repository.js
+          node --check backend/learning/learning_routes.js
+          node --check backend/test/b66_simulator_neon_ingest.test.js
+      - name: Backend full regression
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Install Flutter stable
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: B66 targeted regression
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_central_learning_outbox_test.dart \
+            test/services/goalvdline_central_learning_mobile_sync_test.dart \
+            test/services/goalvdline_b66_simulator_mobile_sync_test.dart \
+            test/services/smartbet_third_brain_capture_service_test.dart \
+            test/services/smartbet_analysis_registration_service_test.dart
+      - name: Flutter full regression
+        run: flutter test --no-pub --reporter compact
