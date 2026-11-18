@@ -1,0 +1,45 @@
+name: GoalVdLine B69 audit clarity QA
+
+# UI labels only. No TestFlight, server deploy, database mutation,
+# live coupon selection or paid service.
+on:
+  push:
+    branches:
+      - feature/b69-audit-clarity
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b69-audit-clarity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-audit-clarity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend regression
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: B69 audits and related widget regression
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/widgets/goalvdline_b69_audit_clarity_test.dart \
+            test/services/dual_engine_summary_preview_test.dart \
+            test/services/goalvdline_market_relation_service_test.dart \
+            test/services/smartbet_sports_audit_status_test.dart \
+            test/services/goalvdline_multi_bookmaker_odds_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
