@@ -1488,6 +1488,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             builder: (_) => AnalysisDetailScreen(
                               match: match,
                               result: advancedResult,
+                              // SmartCore grezzo già ottenuto per la card:
+                              // la lettura shadow non modifica il risultato
+                              // SmartBet avanzato né richiama altri provider.
+                              smartCoreResult: result,
                               diegoAnalysis: diegoAnalysis,
                               engineComparison: dualAnalysis.comparison,
                             ),
