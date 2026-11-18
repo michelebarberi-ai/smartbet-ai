@@ -12,18 +12,15 @@ import 'package:smartbet_ai_new/widgets/goalvdline_three_engine_paired_compariso
 
 class _Diego implements DiegoAiAnalysis {
   @override
-  final double expectedHomeGoals;
+  final double expectedHomeGoals = 1.55;
   @override
-  final double expectedAwayGoals;
+  final double expectedAwayGoals = 0.95;
   @override
-  final int dataConfidence;
+  final int dataConfidence = 75;
   @override
   final List<DiegoAiMarketProbability> markets;
 
   const _Diego({
-    this.expectedHomeGoals = 1.55,
-    this.expectedAwayGoals = 0.95,
-    this.dataConfidence = 75,
     this.markets = const [
       DiegoAiMarketProbability(market: '1', probability: 0.61),
       DiegoAiMarketProbability(market: 'X', probability: 0.25),
