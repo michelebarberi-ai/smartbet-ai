@@ -108,7 +108,9 @@ function finishedScore(raw) {
   return {home, away};
 }
 
-function validateBatch(payload) {
+const SIMULATOR_MARKETS = new Set(['1','X','2','GOAL','NO GOAL','OVER 2.5','UNDER 2.5']);
+
+function validateBatch(payload, {allowSimulator = false} = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   if (typeof payload.clientId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.clientId)) return null;
@@ -118,9 +120,23 @@ function validateBatch(payload) {
   const seen = new Set();
   for (const p of payload.predictions) {
     if (!p || !Number.isSafeInteger(p.fixtureId) || p.fixtureId <= 0 ||
-        !['smartBet', 'diego'].includes(p.engine) || !Number.isFinite(p.probability) ||
-        p.probability < 0 || p.probability > 1 || !isSupportedMarket(p.market)) return null;
-    const item = {fixtureId: p.fixtureId, engine: p.engine, market: normalizeMarket(p.market), probability: p.probability};
+        !Number.isFinite(p.probability) || p.probability < 0 ||
+        p.probability > 1 || !isSupportedMarket(p.market)) return null;
+    const simulator = p.engine === 'simulator';
+    if (simulator) {
+      // Opt-in only, with a bounded set of full-time settled markets.
+      if (!allowSimulator || !SIMULATOR_MARKETS.has(normalizeMarket(p.market)) ||
+          !['smartBet', 'diego'].includes(p.inputSource) ||
+          Object.keys(p).some(k => !['fixtureId','engine','market','probability','inputSource'].includes(k))) {
+        return null;
+      }
+    } else if (!['smartBet', 'diego'].includes(p.engine) ||
+               Object.hasOwn(p, 'inputSource')) {
+      return null;
+    }
+    const item = {fixtureId: p.fixtureId, engine: p.engine,
+      market: normalizeMarket(p.market), probability: p.probability,
+      ...(simulator ? {inputSource: p.inputSource} : {})};
     const key = `${item.fixtureId}|${item.engine}|${item.market}`;
     if (seen.has(key)) return null;
     seen.add(key);
