@@ -44,7 +44,11 @@ function createLearningMobileAuthenticator({env = process.env, now = () => new D
       });
       repository = new LearningRepository(pool);
     }
-    return repository.findValidClient(mobileTokenHash(token), now());
+    // Learning-only credentials do NOT authorize paid AI requests.
+    // Old 30-day mobile tokens carry the default learning scope.
+    return repository.findValidClientForScope(
+      mobileTokenHash(token), now(), 'ai:analyze',
+    );
   };
 }
 
