@@ -380,7 +380,7 @@ class DualEngineSummary extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Confronto sullo stesso mercato '
-                '${displayedGoalMarket!}: GoalVdLine '
+                '${displayedGoalMarket}: GoalVdLine '
                 '${_percent(firstProbability)} · Diego '
                 '${_percent(sameMarketDiegoProbability)} '
                 '(${((firstProbability - sameMarketDiegoProbability).abs() * 100).toStringAsFixed(0)} '
