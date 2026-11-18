@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
 
-enum _HistoryEngineFilter { all, smartBet, diego }
+enum _HistoryEngineFilter { all, smartBet, diego, simulator }
 
 enum _HistoryStatusFilter { all, pending, correct, wrong, unsupported }
 
@@ -109,6 +109,10 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
 
           if (_engineFilter == _HistoryEngineFilter.diego &&
               record.engine != SmartBetAnalysisEngine.diego) {
+            return false;
+          }
+          if (_engineFilter == _HistoryEngineFilter.simulator &&
+              record.engine != SmartBetAnalysisEngine.simulator) {
             return false;
           }
 
@@ -267,6 +271,7 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
                 value: _HistoryEngineFilter.smartBet,
               ),
               _engineChip(label: 'Diego', value: _HistoryEngineFilter.diego),
+              _engineChip(label: 'Simulatore', value: _HistoryEngineFilter.simulator),
             ],
           ),
           const SizedBox(height: 13),
@@ -362,13 +367,17 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
   }
 
   Widget _recordCard(SmartBetAnalysisRecord record) {
-    final engineColor = record.engine == SmartBetAnalysisEngine.smartBet
-        ? const Color(0xFF00C853)
-        : Colors.lightBlueAccent;
+    final engineColor = switch (record.engine) {
+      SmartBetAnalysisEngine.smartBet => const Color(0xFF00C853),
+      SmartBetAnalysisEngine.diego => Colors.lightBlueAccent,
+      SmartBetAnalysisEngine.simulator => Colors.amberAccent,
+    };
 
-    final engineLabel = record.engine == SmartBetAnalysisEngine.smartBet
-        ? 'SMARTBET'
-        : 'DIEGO';
+    final engineLabel = switch (record.engine) {
+      SmartBetAnalysisEngine.smartBet => 'SMARTBET',
+      SmartBetAnalysisEngine.diego => 'DIEGO',
+      SmartBetAnalysisEngine.simulator => 'SIMULATORE',
+    };
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -506,6 +515,14 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
       return _dataBlock(
         label: 'SmartScore',
         value: record.smartScore != null ? '${record.smartScore}' : 'N/D',
+      );
+    }
+
+    if (record.engine == SmartBetAnalysisEngine.simulator) {
+      return _dataBlock(
+        label: 'Origine xG (modello teorico, non calibrato)',
+        value: record.classification == 'SIMULATOR_XG_FROM_DIEGO'
+            ? 'Dati Diego AI' : 'Dati SmartBet AI',
       );
     }
 
