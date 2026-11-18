@@ -60,7 +60,7 @@ class GoalVdLinePairedThreeEngineSegment {
   bool get canChangePredictions => false;
 }
 
-class GoalVdLineThreeEnginePairedReport {
+class GoalVdLinePairedThreeEngineReport {
   final DateTime asOf;
   final DateTime windowStartsAt;
   final int eligibleRecords;
@@ -69,7 +69,7 @@ class GoalVdLineThreeEnginePairedReport {
   final int conflictingFixtureMarkets;
   final List<GoalVdLinePairedThreeEngineSegment> segments;
 
-  const GoalVdLineThreeEnginePairedReport({
+  const GoalVdLinePairedThreeEngineReport({
     required this.asOf,
     required this.windowStartsAt,
     required this.eligibleRecords,
