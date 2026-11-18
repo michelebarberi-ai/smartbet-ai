@@ -1,0 +1,42 @@
+name: B72 daily fixture digest without automatic coupons
+
+on:
+  push:
+    branches:
+      - feature/b72-daily-fixture-digest-no-auto-coupon
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b72-daily-digest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full backend regression and B72 digest contract
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: B72 daily palinsesto preferences and UI
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/goalvdline_palinsesto_digest_preferences_test.dart \
+            test/widgets/goalvdline_palinsesto_digest_settings_card_test.dart \
+            test/services/goalvdline_daily_match_counter_test.dart \
+            test/widgets/goalvdline_daily_matches_card_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
