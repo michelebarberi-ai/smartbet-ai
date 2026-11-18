@@ -4,9 +4,10 @@ class GoalVdLineQuotePolicy {
   const GoalVdLineQuotePolicy._();
   static const String bookmaker = 'Sisal';
   static const double minimumOdd = 1.20;
-  // Per impostazione predefinita usa il feed mondiale multi-bookmaker.
-  // Il filtro italiano resta una scelta esplicita dell'utente.
-  static const bool italianOnlyByDefault = false;
+  // Avvio con Palinsesto Italia attivo. L'utente può disattivarlo:
+  // è un filtro sui marchi presenti in Italia, non una certificazione
+  // che il prezzo sia davvero disponibile sul sito .it.
+  static const bool italianOnlyByDefault = true;
 
   static bool isSisal(String name) {
     final normalized = name.toLowerCase()
