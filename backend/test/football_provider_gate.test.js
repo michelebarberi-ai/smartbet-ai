@@ -156,3 +156,77 @@ test('invalid gate config rejected instead of disabling protections',()=>{
   assert.throws(()=>createFootballProviderGate({baseCooldownMs:0}));
   assert.throws(()=>createFootballProviderGate({maxCooldownMs:1000,baseCooldownMs:2000}));
 });
+
+
+test('healthy spike: bounded FIFO queue serves 18 requests with just two provider slots', async () => {
+  let inFlight = 0;
+  let maximum = 0;
+  let upstream = 0;
+  const gate = createFootballProviderGate({
+    maxConcurrent: 2,
+    maxQueue: 20,
+    maxWaitMs: 2000,
+  });
+  const tasks = Array.from({length: 18}, (_, i) => gate.run(async () => {
+    upstream++;
+    inFlight++;
+    maximum = Math.max(maximum, inFlight);
+    await new Promise(resolve => setTimeout(resolve, 3));
+    inFlight--;
+    return i;
+  }));
+  const results = await Promise.all(tasks);
+  assert.deepEqual(results, Array.from({length:18}, (_, i) => i));
+  assert.equal(maximum, 2);
+  assert.equal(upstream, 18);
+});
+
+test('upstream 429 cancels waiting queue without sending queued provider requests', async () => {
+  let rejectFirst;
+  let upstream = 0;
+  const gate = createFootballProviderGate({
+    maxConcurrent: 1,
+    maxQueue: 12,
+    maxWaitMs: 2000,
+    baseCooldownMs: 1000,
+    maxCooldownMs: 4000,
+  });
+  const first = gate.run(() => {
+    upstream++;
+    return new Promise((resolve, reject) => {rejectFirst = reject;});
+  });
+  const waiting = Array.from({length: 10}, () => gate.run(async () => {
+    upstream++;
+    return {shouldNotRun: true};
+  }));
+  const combined = Promise.allSettled([first, ...waiting]);
+  rejectFirst(provider429());
+  const results = await combined;
+  assert.equal(results[0].status, 'rejected');
+  assert.equal(results[0].reason.code, 'FOOTBALL_PROVIDER_RATE_LIMIT');
+  assert.equal(results.slice(1).filter(x => x.status === 'rejected' &&
+      x.reason.code === 'FOOTBALL_PROVIDER_COOLDOWN').length, 10);
+  assert.equal(upstream, 1);
+});
+
+test('full queue and queue timeout return safe busy status without leaking slots', async () => {
+  const gate = createFootballProviderGate({
+    maxConcurrent: 1,
+    maxQueue: 1,
+    maxWaitMs: 1000,
+  });
+  let release;
+  const first = gate.run(() => new Promise(resolve => {release = resolve;}));
+  const second = gate.run(async () => 2);
+  const third = gate.run(async () => 3);
+  await assert.rejects(third, {code:'FOOTBALL_PROVIDER_BUSY'});
+  release(1);
+  assert.deepEqual(await Promise.all([first, second]), [1, 2]);
+  assert.equal(await gate.run(async () => 4), 4);
+});
+
+test('invalid queue bounds rejected rather than silently disabling them', () => {
+  assert.throws(() => createFootballProviderGate({maxQueue:-1}));
+  assert.throws(() => createFootballProviderGate({maxQueue:501}));
+  assert.throws(() => createFootballProviderGate({maxWaitMs:0}));
+});
