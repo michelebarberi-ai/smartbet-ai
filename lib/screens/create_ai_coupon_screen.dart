@@ -888,7 +888,11 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         return 'Oggi';
 
       case _CouponPeriod.weekend:
-        return '2 giorni';
+        final dates = GoalVdLineCouponScreeningPolicy.nextWeekend(
+          DateTime.now(),
+        );
+        return 'Fine settimana (${_shortDate(dates.first)} - '
+            '${_shortDate(dates.last)})';
 
       case _CouponPeriod.next3Days:
         return 'Prossimi 3 giorni';
@@ -987,6 +991,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       initialDateRange: initialRange,
       helpText: 'Periodo schedina GoalVdLine',
       saveText: 'CONFERMA',
+      cancelText: 'ANNULLA',
+      locale: const Locale('it', 'IT'),
     );
 
     if (selected == null || !mounted) {
@@ -4101,7 +4107,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           runSpacing: 8,
           children: [
             chip(_CouponPeriod.today, 'OGGI'),
-            chip(_CouponPeriod.weekend, '2 GIORNI'),
+            chip(_CouponPeriod.weekend, 'FINE SETTIMANA'),
             chip(_CouponPeriod.next3Days, '3 GIORNI'),
             chip(_CouponPeriod.custom, 'PERSONALIZZATO'),
           ],
