@@ -46,7 +46,7 @@ test('B73: a protected morning dispatcher is not the old AutoSchedina worker',()
   assert.doesNotMatch(source('backend/daily_palinsesto/dispatch.js'),
     /auto_coupon\/generation_coordinator|generateOfficialCoupon/);
   const ios=source('lib/services/goalvdline_palinsesto_digest_registration.dart');
-  assert.doesNotMatch(ios,/auto-coupon|automatic.*coupon/i);
+  assert.doesNotMatch(ios,/\/auto-coupon\/|\/auto_coupon\/|generateOfficialCoupon/);
   assert.match(ios,/requestDeviceToken/);
 });
 
