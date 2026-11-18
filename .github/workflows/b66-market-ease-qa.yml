@@ -1,0 +1,38 @@
+name: GoalVdLine B66 market ease SHADOW QA
+
+# Diagnostics only: no TestFlight publish, no Render/Neon deploy.
+on:
+  push:
+    branches:
+      - feature/b66-market-ease-shadow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b66-mei-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-mei-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter stable
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: MEI service and widget tests
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/services/smartbet_market_ease_index_service_test.dart \
+            test/widgets/smartbet_market_ease_index_panel_test.dart \
+            test/services/smartbet_league_market_reliability_service_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
