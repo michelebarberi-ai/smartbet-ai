@@ -11,15 +11,16 @@ const {
 } = require('./learning_core');
 
 class LearningService {
-  constructor({repository, fetchFixture, subjectSalt, now = () => new Date()}) {
+  constructor({repository, fetchFixture, subjectSalt, now = () => new Date(), allowSimulator = false}) {
     this.repository = repository;
     this.fetchFixture = fetchFixture;
     this.subjectSalt = subjectSalt;
     this.now = now;
+    this.allowSimulator = allowSimulator === true;
   }
 
   async ingest(payload) {
-    const validated = validateBatch(payload);
+    const validated = validateBatch(payload, {allowSimulator: this.allowSimulator});
     if (!validated) return {status: 400, body: {success: false, error: 'Dati non validi.'}};
     const fixtureIds = [...new Set(validated.predictions.map(p => p.fixtureId))];
     if (fixtureIds.length > 5) {
