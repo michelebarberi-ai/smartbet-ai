@@ -68,6 +68,7 @@ void main() {
       preferences: await SharedPreferences.getInstance(),
       clock: () => DateTime.utc(2026, 11, 18, 10),
     );
+    await outbox.setConsent(true);
     final service = SmartBetAnalysisRegistrationService(
       store: store, centralOutbox: outbox,
     );
@@ -98,8 +99,9 @@ void main() {
     final meta = store.records.firstWhere(
       (r) => r.engine == SmartBetAnalysisEngine.metaAi,
     );
-    await outbox.setConsent(true);
+    expect(outbox.pendingCount, 7);
     expect(await outbox.captureIfEligible(meta), isFalse);
-    expect(outbox.pendingCount, 0);
+    expect(outbox.pendingCount, 7);
+    expect(outbox.pendingDrafts.every((p) => p.engine == 'simulator'), isTrue);
   });
 }
