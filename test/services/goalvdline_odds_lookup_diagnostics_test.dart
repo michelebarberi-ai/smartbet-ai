@@ -67,6 +67,9 @@ void main() {
       '{"error":"You have reached your daily limit of requests."}', 502,
     ));
     expect(result?.status, OddsLookupStatus.quotaOrRateLimit);
+    // A distinct synthetic response must not be suppressed by the shared
+    // cooldown produced in the first half of this classification test.
+    OddsService.clearCache();
     final second = await check(fixture: 980002, reply: () =>
         http.Response('Too many requests', 429));
     expect(second?.status, OddsLookupStatus.quotaOrRateLimit);
