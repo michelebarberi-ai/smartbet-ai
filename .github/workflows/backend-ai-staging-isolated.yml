@@ -1,0 +1,52 @@
+name: GoalVdLine Backend AI isolated staging
+
+on:
+  push:
+    branches:
+      - feature/b64-sports-reading
+    paths:
+      - 'backend/server.js'
+      - 'backend/football_provider_gate.js'
+      - 'backend/football_upstream_diagnostics.js'
+      - 'backend/test/football_*'
+      - 'backend/test/fixtures/football_server_mock_preload.js'
+      - 'backend/package.json'
+      - 'backend/package-lock.json'
+      - '.github/workflows/backend-ai-staging-isolated.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-backend-ai-mock-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-backend-ai:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend dependencies (no external providers)
+        run: npm --prefix backend ci --no-audit --no-fund
+      - name: Syntax of backend and isolated mock
+        run: |
+          node --check backend/server.js
+          node --check backend/football_provider_gate.js
+          node --check backend/football_upstream_diagnostics.js
+          node --check backend/test/fixtures/football_server_mock_preload.js
+      - name: Staging HTTP real Express, mocked upstream, zero provider traffic
+        run: |
+          node --test \
+            backend/test/football_server_e2e_mock.test.js \
+            backend/test/football_provider_staging_simulation.test.js \
+            backend/test/football_provider_gate.test.js \
+            backend/test/football_upstream_diagnostics.test.js
+        env:
+          CI: 'true'
+          GOALVDLINE_LOCAL_STAGING_ONLY: 'true'
