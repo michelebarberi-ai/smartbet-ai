@@ -1464,6 +1464,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 smartBet: advancedResult,
                                 source: SmartBetAnalysisSource.analysis,
                                 dualAnalysis: dualAnalysis,
+                                // Solo analisi esplicita: registra in locale
+                                // cinque famiglie del terzo cervello come
+                                // storico SHADOW, senza alterare pronostici.
+                                captureThirdBrainHistory: true,
                               );
                         } catch (e) {
                           debugPrint(
