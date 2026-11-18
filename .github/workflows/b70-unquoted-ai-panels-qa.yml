@@ -1,0 +1,43 @@
+name: GoalVdLine B70 quote-independent AI analysis QA
+
+# Read-only display fix: no TestFlight upload or server changes.
+on:
+  push:
+    branches:
+      - feature/b70-unquoted-ai-panels
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b70-unquoted-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend regression and B70 UI contract
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Analyze Flutter
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Fourth-brain and quote-free motor panel tests
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/widgets/goalvdline_three_brains_expansion_test.dart \
+            test/services/goalvdline_fourth_brain_service_test.dart \
+            test/services/goalvdline_odds_lookup_diagnostics_test.dart \
+            test/services/goalvdline_odds_scan_guard_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
