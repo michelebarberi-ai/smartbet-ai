@@ -8,7 +8,7 @@ import 'smartbet_asian_handicap_accounting_service.dart';
 import 'smartbet_asian_handicap_market_settlement_service.dart';
 import 'smartbet_asian_handicap_settlement_service.dart';
 
-enum SmartBetAnalysisEngine { smartBet, diego }
+enum SmartBetAnalysisEngine { smartBet, diego, simulator }
 
 enum SmartBetAnalysisSource { analysis, aiCoupon, combinations, dailyResults }
 
@@ -539,6 +539,87 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
     }
 
     return updatedRecords;
+  }
+
+  /// B66: saves a fixed set of probabilities as one immutable pre-kickoff
+  /// snapshot. Existing first forecasts are never recalculated/overwritten.
+  /// Batch persistence avoids one disk write per simulator market.
+  Future<List<SmartBetAnalysisRecord>> registerMarketBundle({
+    required SmartBetAnalysisEngine engine,
+    required SmartBetAnalysisSource source,
+    required int fixtureId,
+    required String homeTeam,
+    required String awayTeam,
+    required String league,
+    required String country,
+    required DateTime matchDate,
+    required Map<String, double> markets,
+    String? classification,
+    DateTime? recordedAt,
+  }) async {
+    await initialize();
+    final now = (recordedAt ?? DateTime.now()).toUtc();
+    final kickoff = matchDate.toUtc();
+    if (fixtureId <= 0 || !now.isBefore(kickoff) ||
+        !kickoff.isAfter(DateTime.utc(2000, 1, 1)) ||
+        markets.isEmpty) {
+      return const <SmartBetAnalysisRecord>[];
+    }
+
+    final saved = <SmartBetAnalysisRecord>[];
+    var dirty = false;
+    for (final entry in markets.entries) {
+      final market = normalizeAnalysisMarket(entry.key);
+      final probability = entry.value;
+      if (market.isEmpty || market == 'N/D' ||
+          !probability.isFinite || probability < 0 || probability > 1) {
+        continue;
+      }
+      final key = '${engine.name}|$fixtureId|$market';
+      final existing = _records.indexWhere((record) => record.key == key);
+      if (existing >= 0) {
+        var prior = _records[existing];
+        if (!prior.sources.contains(source)) {
+          prior = prior.withSource(source: source, seenAt: now);
+          _records[existing] = prior;
+          dirty = true;
+        }
+        saved.add(prior);
+        continue;
+      }
+      final record = SmartBetAnalysisRecord(
+        engine: engine,
+        fixtureId: fixtureId,
+        homeTeam: homeTeam.trim(),
+        awayTeam: awayTeam.trim(),
+        league: league.trim(),
+        country: country.trim(),
+        matchDate: kickoff,
+        market: market,
+        probability: probability,
+        smartScore: null,
+        confidence: null,
+        classification: classification,
+        qualified: null,
+        sources: List.unmodifiable([source]),
+        prospectiveEligible: true,
+        status: SmartBetAnalysisStatus.pending,
+        actualHomeGoals: null,
+        actualAwayGoals: null,
+        firstSeenAt: now,
+        lastSeenAt: now,
+        quotedOdd: null,
+      );
+      _records.add(record);
+      saved.add(record);
+      dirty = true;
+    }
+
+    if (dirty) {
+      await _save();
+      notifyListeners();
+    }
+    return List.unmodifiable(saved);
   }
 
   SmartBetAnalysisEngineStats statsFor(
