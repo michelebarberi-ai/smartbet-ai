@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/analysis_result.dart';
 import '../services/dual_engine_analysis_service.dart';
 import '../services/goalvdline_third_brain_service.dart';
+import '../services/smartbet_analysis_history_store.dart';
 
 /// Scheda diagnostica, chiusa inizialmente, riutilizzata in Schedina
 /// e Combinazioni. Il terzo motore si calcola solo all'apertura.
@@ -81,6 +82,22 @@ class _GoalVdLineThreeBrainsExpansionState
     );
     final diegoMarket = dual?.comparison.diegoMarket ?? 'N/D';
     final diegoProbability = dual?.comparison.diegoProbability;
+    final metaRecords = SmartBetAnalysisHistoryStore.instance
+        .recordsForFixture(widget.fixtureId)
+        .where((record) =>
+            record.engine == SmartBetAnalysisEngine.metaAi &&
+            record.prospectiveEligible &&
+            record.probability != null)
+        .toList()
+      ..sort((a, b) => b.probability!.compareTo(a.probability!));
+    final selectedMetaMarket = normalizeAnalysisMarket(widget.selectedMarket);
+    SmartBetAnalysisRecord? selectedMeta;
+    for (final entry in metaRecords) {
+      if (entry.market == selectedMetaMarket) {
+        selectedMeta = entry;
+        break;
+      }
+    }
 
     final choices = simulation?.markets
         .where((item) => _ordinaryMarkets.contains(item.market))
@@ -115,6 +132,33 @@ class _GoalVdLineThreeBrainsExpansionState
                 : 'Poisson bivariata',
             simulation == null ? 'N/D' : 'Attivo',
           ),
+          const SizedBox(height: 5),
+          _readout(
+            '4° Meta AI',
+            metaRecords.isEmpty
+                ? 'Non valutabile: servono SmartBet e Diego sullo stesso mercato'
+                : selectedMeta == null
+                    ? 'Sintesi SHADOW registrata su ${metaRecords.length} mercati'
+                    : 'Sintesi ${_market(selectedMeta.market)} (SHADOW)',
+            selectedMeta == null
+                ? (metaRecords.isEmpty ? 'N/D' : '${metaRecords.length} mercati')
+                : _pct(selectedMeta.probability!),
+          ),
+          if (metaRecords.isNotEmpty) ...[
+            Text(
+              'Quarto cervello: somma ponderata delle probabilità '
+              'sportive dei motori, con pesi MEI soltanto se '
+              'esiste uno storico sufficiente. '
+              'Il simulatore condivide gli xG di un motore: '
+              'non è una terza conferma indipendente.',
+              style: const TextStyle(color: Colors.white70, fontSize: 10),
+            ),
+            const Text(
+              'Le stime sono in osservazione SHADOW: non sono '
+              'consigli di giocata e non modificano le schedine.',
+              style: TextStyle(color: Colors.amberAccent, fontSize: 10),
+            ),
+          ],
           if (simulation != null) ...[
             const SizedBox(height: 9),
             Text(
