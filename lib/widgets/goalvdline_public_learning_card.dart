@@ -50,6 +50,10 @@ class GoalVdLinePublicLearningSummary {
     var scorerScored = 0;
 
     for (final r in records) {
+      // La Home mantiene i conteggi consolidati SmartBet/Diego.
+      // Il terzo cervello viene mostrato solo nella diagnostica dedicata,
+      // per non gonfiare le percentuali esistenti con piu' mercati per gara.
+      if (r.engine == SmartBetAnalysisEngine.thirdBrain) continue;
       if (!r.prospectiveEligible ||
           r.fixtureId <= 0 ||
           !r.firstSeenAt.toUtc().isBefore(r.matchDate.toUtc()) ||
