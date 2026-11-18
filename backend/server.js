@@ -7,8 +7,9 @@ const OpenAI = require("openai");
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
 
+// Rate limit prima del parsing JSON: anche il payload di richieste
+// respinte non deve consumare risorse per essere decodificato.
 // Budget di sicurezza applicati prima dei router costosi. Il controllo
 // iniziale resta compatibile con le Build iOS gia distribuite.
 // L'autenticazione mobile si puo' rendere obbligatoria con flag SOLO
@@ -28,6 +29,7 @@ app.use('/football', createPublicApiGuard({
   tokenMode: process.env.PUBLIC_FOOTBALL_MOBILE_TOKEN_MODE || 'off',
   authenticate: verifyMobileToken,
 }));
+app.use(express.json({ limit: "2mb" }));
 
 // ============================================================
 // OPENAI
