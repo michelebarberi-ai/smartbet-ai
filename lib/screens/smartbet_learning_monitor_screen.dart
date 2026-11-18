@@ -175,6 +175,7 @@ class _SmartBetLearningMonitorScreenState
             SmartBetAnalysisEngine.smartBet => 'SmartBet',
             SmartBetAnalysisEngine.diego => 'Diego AI',
             SmartBetAnalysisEngine.simulator => 'Simulatore',
+            SmartBetAnalysisEngine.metaAi => 'Meta AI (SHADOW)',
           };
           final sufficient = m.samples >= 30;
 
