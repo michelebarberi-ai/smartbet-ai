@@ -37,6 +37,7 @@ jobs:
           flutter test --no-pub --reporter compact \
             test/services/goalvdline_fourth_brain_service_test.dart \
             test/services/goalvdline_fourth_brain_validation_service_test.dart \
+            test/services/goalvdline_fourth_brain_registration_test.dart \
             test/services/smartbet_analysis_registration_service_test.dart \
             test/services/smartbet_third_brain_capture_service_test.dart \
             test/services/smartbet_three_engine_comparison_service_test.dart \
