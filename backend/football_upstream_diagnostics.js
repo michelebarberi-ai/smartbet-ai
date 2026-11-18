@@ -11,6 +11,8 @@ const ERROR_MESSAGES = Object.freeze({
   FOOTBALL_PROVIDER_INVALID_JSON: 'Risposta sportiva non valida.',
   FOOTBALL_PROVIDER_REPORTED_ERROR: 'Il fornitore sportivo ha restituito un errore.',
   FOOTBALL_PROVIDER_TIMEOUT: 'Il fornitore sportivo non ha risposto in tempo.',
+  FOOTBALL_PROVIDER_COOLDOWN: 'Dati sportivi temporaneamente sospesi per limite del fornitore.',
+  FOOTBALL_PROVIDER_BUSY: 'Troppe interrogazioni sportive in corso.',
   FOOTBALL_PROVIDER_NETWORK_ERROR: 'Connessione al fornitore sportivo non riuscita.',
   FOOTBALL_PROXY_INTERNAL_ERROR: 'Dati sportivi temporaneamente non disponibili.',
 });
@@ -107,8 +109,9 @@ function safeFootballCode(error) {
 function footballFailurePayload(error) {
   const code = safeFootballCode(error);
   return {
-    httpStatus: code === 'FOOTBALL_PROVIDER_KEY_MISSING' ? 503 :
-      code === 'FOOTBALL_PROXY_INTERNAL_ERROR' ? 500 : 502,
+    httpStatus: ['FOOTBALL_PROVIDER_KEY_MISSING',
+        'FOOTBALL_PROVIDER_COOLDOWN', 'FOOTBALL_PROVIDER_BUSY'].includes(code)
+      ? 503 : code === 'FOOTBALL_PROXY_INTERNAL_ERROR' ? 500 : 502,
     body: {
       success: false,
       code,
@@ -121,6 +124,8 @@ function footballFailurePayload(error) {
  * Structured, non-identifying log. Never log URL, request queries, provider
  * error text/body, credentials, fixture IDs, IP address or arbitrary stack.
  */
+const previousSuppressedLog = new Map();
+
 function logFootballFailure(error, {
   endpoint,
   logger = console,
@@ -130,6 +135,14 @@ function logFootballFailure(error, {
   const safeEndpoint = typeof endpoint === 'string' &&
       /^\/[a-z/-]{1,64}$/.test(endpoint)
     ? endpoint : '/unknown';
+  // Avoid log storms when hundreds of clients retry during a cooldown.
+  if (code === 'FOOTBALL_PROVIDER_COOLDOWN' ||
+      code === 'FOOTBALL_PROVIDER_BUSY') {
+    const key = safeEndpoint + '|' + code;
+    const timestamp = Date.now();
+    if (timestamp - (previousSuppressedLog.get(key) || 0) < 60000) return;
+    previousSuppressedLog.set(key, timestamp);
+  }
   const upstream = Number.isInteger(error?.upstreamStatus) &&
       error.upstreamStatus >= 100 && error.upstreamStatus <= 599
     ? error.upstreamStatus : null;
@@ -145,6 +158,10 @@ function logFootballFailure(error, {
 function respondFootballFailure(res, error, endpoint) {
   logFootballFailure(error, {endpoint});
   const outcome = footballFailurePayload(error);
+  if (Number.isFinite(error?.retryAfterSeconds) &&
+      error.retryAfterSeconds >= 1 && error.retryAfterSeconds <= 3600) {
+    res.set('Retry-After', String(Math.ceil(error.retryAfterSeconds)));
+  }
   return res.status(outcome.httpStatus).json(outcome.body);
 }
 
