@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_analysis_result_resolver.dart';
 
-enum _HistoryEngineFilter { all, smartBet, diego, simulator }
+enum _HistoryEngineFilter { all, smartBet, diego, simulator, metaAi }
 
 enum _HistoryStatusFilter { all, pending, correct, wrong, unsupported }
 
@@ -113,6 +113,10 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
           }
           if (_engineFilter == _HistoryEngineFilter.simulator &&
               record.engine != SmartBetAnalysisEngine.simulator) {
+            return false;
+          }
+          if (_engineFilter == _HistoryEngineFilter.metaAi &&
+              record.engine != SmartBetAnalysisEngine.metaAi) {
             return false;
           }
 
@@ -272,6 +276,7 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
               ),
               _engineChip(label: 'Diego', value: _HistoryEngineFilter.diego),
               _engineChip(label: 'Simulatore', value: _HistoryEngineFilter.simulator),
+              _engineChip(label: 'Meta AI', value: _HistoryEngineFilter.metaAi),
             ],
           ),
           const SizedBox(height: 13),
@@ -371,12 +376,14 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
       SmartBetAnalysisEngine.smartBet => const Color(0xFF00C853),
       SmartBetAnalysisEngine.diego => Colors.lightBlueAccent,
       SmartBetAnalysisEngine.simulator => Colors.amberAccent,
+      SmartBetAnalysisEngine.metaAi => Colors.purpleAccent,
     };
 
     final engineLabel = switch (record.engine) {
       SmartBetAnalysisEngine.smartBet => 'SMARTBET',
       SmartBetAnalysisEngine.diego => 'DIEGO',
       SmartBetAnalysisEngine.simulator => 'SIMULATORE',
+      SmartBetAnalysisEngine.metaAi => 'QUARTO CERVELLO · SHADOW',
     };
 
     return Container(
@@ -515,6 +522,15 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
       return _dataBlock(
         label: 'SmartScore',
         value: record.smartScore != null ? '${record.smartScore}' : 'N/D',
+      );
+    }
+
+    if (record.engine == SmartBetAnalysisEngine.metaAi) {
+      return _dataBlock(
+        label: 'Sintesi AI in osservazione',
+        value: 'Previsione originale della fusione SmartBet + Diego + '
+            'simulatore dipendente. Nessun effetto sulle schedine. '
+            '${record.classification ?? ''}',
       );
     }
 
