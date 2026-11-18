@@ -1581,7 +1581,15 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       for (final item in audited) {
         final markets = _sportsMarketCandidates(item.analysis);
         if (markets.isEmpty) continue;
-        final top = markets.first;
+        // Read-only previews must not all look 99% reliable just because a
+        // broad «OPPURE» union market is easy to satisfy. Show the best
+        // ordinary sporting market; OR alternatives stay in the expandable
+        // motor analysis and remain eligible only with real bookmaker odds.
+        final top = markets.firstWhere(
+          (candidate) => !SmartBetMarketProbabilityService.orMarkets
+              .contains(candidate.market),
+          orElse: () => markets.first,
+        );
         final percent = _livePercent(
           top.market, top.probability, item.match.fixtureId,
         );
