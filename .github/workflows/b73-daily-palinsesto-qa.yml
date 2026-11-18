@@ -1,0 +1,34 @@
+name: B73 daily palinsesto push delivery QA
+
+on:
+  push:
+    branches: [feature/b73-daily-palinsesto-push-delivery]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b73-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full backend regression and B73 push validation
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Full Flutter tests
+        run: flutter test --no-pub --reporter compact
