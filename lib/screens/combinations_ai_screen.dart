@@ -4600,7 +4600,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           if (item.dualAnalysis != null) ...[
             const SizedBox(height: 12),
-            DualEngineSummary(analysis: item.dualAnalysis!),
+            DualEngineSummary(
+              analysis: item.dualAnalysis!,
+              localSelectionAuditStatus: item.auditorStatus,
+            ),
           ],
 
           const SizedBox(height: 12),
@@ -5294,6 +5297,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   Text(
                     _outputMode == _CombinationOutputMode.system
                         ? 'SISTEMA'
+                        : _results.isNotEmpty &&
+                            _results.every((item) =>
+                                item.auditorStatus == 'CONFERMATA' ||
+                                item.auditorStatus == 'CON RISERVA')
+                        ? 'QUOTE + AUDITOR LOCALE'
                         : 'PRE-ANALISI',
                     style: const TextStyle(
                       color: Colors.white38,
