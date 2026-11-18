@@ -126,7 +126,7 @@ void main() {
     expect(find.byKey(const Key('b60-diego-data-readiness')), findsOneWidget);
     expect(find.textContaining('DIEGO AI · MOTIVO N/D'), findsOneWidget);
     expect(find.textContaining('Dati storici'), findsOneWidget);
-    expect(find.textContaining('AUDITOR SPORTIVO NON ESEGUITO'), findsOneWidget);
+    expect(find.textContaining('AUDITOR SPORTIVO AVANZATO NON ESEGUITO'), findsOneWidget);
   });
 
   test('B60: failed team source is short cached but retries after cache reset',
