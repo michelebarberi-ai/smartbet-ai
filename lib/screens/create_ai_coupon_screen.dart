@@ -9,6 +9,7 @@ import '../models/analysis_result.dart';
 import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
+import '../services/goalvdline_odds_scan_guard.dart';
 import '../services/goalvdline_quote_policy.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
@@ -251,6 +252,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   int _couponAuditRejected = 0;
   final Map<int, OddsLookupDiagnostic> _couponQuoteDiagnostics = {};
   final Set<int> _couponFixturesWithEligibleQuotes = {};
+  int _couponQuoteSkippedDueToOutage = 0;
 
   void _recordCouponOddsLookup(int fixtureId, FixtureMarketOdds? odds) {
     final diagnosis = _oddsService.diagnosticFor(
@@ -278,18 +280,50 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         count(OddsLookupStatus.unsupportedMarkets);
     final insufficientPrice = count(OddsLookupStatus.available) -
         _couponFixturesWithEligibleQuotes.length;
-    final possibleQuota = count(OddsLookupStatus.quotaOrRateLimit);
-    return 'QUOTE REALI — partite interrogate: ${diagnoses.length} • '
+    final quota = count(OddsLookupStatus.quotaOrRateLimit);
+    final proxyConfig = count(OddsLookupStatus.proxyConfigurationError);
+    final proxyAccess = count(OddsLookupStatus.proxyAccessDenied);
+    final routeMissing = count(OddsLookupStatus.proxyRouteUnavailable);
+    final network = count(OddsLookupStatus.networkError);
+    final malformed = count(OddsLookupStatus.invalidPayload);
+    final upstream = count(OddsLookupStatus.upstreamUnavailable);
+    final provider = count(OddsLookupStatus.providerError);
+    final statusCounts = <int, int>{};
+    for (final item in diagnoses) {
+      if (item.httpStatus == null) continue;
+      statusCounts.update(item.httpStatus!, (v) => v + 1, ifAbsent: () => 1);
+    }
+    final httpSummary = statusCounts.isEmpty ? 'N/D'
+        : (statusCounts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+            .map((e) => '${e.key}×${e.value}').join(', ');
+    return 'QUOTE REALI — richieste: ${diagnoses.length} • '
         'con mercati quotati >1,20: ${_couponFixturesWithEligibleQuotes.length} • '
         'senza offerte dal feed: $withoutCoverage • '
-        'bookmaker o mercati non utilizzabili: $filtered • '
+        'bookmaker/mercati non utilizzabili: $filtered • '
         'quote presenti ma non idonee: ${math.max(0, insufficientPrice)} • '
-        'errori del servizio: $errors'
-        '${possibleQuota > 0 ? ' (possibile limite API: $possibleQuota)' : ''}.';
+        'errori: ${errors + proxyConfig + proxyAccess + routeMissing} '
+        '(HTTP: $httpSummary; quota: $quota, proxy non configurato: $proxyConfig, '
+        'accesso negato: $proxyAccess, rotta assente: $routeMissing, '
+        'server/upstream: $upstream, provider: $provider, '
+        'rete: $network, risposta non valida: $malformed) • '
+        'non interrogate per guasto ripetuto: $_couponQuoteSkippedDueToOutage.';
   }
 
   String get _couponNoOddsExplanation {
     final diagnoses = _couponQuoteDiagnostics.values;
+    if (diagnoses.any((d) =>
+        d.status == OddsLookupStatus.proxyConfigurationError)) {
+      return 'Il proxy quote risponde che manca la configurazione '
+          'della chiave API sul server. Non è un problema delle partite '
+          'né dei filtri: serve verificare il servizio backend.';
+    }
+    if (diagnoses.any((d) =>
+        d.status == OddsLookupStatus.proxyAccessDenied ||
+        d.status == OddsLookupStatus.proxyRouteUnavailable)) {
+      return 'Il proxy delle quote ha negato l’accesso o non espone '
+          'la rotta richiesta. Controllare configurazione e deployment '
+          'del backend, non modificare i pronostici.';
+    }
     if (diagnoses.any((d) =>
         d.status == OddsLookupStatus.quotaOrRateLimit)) {
       return 'Il servizio quote segnala un possibile limite di richieste. '
@@ -301,8 +335,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         d.status == OddsLookupStatus.providerError ||
         d.status == OddsLookupStatus.networkError ||
         d.status == OddsLookupStatus.invalidPayload)) {
-      return 'Alcune richieste di quote sono fallite. '
-          'Non possiamo stabilire se queste partite siano giocabili.';
+      return 'Il recupero quote ha restituito errori del server, '
+          'del provider o di rete. '
+          '${_couponQuoteSkippedDueToOutage > 0
+              ? 'La scansione è stata fermata dopo errori consecutivi '
+                  'per evitare richieste inutili. '
+              : ''}'
+          'Non sappiamo se le partite non interrogate siano giocabili.';
     }
     if (_couponFixturesWithEligibleQuotes.isEmpty) {
       return 'Non sono state trovate quote reali superiori a 1,20 '
@@ -1286,6 +1325,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       _couponAuditRejected = 0;
       _couponQuoteDiagnostics.clear();
       _couponFixturesWithEligibleQuotes.clear();
+      _couponQuoteSkippedDueToOutage = 0;
     });
 
     try {
@@ -1558,7 +1598,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
       final quoteCandidates = <_PreCandidate>[...audited, ...reserveQuoteProbe];
 
-      const quoteBatchSize = 6;
+      // Combinazioni interroga le quote in sequenza. Riduciamo il burst
+      // della schedina per non amplificare eventuali limiti del provider.
+      const quoteBatchSize = 2;
+      var consecutiveSystemicFailures = 0;
 
       if (!mounted) return;
 
@@ -1599,6 +1642,30 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         setState(() {
           _oddsProcessed = end;
         });
+
+        // A missing quote is not an outage. Stop only when all lookups
+        // across consecutive whole batches have systemic errors.
+        final batchDiagnostics = [
+          for (final candidate in batch)
+            if (_couponQuoteDiagnostics[candidate.match.fixtureId] != null)
+              _couponQuoteDiagnostics[candidate.match.fixtureId]!,
+        ];
+        consecutiveSystemicFailures =
+            GoalVdLineOddsScanGuard.fullOutageBatch(batchDiagnostics)
+                ? consecutiveSystemicFailures + 1
+                : 0;
+        if (GoalVdLineOddsScanGuard.stopAfterBatch(
+          diagnostics: batchDiagnostics,
+          consecutiveFailedBatches: consecutiveSystemicFailures,
+        )) {
+          _couponQuoteSkippedDueToOutage = quoteCandidates.length - end;
+          debugPrint(
+            'GOALVDLINE ODDS SCAN: stopped after '
+            '$end attempted fixtures; '
+            '$_couponQuoteSkippedDueToOutage skipped due to systematic errors',
+          );
+          break;
+        }
       }
 
       final reserveQuoted = reserveQuoteProbe
