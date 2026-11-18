@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:smartbet_ai_new/screens/home_screen.dart';
 import 'package:smartbet_ai_new/screens/goalvdline_auto_coupon_today_screen.dart';
@@ -105,6 +106,10 @@ class _SmartBetAppState extends State<SmartBetApp> {
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
       title: 'GoalVdLine AI',
+      // Date picker, months, weekdays and Material controls in Italian.
+      locale: const Locale('it', 'IT'),
+      supportedLocales: const [Locale('it', 'IT')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: AppTheme.darkTheme,
       home: const HomeScreen(),
     );
