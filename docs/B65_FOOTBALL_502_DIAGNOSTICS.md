@@ -7,7 +7,10 @@
 ## Evidenze disponibili
 
 - Le metriche del servizio Render `smartbet-ai` (istanza `srv-da0u5795efls73agloi0`) tra il 17 novembre 08:00 UTC e il 18 novembre 09:00 UTC hanno riportato 596 risposte HTTP 502, 13 risposte 503, 2200 risposte 200 e 7 risposte 404.
-- I tentativi di consultare i log granulari dell'intervallo tramite il connettore Render non hanno restituito righe. Non possiamo attribuire con certezza i 502 a un endpoint specifico né distinguerli da errori generati dal proxy Render.
+- I log HTTP di tipo `request` non risultano accessibili nel periodo. Un'ulteriore ricerca mirata nei log applicativi `app` del **17 novembre 08:00–16:00 UTC** ha però restituito 100 messaggi di errore: **87** contengono `API-Football HTTP 429` e **13** contengono `API-Football ha restituito un errore`. È un campione di **messaggi**, non il conteggio definitivo delle chiamate fallite; il risultato ha pagine ulteriori.
+- Un altro campione di 100 righe `API-FOOTBALL REQUEST` include richieste a `/fixtures`, `/odds`, `/fixtures/headtohead`, `/injuries`, `/fixtures/lineups` e `/leagues`. Non è stato possibile associare ciascuna di queste richieste a una risposta 429.
+- Pertanto, gli errori di rate limiting upstream sono **una causa documentata di almeno parte dei 502**, ma non si può attribuire loro l'intera serie di 596 eventi senza maggior dettaglio.
+- Questa correlazione è stata ottenuta in sola lettura, senza effettuare richieste al provider o alla produzione.
 - Il backend **effettivamente distribuito** (`feature/api`, commit `6b68cfb60947fa99b22572e77b305e1dffc4442f`) contiene tre rami di errore API-Football che convertono errori del fornitore in HTTP 502: HTTP non riuscito, risposta JSON malformata e payload JSON con oggetto `errors` popolato. Questo è un **possibile** meccanismo per i 502, non una diagnosi conclusiva dei 596 eventi.
 - Il backend distribuito non contiene ancora la nuova protezione credenziali o i rate limit B65. Non attivare un deploy diretto di `feature/b64-sports-reading` sul servizio di produzione senza audit dei delta tra i rami.
 
@@ -16,6 +19,9 @@
 Moduli: `backend/football_upstream_diagnostics.js` e `backend/server.js`.
 
 - Ogni richiesta upstream continua a essere **una sola richiesta**, senza retry automatici.
+- Nuovo `backend/football_provider_gate.js`: blocco per-processo **condiviso fra tutti i path API-Football**. Dopo HTTP 429: cooldown iniziale di 2 minuti, raddoppio in caso di 429 ripetuti fino a 30 minuti, poi **una sola richiesta-sonda** per verificare il recupero. Le altre richieste nel cooldown non arrivano al fornitore e ricevono HTTP 503 con `code=FOOTBALL_PROVIDER_COOLDOWN` e `Retry-After`. Le chiamate upstream contemporanee sono limitate a 4 per processo; quando il limite è occupato, HTTP 503 `FOOTBALL_PROVIDER_BUSY` senza inviare ulteriori richieste upstream. Questo valore richiede test di carico sullo staging prima del rilascio, perché può temporaneamente ridurre la disponibilità.
+- La cache valida continua a funzionare prima del controllo. I dati scaduti non vengono riproposti come freschi. Nessuna nuova connessione o costo fisso richiesto.
+- I codici locali di cooldown e busy sono registrati con massimo un evento per endpoint/minuto per evitare tempeste di log.
 - Timeout per richiesta upstream di 25 secondi: protegge dai timeout indefiniti. Il timeout è categorizzato separatamente.
 - Le risposte valide del fornitore non cambiano: fixture, quote, statistiche e league vengono restituite nella forma originale.
 - Le risposte fallite continuano a usare 502, con eccezione della chiave mancante sul server (503). Errori inattesi del proxy: 500.
@@ -32,15 +38,15 @@ Moduli: `backend/football_upstream_diagnostics.js` e `backend/server.js`.
 - I precedenti campi diagnostici con risposta raw `apiResponse` sui fallimenti vengono rimossi: nessun payload arbitrario del provider nel JSON al client. La risposta di successo resta invariata; in errore il client riceve un messaggio stabile, `code` e `success:false`.
 - Le righe cache hit/miss/single-flight registrano solo il path, non parametri query.
 - Non vengono effettuate nuove chiamate ai fornitori per questa diagnosi.
-- Test Node: classificazione di tutte le cause, nessun retry, assenza di informazioni sensibili, coerenza dei quattro handler proxy, timeout, forma della risposta valida.
+- Test Node: classificazione di tutte le cause, nessun retry, assenza di informazioni sensibili, coerenza dei quattro handler proxy, timeout, forma della risposta valida. Ulteriori test: cooldown fra path differenti, backoff, recupero con sonda singola, concorrenza massima, `Retry-After` e precedenza della cache.
 
 ## Come validare la causa in sicurezza
 
 1. La CI del ramo deve essere verde prima di ulteriori cambiamenti.
 2. Verificare l'insieme delle differenze con il ramo distribuito, in particolare compatibilità API, chiavi, dipendenze e budget per processo.
 3. Abilitare la diagnostica prima su ambiente non di produzione; utilizzare richieste innocue e una quota limitata, senza esporre credenziali.
-4. Solo dopo un rollout esplicitamente approvato e reversibile, osservare il nuovo log `FOOTBALL_UPSTREAM_DIAGNOSTIC` nei periodi di 502. Incrociare i timestamp con status edge Render e le richieste `/football/*` per capire quali errori sono effettivamente upstream.
+4. Solo dopo un rollout esplicitamente approvato e reversibile, verificare che il tetto iniziale di 4 richieste simultanee upstream non causi indisponibilità nelle analisi complete. Valutare un meccanismo di accodamento limitato se il normale traffico simultaneo richiede più capacità. Osservare il nuovo log `FOOTBALL_UPSTREAM_DIAGNOSTIC` nei periodi di 502. Incrociare i timestamp con status edge Render e le richieste `/football/*` per capire quali errori sono effettivamente upstream.
 5. Se il fornitore risponde con 429 o `errors.requests`, verificare limiti contrattuali e volume richieste; se 401/403, controllare le credenziali senza stamparle; se 5xx, distinguere disservizio esterno da errori app; se 502 edge senza log app, esaminare disponibilità e configurazione Render.
 6. Non attivare servizi o piani a pagamento e non modificare la produzione senza consenso esplicito.
 
-**Nota:** questa patch migliora l'osservabilità; **non dimostra né risolve ancora** la causa storica dei 596 errori.
+**Nota:** i log applicativi dimostrano che API-Football ha risposto con 429 durante l'incidente. La patch migliora l'osservabilità e introduce un fail-fast contro le tempeste di richieste. Non dimostra né risolve ancora tutte le cause storiche dei 596 errori; deve essere testata in un ambiente non produttivo e distribuita soltanto con un piano di rollback.
