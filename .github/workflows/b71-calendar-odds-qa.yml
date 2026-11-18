@@ -1,0 +1,44 @@
+name: B71 Italian calendar and safe provider cooldown QA
+
+on:
+  push:
+    branches:
+      - feature/b71-italian-calendar-default-odds-cooldown
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b71-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend full regression and B71 UI contract
+        run: |
+          npm --prefix backend ci --no-audit --no-fund
+          npm --prefix backend test
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies with Italian SDK localizations
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: B71 calendar, odds cooldown, schedule and existing guarded scan
+        run: |
+          flutter test --no-pub --reporter compact \
+            test/widgets/goalvdline_b71_italian_calendar_test.dart \
+            test/services/goalvdline_b71_provider_cooldown_test.dart \
+            test/services/goalvdline_odds_lookup_diagnostics_test.dart \
+            test/services/goalvdline_odds_scan_guard_test.dart \
+            test/services/goalvdline_coupon_screening_policy_test.dart \
+            test/services/italy_schedule_filter_test.dart
+      - name: Full Flutter regression
+        run: flutter test --no-pub --reporter compact
