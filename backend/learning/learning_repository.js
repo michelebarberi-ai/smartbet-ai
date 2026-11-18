@@ -19,7 +19,21 @@ class LearningRepository {
     await this.ready;
   }
 
-  async insertPrediction({subjectHash, fixtureId, engine, market, probability, kickoff}) {
+  async insertPrediction({subjectHash, fixtureId, engine, market, probability, kickoff, inputSource}) {
+    if (engine === 'simulator') {
+      // Only executed after the explicitly approved B66 schema migration.
+      // The main SQL path remains untouched for existing SmartBet/Diego.
+      const result = await this.pool.query(
+        `INSERT INTO sb_learning_predictions_v1
+         (subject_hash, fixture_id, engine, market, original_probability,
+          kickoff_at, simulator_input_source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (subject_hash, fixture_id, engine, market) DO NOTHING
+         RETURNING id`,
+        [subjectHash, fixtureId, engine, market, probability, kickoff, inputSource]
+      );
+      return result.rowCount === 1;
+    }
     const result = await this.pool.query(
       `INSERT INTO sb_learning_predictions_v1
        (subject_hash, fixture_id, engine, market, original_probability, kickoff_at)
