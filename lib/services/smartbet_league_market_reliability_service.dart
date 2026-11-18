@@ -19,6 +19,10 @@ class SmartBetLeagueMarketReliability {
   final String country;
   final String league;
   final String market;
+  /// Third brain is a separate algorithm, but may reuse SmartBet/Diego xG.
+  /// Keep those input populations (and model versions) in separate buckets.
+  final String? inputSource;
+  final String? modelVersion;
   final int sampleSize;
   final int correct;
   final int wrong;
@@ -40,6 +44,8 @@ class SmartBetLeagueMarketReliability {
     required this.country,
     required this.league,
     required this.market,
+    this.inputSource,
+    this.modelVersion,
     required this.sampleSize,
     required this.correct,
     required this.wrong,
@@ -82,19 +88,22 @@ class SmartBetLeagueMarketReliabilityReport {
     required String country,
     required String league,
     required String market,
+    String? inputSource,
+    String? modelVersion,
   }) {
     final c = _normalizedLabel(country);
     final l = _normalizedLabel(league);
     final m = normalizeAnalysisMarket(market);
-    for (final segment in segments) {
-      if (segment.engine == engine &&
-          segment.country == c &&
-          segment.league == l &&
-          segment.market == m) {
-        return segment;
-      }
-    }
-    return null;
+    final matching = segments.where((segment) =>
+        segment.engine == engine &&
+        segment.country == c &&
+        segment.league == l &&
+        segment.market == m &&
+        (inputSource == null || segment.inputSource == inputSource) &&
+        (modelVersion == null || segment.modelVersion == modelVersion),
+    ).toList();
+    // Two provenance variants must never be collapsed into one answer.
+    return matching.length == 1 ? matching.single : null;
   }
 }
 
@@ -156,7 +165,9 @@ class SmartBetLeagueMarketReliabilityService {
           _normalizedLabel(previous.league) != league ||
           previous.probability != r.probability ||
           previous.actualHomeGoals != r.actualHomeGoals ||
-          previous.actualAwayGoals != r.actualAwayGoals) {
+          previous.actualAwayGoals != r.actualAwayGoals ||
+          previous.inputSource != r.inputSource ||
+          previous.modelVersion != r.modelVersion) {
         // Conflicting outcomes or predictions are not usable evidence.
         deduped.remove(key);
         conflicts.add(key);
@@ -170,10 +181,15 @@ class SmartBetLeagueMarketReliabilityService {
       final country = _normalizedLabel(r.country);
       final league = _normalizedLabel(r.league);
       final market = normalizeAnalysisMarket(r.market);
-      final key = r.engine.name + '|' + country + '|' + league + '|' + market;
+      final isThirdBrain = r.engine == SmartBetAnalysisEngine.thirdBrain;
+      final source = isThirdBrain ? (r.inputSource ?? 'N/D') : null;
+      final version = isThirdBrain ? (r.modelVersion ?? 'N/D') : null;
+      final key = r.engine.name + '|' + country + '|' + league + '|' + market +
+          (isThirdBrain ? '|$source|$version' : '');
       final bucket = buckets.putIfAbsent(
         key,
-        () => _Bucket(r.engine, country, league, market),
+        () => _Bucket(r.engine, country, league, market,
+            inputSource: source, modelVersion: version),
       );
       bucket.add(r);
     }
@@ -210,6 +226,8 @@ class _Bucket {
   final String country;
   final String league;
   final String market;
+  final String? inputSource;
+  final String? modelVersion;
   final Set<String> matchDays = <String>{};
   int total = 0;
   int correct = 0;
@@ -218,7 +236,8 @@ class _Bucket {
   double probabilitySum = 0;
   double brierSum = 0;
 
-  _Bucket(this.engine, this.country, this.league, this.market);
+  _Bucket(this.engine, this.country, this.league, this.market,
+      {this.inputSource, this.modelVersion});
 
   void add(SmartBetAnalysisRecord r) {
     total++;
@@ -258,6 +277,8 @@ class _Bucket {
       country: country,
       league: league,
       market: market,
+      inputSource: inputSource,
+      modelVersion: modelVersion,
       sampleSize: total,
       correct: correct,
       wrong: total - correct,
