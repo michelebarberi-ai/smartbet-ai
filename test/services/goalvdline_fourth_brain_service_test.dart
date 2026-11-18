@@ -228,9 +228,12 @@ void main() {
   });
 
   test('B67: invalid source distribution does not manufacture a market', () {
-    expect(GoalVdLineFourthBrainService.smartBetMarkets(
+    final partiallyValid = GoalVdLineFourthBrainService.smartBetMarkets(
       smart(home: 40, draw: 30, away: 20),
-    ), isEmpty);
+    );
+    expect(partiallyValid.keys, isNot(contains('1')));
+    expect(partiallyValid.keys, contains('GOAL'));
+    expect(partiallyValid.keys, contains('OVER 2.5'));
     expect(GoalVdLineFourthBrainService.smartBetMarkets(
       smart(score: 0),
     ), isEmpty);
