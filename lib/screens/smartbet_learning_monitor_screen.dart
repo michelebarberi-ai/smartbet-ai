@@ -171,7 +171,11 @@ class _SmartBetLearningMonitorScreenState
             ),
           ),
         ...groups.take(12).map((m) {
-          final isDiego = m.engine == SmartBetAnalysisEngine.diego;
+          final engineLabel = switch (m.engine) {
+            SmartBetAnalysisEngine.smartBet => 'SmartBet',
+            SmartBetAnalysisEngine.diego => 'Diego AI',
+            SmartBetAnalysisEngine.simulator => 'Simulatore',
+          };
           final sufficient = m.samples >= 30;
 
           final gap = m.marketGap == null
@@ -189,7 +193,7 @@ class _SmartBetLearningMonitorScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${isDiego ? "Diego AI" : "SmartBet"} • ${m.market}',
+                    '$engineLabel • ${m.market}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 5),
