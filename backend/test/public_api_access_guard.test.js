@@ -43,7 +43,7 @@ test('AI budget: pre-existing iPhone without token still works, up to a bound', 
   const blocked = await invoke(guard);
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.res.code, 429);
-  assert.equal(blocked.res.body.code, 'PUBLIC_API_RATE_LIMITED');
+  assert.equal(blocked.res.body.code, 'AI_RATE_LIMITED');
   assert.ok(Number(blocked.res.headers['Retry-After']) > 0);
   assert.equal((await invoke(guard, {ip: '192.0.2.2'})).allowed, true);
   assert.equal((await invoke(guard, {ip: '192.0.2.3'})).res.code, 429);
