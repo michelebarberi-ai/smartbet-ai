@@ -11,6 +11,9 @@ import 'package:smartbet_ai_new/services/smartbet_analysis_history_store.dart';
 import 'package:smartbet_ai_new/widgets/goalvdline_three_engine_paired_comparison_panel.dart';
 
 class _Diego implements DiegoAiAnalysis {
+  final int fixtureId;
+  @override
+  MatchModel get match => _match(fixtureId);
   @override
   final double expectedHomeGoals = 1.55;
   @override
@@ -21,6 +24,7 @@ class _Diego implements DiegoAiAnalysis {
   final List<DiegoAiMarketProbability> markets;
 
   const _Diego({
+    this.fixtureId = 981,
     this.markets = const [
       DiegoAiMarketProbability(market: '1', probability: 0.61),
       DiegoAiMarketProbability(market: 'X', probability: 0.25),
@@ -39,15 +43,7 @@ class _Diego implements DiegoAiAnalysis {
       super.noSuchMethod(invocation);
 }
 
-void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
-
-  final kickoff = DateTime.utc(2026, 12, 15, 20, 45);
-  final recorded = kickoff.subtract(const Duration(days: 2));
-  final scoredAt = kickoff.add(const Duration(hours: 5));
-  final asOf = kickoff.add(const Duration(days: 1));
-
-  MatchModel match(int id) => MatchModel(
+MatchModel _match(int id) => MatchModel(
     fixtureId: id,
     homeTeamId: 1,
     awayTeamId: 2,
@@ -70,6 +66,23 @@ void main() {
     valueBet: '',
     odd: 0,
   );
+
+class _MismatchDiego extends _Diego {
+  final MatchModel otherMatch;
+  const _MismatchDiego(this.otherMatch);
+  @override
+  MatchModel get match => otherMatch;
+}
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  final kickoff = DateTime.utc(2026, 12, 15, 20, 45);
+  final recorded = kickoff.subtract(const Duration(days: 2));
+  final scoredAt = kickoff.add(const Duration(hours: 5));
+  final asOf = kickoff.add(const Duration(days: 1));
+
+  MatchModel match(int id) => _match(id);
 
   AnalysisResult smart({
     int score = 75,
@@ -99,12 +112,13 @@ void main() {
     GoalVdLineThreeEngineBenchmarkStore store, {
     int fixture = 981,
     AnalysisResult? result,
-    DiegoAiAnalysis? diego = const _Diego(),
+    DiegoAiAnalysis? diego,
+    bool missingDiego = false,
     DateTime? seen,
   }) => GoalVdLineThreeEngineBenchmarkCaptureService(store: store).capture(
     match: match(fixture),
     smartBet: result ?? smart(),
-    diego: diego,
+    diego: missingDiego ? null : diego ?? _Diego(fixtureId: fixture),
     recordedAt: seen ?? recorded,
   );
 
@@ -221,12 +235,79 @@ void main() {
 
   test('nessun benchmark senza terzo, Diego, market probability o 2m lead', () async {
     final store = GoalVdLineThreeEngineBenchmarkStore();
-    expect(await capture(store, diego: null), isFalse);
+    expect(await capture(store, missingDiego: true), isFalse);
     expect(await capture(store, result: smart(score: 0)), isFalse);
     expect(await capture(store,
       seen: kickoff.subtract(const Duration(minutes: 1))), isFalse);
     expect(await capture(store, diego: const _Diego(markets: [])), isFalse);
     expect(store.snapshots, isEmpty);
+  });
+
+  test('scarta Diego su fixture differente e kickoff disallineato', () async {
+    final store = GoalVdLineThreeEngineBenchmarkStore();
+    expect(await capture(store,
+      diego: const _Diego(fixtureId: 999)), isFalse);
+    expect(store.snapshots, isEmpty);
+    // Fixture concordante ma stagione, kickoff o date diverse sono
+    // comunque escluse dal confronto prospettico.
+    final altered = _match(981);
+    final wrongTime = MatchModel(
+      fixtureId: 981,
+      homeTeamId: altered.homeTeamId,
+      awayTeamId: altered.awayTeamId,
+      homeTeam: altered.homeTeam,
+      awayTeam: altered.awayTeam,
+      league: altered.league,
+      leagueId: altered.leagueId,
+      country: altered.country,
+      countryCode: altered.countryCode,
+      date: '2026-12-16T20:45:00Z',
+      leagueType: altered.leagueType,
+      isEuropeanCup: altered.isEuropeanCup,
+      isFriendly: altered.isFriendly,
+      isNational: altered.isNational,
+      aiWeight: altered.aiWeight,
+      smartScore: altered.smartScore,
+      homeWin: altered.homeWin,
+      draw: altered.draw,
+      awayWin: altered.awayWin,
+      valueBet: altered.valueBet,
+      odd: altered.odd,
+    );
+    final stale = _MismatchDiego(wrongTime);
+    expect(await capture(store, diego: stale), isFalse);
+    expect(store.snapshots, isEmpty);
+  });
+
+  test('non usa uno score con stato incompatibile nel confronto reale', () async {
+    final store = GoalVdLineThreeEngineBenchmarkStore();
+    expect(await capture(store, fixture: 995), isTrue);
+    final badRecord = SmartBetAnalysisRecord(
+      engine: SmartBetAnalysisEngine.smartBet,
+      fixtureId: 995,
+      homeTeam: 'Juventus',
+      awayTeam: 'Parma',
+      league: 'Serie A',
+      country: 'Italy',
+      matchDate: kickoff,
+      market: '1',
+      probability: 0.65,
+      smartScore: null,
+      confidence: null,
+      classification: null,
+      qualified: true,
+      sources: const [SmartBetAnalysisSource.analysis],
+      prospectiveEligible: true,
+      status: SmartBetAnalysisStatus.wrong,
+      actualHomeGoals: 3,
+      actualAwayGoals: 1,
+      firstSeenAt: recorded,
+      lastSeenAt: scoredAt,
+      resolvedAt: scoredAt,
+    );
+    expect(store.verifiedPairedRecords(
+      resultHistory: [badRecord], asOf: asOf,
+    ), isEmpty, reason: '3-1 significa vittoria casa, non esito errato di 1');
   });
 
   test('non riempie percentuali mancanti con zero o quote fittizie', () async {
