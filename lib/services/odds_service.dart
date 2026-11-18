@@ -150,6 +150,7 @@ enum OddsLookupStatus {
   providerError,
   upstreamUnavailable,
   quotaOrRateLimit,
+  providerCooldownActive,
   networkError,
   proxyConfigurationError,
   proxyAccessDenied,
@@ -185,6 +186,10 @@ class OddsService {
   static final Map<String, FixtureMarketOdds?> _marketCache = {};
   static final Map<String, DateTime> _marketCacheTime = {};
   static final Map<String, OddsLookupDiagnostic> _marketCacheDiagnostics = {};
+  // The Render proxy reports FOOTBALL_PROVIDER_COOLDOWN + Retry-After.
+  // Share its bounded deadline across fixture lookups, so a second coupon
+  // search cannot burn the same exhausted sports-provider budget.
+  static DateTime? _providerCooldownUntil;
   final Map<String, OddsLookupDiagnostic> _lastLookupDiagnostics = {};
 
   static bool _isRateLimit(String body) {
@@ -200,12 +205,31 @@ class OddsService {
     ).hasMatch(sample);
   }
 
+  static String? _safeProviderCode(String body) {
+    // The backend exposes a short, non-secret machine code. Inspect
+    // only a bounded response and never log raw JSON or API keys.
+    if (body.length > 4096) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded['code']?.toString();
+      }
+    } on FormatException {
+      // A non-JSON upstream response can still be classified by HTTP.
+    }
+    return null;
+  }
+
   static OddsLookupStatus _httpFailureStatus(int status, String body) {
-    if (status == 429 || _isRateLimit(body)) {
+    final code = _safeProviderCode(body);
+    if (code == 'FOOTBALL_PROVIDER_RATE_LIMIT' ||
+        code == 'FOOTBALL_PROVIDER_COOLDOWN' ||
+        status == 429 || _isRateLimit(body)) {
       return OddsLookupStatus.quotaOrRateLimit;
     }
-    if (status == 503 &&
-        body.toUpperCase().contains('FOOTBALL_API_KEY NON CONFIGURATA')) {
+    if (code == 'FOOTBALL_PROVIDER_KEY_MISSING' ||
+        (status == 503 &&
+            body.toUpperCase().contains('FOOTBALL_API_KEY NON CONFIGURATA'))) {
       return OddsLookupStatus.proxyConfigurationError;
     }
     if (status == 401 || status == 403) {
@@ -305,18 +329,44 @@ class OddsService {
       _marketCacheDiagnostics.remove(cacheKey);
     }
 
+    // A 503 cooldown is provider-wide, not an indication that a particular
+    // fixture lacks odds. Respect it before creating a fresh HTTP request.
+    final cooldown = _providerCooldownUntil;
+    if (cooldown != null) {
+      if (_now().isBefore(cooldown)) {
+        _setDiagnostic(cacheKey, const OddsLookupDiagnostic(
+          status: OddsLookupStatus.providerCooldownActive,
+        ));
+        return null;
+      }
+      _providerCooldownUntil = null;
+    }
+
     final uri = Uri.parse(
       'https://smartbet-ai-y6gw.onrender.com/football/odds',
     ).replace(queryParameters: {'fixture': fixtureId.toString()});
 
     try {
-      final response = await _client.get(uri);
+      final response = await _client.get(uri)
+          .timeout(const Duration(seconds: 18));
 
       if (response.statusCode != 200) {
+        final status = _httpFailureStatus(response.statusCode, response.body);
+        if (status == OddsLookupStatus.quotaOrRateLimit) {
+          // The backend sends Retry-After (seconds) for its shared
+          // protection circuit. Bound it to avoid a permanently stuck app.
+          final retryAfter = int.tryParse(
+            response.headers['retry-after'] ?? '',
+          );
+          final seconds = (retryAfter ?? 120).clamp(15, 1800).toInt();
+          final until = _now().add(Duration(seconds: seconds));
+          if (_providerCooldownUntil == null ||
+              until.isAfter(_providerCooldownUntil!)) {
+            _providerCooldownUntil = until;
+          }
+        }
         _setDiagnostic(cacheKey, OddsLookupDiagnostic(
-          status: _httpFailureStatus(
-            response.statusCode, response.body,
-          ),
+          status: status,
           httpStatus: response.statusCode,
         ));
         return null;
@@ -1175,6 +1225,7 @@ class OddsService {
     _marketCache.clear();
     _marketCacheTime.clear();
     _marketCacheDiagnostics.clear();
+    _providerCooldownUntil = null;
   }
 
   void dispose() {
