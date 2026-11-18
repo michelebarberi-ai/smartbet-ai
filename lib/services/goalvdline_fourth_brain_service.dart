@@ -3,6 +3,7 @@ import '../models/match_model.dart';
 import 'diego_ai_service.dart';
 import 'goalvdline_third_brain_service.dart';
 import 'smartbet_analysis_history_store.dart';
+import 'smartbet_analysis_market_settlement.dart';
 import 'smartbet_market_ease_index_service.dart';
 
 /// B67: a *dependent ensemble*, not a fourth independent AI model.
@@ -160,7 +161,19 @@ class GoalVdLineFourthBrainService {
 
     // evaluate() enforces the "known before clock" cut-off on resolved
     // fixtures. No current/future match outcome can modify these weights.
-    final history = historicalRecords.toList(growable: false);
+    // Additional defense: reject settlement labels inconsistent with the
+    // recorded full-time score before allowing them into historic weights.
+    final history = historicalRecords.where((record) {
+      final home = record.actualHomeGoals, away = record.actualAwayGoals;
+      if (home == null || away == null || home < 0 || away < 0) return false;
+      final settled = SmartBetAnalysisMarketSettlement.evaluate(
+        market: record.market, homeGoals: home, awayGoals: away,
+      );
+      return (record.status == SmartBetAnalysisStatus.correct &&
+              settled == SmartBetAnalysisSettlement.correct) ||
+          (record.status == SmartBetAnalysisStatus.wrong &&
+              settled == SmartBetAnalysisSettlement.wrong);
+    }).toList(growable: false);
     final evidence = history.isEmpty ? null
         : const SmartBetMarketEaseIndexService().evaluate(
             records: history, asOf: clock);
