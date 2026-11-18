@@ -298,95 +298,116 @@ app.get("/privacy", (req, res) => {
       smartBetPublicPage(
         "Privacy Policy",
         `
-        <h1>Privacy Policy</h1>
+        <h1>Informativa sulla privacy – GoalVdLine AI</h1>
+        <p class="note">Ultimo aggiornamento: 18 novembre 2026</p>
 
-        <p class="note">
-          Ultimo aggiornamento: 29 agosto 2026
+        <h2>Come funziona l'app</h2>
+        <p>
+          GoalVdLine AI fornisce analisi statistiche calcistiche e pronostici.
+          Non e un bookmaker e non offre depositi, prelievi, pagamenti o
+          esecuzione diretta di scommesse.
         </p>
 
+        <h2>Dati conservati sul dispositivo</h2>
         <p>
-          Questa informativa descrive il trattamento dei dati
-          nell'utilizzo di SmartBet AI.
+          Preferenze, impostazioni, pronostici, schedine, analisi e storico
+          possono essere conservati localmente. Le credenziali mobili,
+          quando assegnate, sono conservate nel Portachiavi del dispositivo.
+          L'app puo funzionare senza un account utente ordinario;
+          l'area proprietario ha un accesso riservato separato.
         </p>
 
-        <h2>Account</h2>
-
+        <h2>Richieste di analisi e dati calcistici</h2>
         <p>
-          SmartBet AI non richiede la creazione di un account
-          utente per utilizzare le funzionalità attualmente
-          disponibili.
+          Quando viene richiesta un'analisi online, l'app invia al backend
+          dati relativi a partite, squadre, competizioni, statistiche e
+          parametri sportivi. Il backend puo utilizzare OpenAI per generare
+          o controllare analisi e API-Football o altri fornitori di dati
+          sportivi per calendari, risultati e quote.
+          Render ospita servizi del backend.
+        </p>
+        <p>
+          I contenuti sportivi inviati ai fornitori di analisi possono
+          includere la richiesta e le statistiche necessarie al servizio.
+          Non e richiesto inviare il proprio nome per una normale
+          analisi sportiva.
         </p>
 
-        <h2>Dati salvati sul dispositivo</h2>
-
+        <h2>Apprendimento e storico centralizzato</h2>
         <p>
-          Alcune preferenze, pronostici, giocate registrate
-          e relative statistiche possono essere conservati
-          localmente sul dispositivo dell'utente per
-          consentire il funzionamento delle relative
-          funzionalità.
+          Le funzioni di contributo all'apprendimento sono facoltative.
+          Il consenso alla raccolta locale di nuove previsioni non comporta
+          automaticamente il loro invio al server. Quando l'utente avvia
+          una trasmissione autorizzata, il backend di apprendimento puo
+          registrare su Neon un identificativo pseudonimo, fixture,
+          motore, mercato, probabilita e timestamp, e verificare l'esito
+          attraverso il fornitore sportivo. Eventuali copie storiche
+          retrospettive sono conservate separatamente dalle previsioni
+          registrate prima dell'evento.
+        </p>
+        <p>
+          Il consenso alla raccolta locale puo essere revocato nelle
+          impostazioni; per i dati gia trasmessi e prevista una funzione
+          separata di cancellazione remota, che richiede una credenziale
+          mobile valida. La revoca locale non elimina automaticamente
+          i dati gia presenti sul server.
         </p>
 
-        <h2>Analisi e servizi online</h2>
-
+        <h2>Credenziali e sicurezza</h2>
         <p>
-          Per fornire dati calcistici, statistiche e funzioni
-          di analisi, SmartBet AI comunica con il proprio
-          backend e con fornitori di servizi necessari al
-          funzionamento dell'app.
+          Per alcune funzioni il server puo assegnare un token temporaneo
+          al dispositivo. Nel database viene conservato un hash della
+          credenziale, non il token in chiaro. Una credenziale per il
+          solo apprendimento non abilita automaticamente le analisi AI:
+          l'accesso ai servizi richiede i permessi previsti per ciascun
+          utilizzo. Le richieste possono generare log tecnici e dati di
+          rete utili a prevenire abusi, monitorare errori e proteggere
+          i servizi.
         </p>
 
+        <h2>AutoSchedina e notifiche</h2>
         <p>
-          Le richieste possono includere dati relativi a
-          partite, squadre, competizioni e parametri necessari
-          a produrre l'analisi richiesta dall'utente.
+          Quando le relative funzioni sono attivate, il backend puo
+          conservare preferenze e richieste di generazione remota delle
+          schedine, il loro stato e i risultati elaborati su Neon.
+          Per notifiche Apple Push Notification service (APNs) puo
+          essere usato il token push del dispositivo; il backend prevede
+          la sua memorizzazione cifrata. Le notifiche richiedono
+          l'abilitazione del servizio e le autorizzazioni del dispositivo.
+          Queste funzioni non sono necessariamente attive per tutti.
         </p>
 
-        <h2>Dati tecnici</h2>
-
+        <h2>Fornitori esterni e conservazione</h2>
         <p>
-          I servizi utilizzati per l'erogazione dell'app
-          possono generare log tecnici standard necessari
-          alla sicurezza, alla diagnostica e al corretto
-          funzionamento del servizio.
+          I servizi tecnici possono coinvolgere Render (hosting), Neon
+          (database), OpenAI (analisi), fornitori di dati calcistici e
+          Apple (notifiche iOS). I dati trattati dipendono dalle funzioni
+          effettivamente utilizzate. I dati locali restano soggetti ai
+          comandi di eliminazione dell'app; quelli remoti seguono le
+          funzioni di cancellazione previste e le necessita tecniche
+          di funzionamento, sicurezza e rendicontazione. Per informazioni
+          specifiche sui periodi di conservazione e sulle richieste
+          relative ai dati personali, utilizzare il contatto seguente.
         </p>
 
-        <h2>Vendita dei dati</h2>
-
+        <h2>Scelte e richieste dell'utente</h2>
         <p>
-          SmartBet AI non vende i dati personali degli utenti.
+          L'utente puo gestire le preferenze di partecipazione e alcune
+          notifiche nelle impostazioni dell'app e richiedere informazioni,
+          accesso, rettifica o cancellazione dei dati che lo riguardano
+          tramite il contatto privacy. GoalVdLine AI non vende i dati
+          personali degli utenti.
         </p>
 
-        <h2>Scommesse e pagamenti</h2>
-
+        <h2>Contatti privacy</h2>
         <p>
-          SmartBet AI non è un bookmaker e non consente di
-          effettuare scommesse, depositare denaro, prelevare
-          denaro o eseguire transazioni di gioco con denaro
-          reale.
-        </p>
-
-        <h2>Modifiche alla presente informativa</h2>
-
-        <p>
-          Questa informativa potrà essere aggiornata in caso
-          di modifiche alle funzionalità dell'app o ai servizi
-          utilizzati.
-        </p>
-
-        <h2>Contatti</h2>
-
-        <p>
-          Per domande relative alla privacy:
-          <a href="mailto:${SUPPORT_EMAIL}">
-            ${SUPPORT_EMAIL}
-          </a>
+          Per informazioni sui trattamenti o per esercitare i propri
+          diritti: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.
         </p>
         `,
       ),
     );
 });
-
 
 // ============================================================
 // PRE-MATCH FILTER
