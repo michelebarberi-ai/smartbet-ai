@@ -11,6 +11,8 @@ import '../services/dual_engine_analysis_service.dart';
 import '../services/diego_ai_analysis_result_adapter.dart';
 import '../services/bet_execution_service.dart';
 import '../services/odds_service.dart';
+import '../services/goalvdline_reliable_alternative_market_service.dart';
+import '../services/goalvdline_smartcore_alternative_preview_service.dart';
 
 class _RegisterMarketOption {
   final String label;
@@ -434,6 +436,8 @@ class _RegisterBetSheetState extends State<_RegisterBetSheet> {
 class AnalysisDetailScreen extends StatefulWidget {
   final MatchModel match;
   final AnalysisResult result;
+  // Analisi SmartCore originale, separata da SmartBet avanzato e Diego.
+  final AnalysisResult? smartCoreResult;
   final DiegoAiAnalysis? diegoAnalysis;
   final DualEngineComparison? engineComparison;
 
@@ -441,6 +445,7 @@ class AnalysisDetailScreen extends StatefulWidget {
     super.key,
     required this.match,
     required this.result,
+    this.smartCoreResult,
     this.diegoAnalysis,
     this.engineComparison,
   });
@@ -451,6 +456,21 @@ class AnalysisDetailScreen extends StatefulWidget {
 
 class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   final BankrollStore _bankroll = BankrollStore.instance;
+  GoalVdLineAlternativeMarketPlan? _smartCoreAlternativePlan;
+
+  @override
+  void initState() {
+    super.initState();
+    final raw = widget.smartCoreResult;
+    if (raw == null) return;
+    try {
+      _smartCoreAlternativePlan =
+          const GoalVdLineSmartCoreAlternativePreviewService().build(raw);
+    } catch (e) {
+      // Il pannello shadow non deve mai bloccare l'analisi principale.
+      debugPrint('SMARTCORE SHADOW ALTERNATIVES unavailable: $e');
+    }
+  }
 
   final bool _registering = false;
 
@@ -1129,6 +1149,87 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
     );
   }
 
+  // Solo lettura: nessuna quota, nessun stake e nessuna sostituzione
+  // automatica del pronostico principale. Ranking da xG non calibrati.
+  Widget _smartCoreAlternativeSection(GoalVdLineAlternativeMarketPlan plan) {
+    final common = plan.sportsAlternatives
+        .where((item) => !item.market.contains(' O '))
+        .take(5)
+        .toList(growable: false);
+    final handicaps = plan.sportsAlternatives
+        .where((item) => item.market.startsWith('HCP EURO CASA'))
+        .take(1)
+        .toList(growable: false);
+    final shownMarkets = common.map((item) => item.market).toSet();
+    final alternatives = [
+      ...common,
+      ...handicaps.where((item) => !shownMarkets.contains(item.market)),
+    ];
+
+    return _sectionCard(
+      title: 'SMARTCORE · MERCATI ALTERNATIVI',
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const Key('smartcore-shadow-alternative-panel'),
+          tilePadding: EdgeInsets.zero,
+          initiallyExpanded: false,
+          title: const Text(
+            'Simulazione mercati (solo analisi)',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          subtitle: const Text(
+            'I tre motori rimangono indipendenti',
+            style: TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          children: [
+            Text(
+              'Pronostico SmartCore: ${widget.smartCoreResult?.prediction ?? plan.primaryMarket}. '
+              'Probabilità modello xG per quel mercato: '
+              '${(plan.primaryProbability * 100).toStringAsFixed(1)}%.',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            const SizedBox(height: 8),
+            for (final alternative in alternatives)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        alternative.market,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${(alternative.probability * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 9),
+            const Text(
+              'Percentuali sperimentali basate sui gol attesi, '
+              'non ancora calibrate sullo storico. '
+              'La qualità dei dati e le quote non sono verificate qui: '
+              'nessuna alternativa è pronta per una schedina. '
+              'L’analisi SmartCore originale non viene modificata.',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -1220,6 +1321,11 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
               ),
 
               const SizedBox(height: 16),
+
+              if (_smartCoreAlternativePlan != null) ...[
+                _smartCoreAlternativeSection(_smartCoreAlternativePlan!),
+                const SizedBox(height: 16),
+              ],
 
               if (widget.diegoAnalysis != null) ...[
                 _diegoAiSection(widget.diegoAnalysis!),
