@@ -45,7 +45,11 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
               child: Text('Nessuna evidenza utilizzabile: affidabilità non determinabile.'),
             ),
           ...segments.take(12).map((s) {
-            final engine = s.engine.name == 'diego' ? 'Diego AI' : 'SmartBet AI';
+            final engine = switch (s.engine.name) {
+              'diego' => 'Diego AI',
+              'thirdBrain' => 'Terzo cervello · Poisson',
+              _ => 'SmartBet AI',
+            };
             final accuracy = s.observedAccuracyPercent.toStringAsFixed(1);
             final lower = s.wilsonLower95Percent.toStringAsFixed(1);
             final upper = s.wilsonUpper95Percent.toStringAsFixed(1);
@@ -65,6 +69,12 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
                   Text('Intervallo 95%: $lower%–$upper%'),
                   Text('Probabilità originale media: $predicted · scostamento: $gap'),
                   Text('Brier: $brier · ${s.distinctMatchDays} giornate'),
+                  if (s.inputSource != null)
+                    Text('xG di partenza: ${s.inputSource} · '
+                      'modello: ${s.modelVersion ?? "N/D"}. '
+                      'Il terzo cervello non ha ancora input '
+                      'statisticamente indipendenti.',
+                      style: const TextStyle(fontSize: 11)),
                   Text(_level(s.evidenceLevel)),
                   if (s.evidenceLevel == SmartBetLeagueMarketEvidenceLevel.insufficient)
                     const Text('Affidabilità non determinabile con questo campione.'),
@@ -88,8 +98,11 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
                 child: Text('Campione prospettico insufficiente: confronto non disponibile.'),
               ),
             ...shadowReport!.segments.where((s) => s.evaluatedFixtures > 0).take(8).map((s) {
-              final engine = s.engine.name == 'diego'
-                  ? 'Diego AI' : 'SmartBet AI';
+              final engine = switch (s.engine.name) {
+                  'diego' => 'Diego AI',
+                  'thirdBrain' => 'Terzo cervello · Poisson',
+                  _ => 'SmartBet AI',
+                };
               final original = s.originalBrier!.toStringAsFixed(4);
               final shadow = s.shadowBrier!.toStringAsFixed(4);
               final improvement = s.brierImprovement!.toStringAsFixed(4);
