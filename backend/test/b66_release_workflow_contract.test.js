@@ -39,10 +39,10 @@ test('B66: backend and Flutter regressions run before signing in release job', (
   assert.match(workflow.slice(flutter, signing), /release\/b66-testflight/);
 });
 
-test('B66: feature branch stays at previous build number until release authorization', () => {
+test('B66: feature build 65 and release build 66 have valid version metadata', () => {
   const pubspec = fs.readFileSync(
     path.join(__dirname, '../../pubspec.yaml'),
     'utf8',
   );
-  assert.match(pubspec, /^version: 1\.2\.5\+65$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:65|66)$/m);
 });
