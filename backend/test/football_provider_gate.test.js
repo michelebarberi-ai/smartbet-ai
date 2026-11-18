@@ -200,6 +200,10 @@ test('upstream 429 cancels waiting queue without sending queued provider request
     return {shouldNotRun: true};
   }));
   const combined = Promise.allSettled([first, ...waiting]);
+  // acquire() is async: give the first simulated upstream call a tick
+  // to install its rejection callback before triggering provider 429.
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof rejectFirst, 'function');
   rejectFirst(provider429());
   const results = await combined;
   assert.equal(results[0].status, 'rejected');
