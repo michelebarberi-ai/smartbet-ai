@@ -411,18 +411,32 @@ class LearningRepository {
     // Scopes are administrator-assigned, never accepted from a mobile body.
     if (!['learning:predictions', 'learning:predictions ai:analyze']
         .includes(scopes)) throw new Error('Invalid mobile token scopes');
+    if (scopes === 'learning:predictions') {
+      // Legacy provisioning must keep working before the optional B65
+      // migration. The schema's default scope applies after migration.
+      await this.pool.query(
+        `INSERT INTO sb_learning_clients_v1 (client_id, token_hash, expires_at)
+         VALUES ($1,$2,$3)`, [clientId, tokenHash, expiresAt],
+      );
+      return;
+    }
+    // AI credentials require the separately approved migration.
+    // If token_scopes does not exist yet, PostgreSQL rejects this operation:
+    // fail closed instead of silently issuing a learning-only credential.
     await this.pool.query(
       `INSERT INTO sb_learning_clients_v1
          (client_id, token_hash, expires_at, token_scopes)
-       VALUES ($1,$2,$3,$4)`, [clientId, tokenHash, expiresAt, scopes]
+       VALUES ($1,$2,$3,$4)`, [clientId, tokenHash, expiresAt, scopes],
     );
   }
 
   async findValidClient(tokenHash, now) {
+    // The legacy learning endpoint works on both schema versions.
+    // The only issuing path for new AI-scoped tokens also retains
+    // learning:predictions; no AI authorization can be inferred here.
     const result = await this.pool.query(
       `SELECT client_id FROM sb_learning_clients_v1
        WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL
-         AND 'learning:predictions' = ANY(string_to_array(token_scopes, ' '))
        LIMIT 1`, [tokenHash, now]
     );
     return result.rows.length ? result.rows[0].client_id : null;
