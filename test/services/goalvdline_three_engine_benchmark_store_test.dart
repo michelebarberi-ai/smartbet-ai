@@ -53,7 +53,7 @@ MatchModel _match(int id) => MatchModel(
     leagueId: 135,
     country: 'Italy',
     countryCode: 'IT',
-    date: kickoff.toIso8601String(),
+    date: DateTime.utc(2026, 12, 15, 20, 45).toIso8601String(),
     leagueType: 'domestic',
     isEuropeanCup: false,
     isFriendly: false,
