@@ -334,7 +334,9 @@ class GoalVdLineThreeEngineBenchmarkCaptureService {
       if (!GoalVdLineThreeEngineBenchmarkStore.fixedMarkets.contains(name) ||
           !m.probability.isFinite || m.probability <= 0 ||
           m.probability > 1) continue;
-      if (diegoMarkets.containsKey(name)) ambiguous.add(name);
+      if (diegoMarkets.containsKey(name)) {
+        ambiguous.add(name);
+      }
       diegoMarkets[name] = m.probability;
     }
     final entries = <GoalVdLineBenchmarkMarket>[];
@@ -367,7 +369,9 @@ class GoalVdLineThreeEngineBenchmarkCaptureService {
         thirdBrain: t,
       ));
     }
-    if (entries.isEmpty) return false;
+    if (entries.isEmpty) {
+      return false;
+    }
     return store.freeze(GoalVdLineThreeEngineBenchmarkSnapshot(
       fixtureId: match.fixtureId,
       kickoff: kickoff,
