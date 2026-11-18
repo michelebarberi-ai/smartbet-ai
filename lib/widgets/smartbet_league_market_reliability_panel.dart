@@ -48,6 +48,7 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
             final engine = switch (s.engine.name) {
               'diego' => 'Diego AI',
               'simulator' => 'Simulatore',
+              'metaAi' => 'Quarto cervello (SHADOW)',
               _ => 'SmartBet AI',
             };
             final accuracy = s.observedAccuracyPercent.toStringAsFixed(1);
@@ -95,6 +96,7 @@ class SmartBetLeagueMarketReliabilityPanel extends StatelessWidget {
               final engine = switch (s.engine.name) {
                   'diego' => 'Diego AI',
                   'simulator' => 'Simulatore',
+              'metaAi' => 'Quarto cervello (SHADOW)',
                   _ => 'SmartBet AI',
                 };
               final original = s.originalBrier!.toStringAsFixed(4);
