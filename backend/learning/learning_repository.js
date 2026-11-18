@@ -406,10 +406,15 @@ class LearningRepository {
     return result.rowCount === 1;
   }
 
-  async insertClientCredential({clientId, tokenHash, expiresAt}) {
+  async insertClientCredential({clientId, tokenHash, expiresAt,
+    scopes = 'learning:predictions'}) {
+    // Scopes are administrator-assigned, never accepted from a mobile body.
+    if (!['learning:predictions', 'learning:predictions ai:analyze']
+        .includes(scopes)) throw new Error('Invalid mobile token scopes');
     await this.pool.query(
-      `INSERT INTO sb_learning_clients_v1 (client_id, token_hash, expires_at)
-       VALUES ($1,$2,$3)`, [clientId, tokenHash, expiresAt]
+      `INSERT INTO sb_learning_clients_v1
+         (client_id, token_hash, expires_at, token_scopes)
+       VALUES ($1,$2,$3,$4)`, [clientId, tokenHash, expiresAt, scopes]
     );
   }
 
@@ -417,7 +422,19 @@ class LearningRepository {
     const result = await this.pool.query(
       `SELECT client_id FROM sb_learning_clients_v1
        WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL
+         AND 'learning:predictions' = ANY(string_to_array(token_scopes, ' '))
        LIMIT 1`, [tokenHash, now]
+    );
+    return result.rows.length ? result.rows[0].client_id : null;
+  }
+
+  async findValidClientForScope(tokenHash, now, scope) {
+    if (scope !== 'ai:analyze') return null;
+    const result = await this.pool.query(
+      `SELECT client_id FROM sb_learning_clients_v1
+       WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL
+         AND $3 = ANY(string_to_array(token_scopes, ' '))
+       LIMIT 1`, [tokenHash, now, scope]
     );
     return result.rows.length ? result.rows[0].client_id : null;
   }
