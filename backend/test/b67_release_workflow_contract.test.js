@@ -27,8 +27,8 @@ test('B67: TestFlight uploads only via the designated GitHub release authorizati
 });
 
 test('B67: backend and full Flutter regression run before signing assets', () => {
-  const backend = workflow.indexOf('- name: B64/B65/B66/B67 full backend regression before signing');
-  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67 full Flutter regression before signing');
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68 full Flutter regression before signing');
   const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend > 0);
   assert.ok(flutter > backend);
@@ -41,5 +41,5 @@ test('B67: backend and full Flutter regression run before signing assets', () =>
 
 test('B67: version only advances on deliberately prepared release branch', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:66|67)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:66|67|68)$/m);
 });
