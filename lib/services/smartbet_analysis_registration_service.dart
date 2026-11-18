@@ -13,6 +13,7 @@ import 'smartbet_simulation_shadow_capture_service.dart';
 import 'smartbet_simulation_shadow_store.dart';
 import 'goalvdline_central_learning_outbox.dart';
 import 'goalvdline_third_brain_history_capture_service.dart';
+import 'goalvdline_three_engine_benchmark_store.dart';
 
 export 'smartbet_analysis_history_store.dart' show SmartBetAnalysisSource;
 
@@ -25,12 +26,17 @@ class SmartBetAnalysisRegistrationService {
 
   final GoalVdLineCentralLearningOutbox _centralOutbox;
 
+  final GoalVdLineThreeEngineBenchmarkStore _benchmarkStore;
+
   SmartBetAnalysisRegistrationService({
     SmartBetAnalysisHistoryStore? store,
     SmartBetAnalysisComparisonStore? comparisonStore,
     SmartBetSimulationShadowCaptureService? simulationCapture,
     GoalVdLineCentralLearningOutbox? centralOutbox,
+    GoalVdLineThreeEngineBenchmarkStore? benchmarkStore,
   }) : _store = store ?? SmartBetAnalysisHistoryStore.instance,
+       _benchmarkStore = benchmarkStore ??
+           GoalVdLineThreeEngineBenchmarkStore(),
        _comparisonStore =
            comparisonStore ?? SmartBetAnalysisComparisonStore.instance,
        _simulationCapture =
@@ -134,6 +140,22 @@ class SmartBetAnalysisRegistrationService {
           source: source,
           recordedAt: recordedAt,
         );
+
+        // Benchmark fisso locale: non aggiunge record ai motori live,
+        // non invia dati a Neon e non modifica QuoteLab/MEI o schedine.
+        // Registra solo probabilita' davvero disponibili per tutti e tre.
+        try {
+          await GoalVdLineThreeEngineBenchmarkCaptureService(
+            store: _benchmarkStore,
+          ).capture(
+            match: match,
+            smartBet: smartBet,
+            diego: nativeDiego,
+            recordedAt: recordedAt,
+          );
+        } catch (error) {
+          debugPrint('Three engine fixed benchmark SHADOW unavailable: $error');
+        }
       } catch (error) {
         // Un errore dello storico sperimentale non puo' impedire
         // registrazione e confronto SmartBet/Diego.
