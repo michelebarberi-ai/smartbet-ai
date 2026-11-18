@@ -109,7 +109,11 @@ class _SmartBetAppState extends State<SmartBetApp> {
       // Date picker, months, weekdays and Material controls in Italian.
       locale: const Locale('it', 'IT'),
       supportedLocales: const [Locale('it', 'IT')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: AppTheme.darkTheme,
       home: const HomeScreen(),
     );
