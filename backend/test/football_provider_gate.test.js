@@ -7,6 +7,7 @@ const {createFootballProviderGate} = require('../football_provider_gate');
 const {
   footballFailurePayload,
   respondFootballFailure,
+  fetchFootballJson,
 } = require('../football_upstream_diagnostics');
 
 function provider429() {
@@ -233,4 +234,34 @@ test('invalid queue bounds rejected rather than silently disabling them', () => 
   assert.throws(() => createFootballProviderGate({maxQueue:-1}));
   assert.throws(() => createFootballProviderGate({maxQueue:501}));
   assert.throws(() => createFootballProviderGate({maxWaitMs:0}));
+});
+
+
+test('provider quota reported in successful HTTP 200 JSON also opens shared cooldown', async () => {
+  let t = 0;
+  let outgoing = 0;
+  const gate = createFootballProviderGate({
+    now: () => t,
+    baseCooldownMs: 1000,
+    maxCooldownMs: 8000,
+  });
+  await assert.rejects(gate.run(() => fetchFootballJson({
+    url: 'https://v3.football.api-sports.io/fixtures',
+    apiKey: 'FAKE_KEY',
+    fetchImpl: async () => {
+      outgoing++;
+      return {
+        status: 200,
+        ok: true,
+        text: async () => '{"errors":{"requests":"Daily quota limit reached"}}',
+      };
+    },
+  })), {code: 'FOOTBALL_PROVIDER_RATE_LIMIT'});
+  await assert.rejects(gate.run(async () => {
+    outgoing++;
+    return 1;
+  }), {code: 'FOOTBALL_PROVIDER_COOLDOWN'});
+  assert.equal(outgoing, 1);
+  t = 1000;
+  assert.equal(await gate.run(async () => 5), 5);
 });
