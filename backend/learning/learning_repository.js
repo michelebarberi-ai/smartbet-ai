@@ -436,6 +436,21 @@ class LearningRepository {
     return result.rows.length ? result.rows[0].client_id : null;
   }
 
+  // B73: stop calendar pushes when the mobile credential is revoked.
+  // Guarded to remain compatible with production branches not yet migrated.
+  async deleteDailyPalinsestoSubscriptionIfAvailable(subjectHash) {
+    const exists=await this.pool.query(
+      "SELECT to_regclass('public.sb_daily_palinsesto_subscriptions_v1') AS relation");
+    if (!exists.rows?.[0]?.relation) return false;
+    await this.pool.query(
+      'DELETE FROM public.sb_daily_palinsesto_subscriptions_v1 WHERE subject_hash=$1',
+      [subjectHash]);
+    await this.pool.query(
+      'DELETE FROM public.sb_daily_palinsesto_deliveries_v1 WHERE subject_hash=$1',
+      [subjectHash]);
+    return true;
+  }
+
   async revokeClient(clientId) {
     const result = await this.pool.query(
       `UPDATE sb_learning_clients_v1 SET revoked_at=now()
@@ -478,6 +493,18 @@ class LearningRepository {
         'DELETE FROM sb_on_demand_coupon_jobs_v1 WHERE subject_hash=$1',
         [subjectHash]
       );
+      // Private B73 device registration and delivery history are purged as
+      // part of the same authenticated erasure, only if staging migration exists.
+      const digestSchema=await connection.query(
+        "SELECT to_regclass('public.sb_daily_palinsesto_subscriptions_v1') AS relation");
+      if (digestSchema.rows?.[0]?.relation) {
+        await connection.query(
+          'DELETE FROM public.sb_daily_palinsesto_deliveries_v1 WHERE subject_hash=$1',
+          [subjectHash]);
+        await connection.query(
+          'DELETE FROM public.sb_daily_palinsesto_subscriptions_v1 WHERE subject_hash=$1',
+          [subjectHash]);
+      }
       await connection.query(
         `UPDATE sb_learning_clients_v1 SET revoked_at=now()
          WHERE client_id=$1 AND revoked_at IS NULL`, [clientId]
