@@ -4757,6 +4757,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               'Non vengono inventate quote.',
               style: TextStyle(color: Colors.white60, fontSize: 11),
             ),
+            const SizedBox(height: 6),
+            const Text(
+              'ATTENZIONE: le percentuali molto alte dei mercati '
+              '«OPPURE» sono stime matematiche su eventi ampi. '
+              'Non dimostrano un’affidabilità storica del 94–98% '
+              'e il mercato deve essere quotato esplicitamente '
+              'dal bookmaker per essere utilizzabile.',
+              key: Key('b69-or-market-estimates-warning'),
+              style: TextStyle(color: Colors.amberAccent, fontSize: 11),
+            ),
             const SizedBox(height: 10),
             ..._sportsOnlyPreview
                 .where((forecast) => !_results.any(
