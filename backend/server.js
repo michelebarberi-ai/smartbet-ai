@@ -616,6 +616,7 @@ async function requestApiFootball({
       "FOOTBALL_API_KEY non configurata sul backend.",
     );
     error.statusCode = 503;
+    error.code = 'FOOTBALL_PROVIDER_KEY_MISSING';
     throw error;
   }
 
