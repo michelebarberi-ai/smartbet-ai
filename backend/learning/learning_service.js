@@ -140,16 +140,20 @@ class LearningService {
 
   // P23B2A: admin creates opaque, scoped device credentials; the admin key
   // must never be distributed to any mobile app.
-  async provisionMobileClient() {
+  async provisionMobileClient({aiAccess = false} = {}) {
+    if (typeof aiAccess !== 'boolean') throw new Error('Invalid token scope');
     await this.repository.initialize();
     const clientId = crypto.randomUUID();
     const token = crypto.randomBytes(32).toString('base64url');
     const expiresAt = new Date(this.now().getTime() + 30 * 24 * 60 * 60 * 1000);
+    const scopes = aiAccess
+      ? 'learning:predictions ai:analyze'
+      : 'learning:predictions';
     await this.repository.insertClientCredential({
-      clientId, tokenHash: mobileTokenHash(token), expiresAt,
+      clientId, tokenHash: mobileTokenHash(token), expiresAt, scopes,
     });
     return {success: true, clientId, token, expiresAt: expiresAt.toISOString(),
-      scope: 'learning:predictions', expiresInDays: 30};
+      scope: scopes, expiresInDays: 30};
   }
 
   async authenticateMobileToken(token) {
