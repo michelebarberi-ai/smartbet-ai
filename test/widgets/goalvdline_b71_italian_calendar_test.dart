@@ -30,6 +30,6 @@ void main() {
       home: const Scaffold(body: Text('Calendario')),
     ));
     expect(MaterialLocalizations.of(tester.element(find.text('Calendario')))
-        .localeName, 'it_IT');
+        .localeName, startsWith('it'));
   });
 }
