@@ -6,7 +6,15 @@
 - Existing production branch: `production` (unchanged).
 - Existing staging branch: `smartbet-b45-staging` (expires 2026-11-30).
 - `sb_learning_predictions_v1` exists and currently accepts ONLY `smartBet` and `diego`.
-- No database writes, DDL, purchases, Render deploys, or TestFlight uploads were executed by this change.
+- **Staging migration applied 18 Nov 2026** to the existing branch `smartbet-b45-staging` only.
+- Verified `simulator_input_source`, engine CHECK (smartBet/diego/simulator),
+  provenance CHECK and original uniqueness constraint.
+- The staging table had 0 rows before and after. A temporary-table transaction
+  accepted the two original engines and simulator with valid xG sources, while
+  rejecting simulator records with missing/invalid source and legacy records
+  with an unexpected source. No permanent prediction rows were added.
+- Production schema remains unchanged (only SmartBet/Diego). No purchase, Render
+  deploy, or TestFlight upload was executed.
 
 ## Implemented on the feature branch
 
@@ -27,10 +35,10 @@
 
 ## Manual deployment sequence — NOT authorized by this code change
 
-1. Review `backend/learning/migrations/b66_simulator_ingest.sql`.
-   It adds `simulator_input_source` and replaces the engine CHECK constraint.
-   Apply on staging **only with explicit approval**. Confirm the old
-   `smartBet` and `diego` records and constraints remain intact.
+1. **Done, staging only.** Reviewed and applied
+   `backend/learning/migrations/b66_simulator_ingest.sql` on
+   `smartbet-b45-staging`; constraints and compatibility were checked.
+   The existing staging branch expires 2026-11-30.
 2. In staging, deploy the backend code on existing infrastructure with
    `LEARNING_SIMULATOR_SCHEMA_READY=false` and
    `LEARNING_SIMULATOR_INGEST_ENABLED=false`. Do not enable new paid services.
@@ -59,6 +67,19 @@
 - Neither a high MEI nor paired Brier results promotes an engine into live picks.
 - Central league-by-league MEI will require verified competition metadata
   collected server-side; this change does not invent that mapping.
+
+## GitHub-only TestFlight release preparation
+
+- `.github/workflows/ios-testflight.yml` now recognizes only
+  `release/b66-testflight` with an exact push commit message
+  `release(build66): authorize TestFlight upload`.
+- The Build 66 release must pin `version: 1.2.5+66` in `pubspec.yaml`.
+- The backend and full Flutter regressions run before iOS signing/upload.
+- The B66 feature branch is not a TestFlight trigger. No release branch has
+  been created by this preparation step.
+- Node release contract regression in
+  `backend/test/b66_release_workflow_contract.test.js` guards this behavior.
+- Publishing remains GitHub-only; do not manually use a Mac or Codemagic.
 
 ## Quality verification
 
