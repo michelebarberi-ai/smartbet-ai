@@ -82,7 +82,7 @@ class _GoalVdLineThreeBrainsExpansionState
     );
     final diegoMarket = dual?.comparison.diegoMarket ?? 'N/D';
     final diegoProbability = dual?.comparison.diegoProbability;
-    final metaRecords = SmartBetAnalysisHistoryStore.instance
+    final historicMeta = SmartBetAnalysisHistoryStore.instance
         .recordsForFixture(widget.fixtureId)
         .where((record) =>
             record.engine == SmartBetAnalysisEngine.metaAi &&
@@ -90,6 +90,11 @@ class _GoalVdLineThreeBrainsExpansionState
             record.probability != null)
         .toList()
       ..sort((a, b) => b.probability!.compareTo(a.probability!));
+    // B70: a historical SHADOW record is not proof the current
+    // analysis has a second parent engine. No Diego, no current synthesis.
+    final metaRecords = diego == null
+        ? <SmartBetAnalysisRecord>[]
+        : historicMeta;
     final selectedMetaMarket = normalizeAnalysisMarket(widget.selectedMarket);
     SmartBetAnalysisRecord? selectedMeta;
     for (final entry in metaRecords) {
@@ -135,15 +140,27 @@ class _GoalVdLineThreeBrainsExpansionState
           const SizedBox(height: 5),
           _readout(
             '4° Meta AI',
-            metaRecords.isEmpty
-                ? 'Non valutabile: servono SmartBet e Diego sullo stesso mercato'
-                : selectedMeta == null
+            diego == null
+                ? 'Non disponibile: Diego AI senza dati per questa analisi'
+                : metaRecords.isEmpty
+                    ? 'Non valutabile: servono SmartBet e Diego sullo stesso mercato'
+                    : selectedMeta == null
                     ? 'Sintesi SHADOW registrata su ${metaRecords.length} mercati'
                     : 'Sintesi ${_market(selectedMeta.market)} (SHADOW)',
             selectedMeta == null
                 ? (metaRecords.isEmpty ? 'N/D' : '${metaRecords.length} mercati')
                 : _pct(selectedMeta.probability!),
           ),
+          if (diego == null && historicMeta.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Esiste uno storico SHADOW della partita, ma non viene '
+                'presentato come una nuova sintesi: Diego non è '
+                'disponibile nell’analisi corrente.',
+                style: TextStyle(color: Colors.amberAccent, fontSize: 10),
+              ),
+            ),
           if (metaRecords.isNotEmpty) ...[
             Text(
               'Quarto cervello: somma ponderata delle probabilità '
