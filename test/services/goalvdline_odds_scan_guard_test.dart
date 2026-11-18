@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartbet_ai_new/services/goalvdline_odds_scan_guard.dart';
+import 'package:smartbet_ai_new/services/goalvdline_odds_scan_GoalVdLineOddsScanGuard.dart';
 import 'package:smartbet_ai_new/services/odds_service.dart';
-
-const guard = GoalVdLineOddsScanGuard;
 
 void main() {
   test('B69: a real empty feed is not a systemic failure', () {
@@ -10,8 +8,8 @@ void main() {
       const OddsLookupDiagnostic(status: OddsLookupStatus.noFeedRows),
       const OddsLookupDiagnostic(status: OddsLookupStatus.noBookmakers),
     ];
-    expect(guard.fullOutageBatch(missing), isFalse);
-    expect(guard.stopAfterBatch(diagnostics: missing,
+    expect(GoalVdLineOddsScanGuard.fullOutageBatch(missing), isFalse);
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: missing,
         consecutiveFailedBatches: 999), isFalse);
   });
 
@@ -21,10 +19,10 @@ void main() {
           status: OddsLookupStatus.upstreamUnavailable, httpStatus: 502),
       const OddsLookupDiagnostic(status: OddsLookupStatus.available),
     ];
-    expect(guard.fullOutageBatch(mixed), isFalse);
-    expect(guard.stopAfterBatch(diagnostics: mixed,
+    expect(GoalVdLineOddsScanGuard.fullOutageBatch(mixed), isFalse);
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: mixed,
         consecutiveFailedBatches: 2), isFalse);
-    expect(guard.stopAfterBatch(diagnostics: [mixed.first],
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: [mixed.first],
         consecutiveFailedBatches: 2), isFalse);
   });
 
@@ -35,9 +33,9 @@ void main() {
       const OddsLookupDiagnostic(
           status: OddsLookupStatus.upstreamUnavailable, httpStatus: 503),
     ];
-    expect(guard.stopAfterBatch(diagnostics: unavailable,
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: unavailable,
         consecutiveFailedBatches: 1), isFalse);
-    expect(guard.stopAfterBatch(diagnostics: unavailable,
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: unavailable,
         consecutiveFailedBatches: 2), isTrue);
   });
 
@@ -52,7 +50,7 @@ void main() {
         OddsLookupDiagnostic(status: status),
         OddsLookupDiagnostic(status: status),
       ];
-      expect(guard.stopAfterBatch(diagnostics: diagnoses,
+      expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: diagnoses,
           consecutiveFailedBatches: 1), isTrue);
     }
   });
@@ -62,9 +60,9 @@ void main() {
       const OddsLookupDiagnostic(status: OddsLookupStatus.networkError),
       const OddsLookupDiagnostic(status: OddsLookupStatus.networkError),
     ];
-    expect(guard.stopAfterBatch(diagnostics: network,
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: network,
         consecutiveFailedBatches: 1), isFalse);
-    expect(guard.stopAfterBatch(diagnostics: network,
+    expect(GoalVdLineOddsScanGuard.stopAfterBatch(diagnostics: network,
         consecutiveFailedBatches: 2), isTrue);
   });
 
@@ -75,6 +73,6 @@ void main() {
       const OddsLookupDiagnostic(
           status: OddsLookupStatus.upstreamUnavailable, httpStatus: 404),
     ];
-    expect(guard.fullOutageBatch(bad), isFalse);
+    expect(GoalVdLineOddsScanGuard.fullOutageBatch(bad), isFalse);
   });
 }
