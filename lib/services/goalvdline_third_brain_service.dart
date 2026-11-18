@@ -82,11 +82,11 @@ class GoalVdLineThirdBrainService {
     // Input proprio: calcolato da risultati FT grezzi per campo.
     // Quando non disponibile, mantieni la compatibilita' con la
     // sorgente ereditata, ma dichiarandola esplicitamente.
-    final h = independent ? ownInput!.expectedHomeGoals :
+    final h = independent ? ownInput.expectedHomeGoals :
         useSmartBet ? smartBet.expectedHomeGoals : diego!.expectedHomeGoals;
-    final a = independent ? ownInput!.expectedAwayGoals :
+    final a = independent ? ownInput.expectedAwayGoals :
         useSmartBet ? smartBet.expectedAwayGoals : diego!.expectedAwayGoals;
-    final quality = independent ? ownInput!.dataConfidence :
+    final quality = independent ? ownInput.dataConfidence :
         useSmartBet ? smartBet.dataConfidence : diego!.dataConfidence;
     // Correlazione condivisa prudente, non calibrata: scenario di prova.
     final common = math.min(0.10, math.min(h, a) * 0.10);
@@ -127,9 +127,9 @@ class GoalVdLineThirdBrainService {
         return p != 0 ? p : x.market.compareTo(y.market);
       });
     return GoalVdLineThirdBrainReport(
-      inputSource: independent ? ownInput!.source :
+      inputSource: independent ? ownInput.source :
           useSmartBet ? 'SmartBet AI' : 'Diego AI',
-      modelVersion: independent ? ownInput!.modelVersion :
+      modelVersion: independent ? ownInput.modelVersion :
           'third-brain-${SmartBetMatchSimulationService.modelVersion}',
       dataConfidence: quality > 0 ? quality : null,
       homeExpectedGoals: h,
