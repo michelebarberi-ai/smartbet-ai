@@ -25,8 +25,8 @@ test('B69: only a release branch with exact authorization can publish to TestFli
 });
 
 test('B69: full backend and Flutter tests run before signing and upload', () => {
-  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69 full backend regression before signing');
-  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69 full Flutter regression before signing');
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70 full Flutter regression before signing');
   const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend > 0);
   assert.ok(flutter > backend);
@@ -39,5 +39,5 @@ test('B69: full backend and Flutter tests run before signing and upload', () => 
 
 test('B69: feature base retains last version until release branch is prepared', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:68|69)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:68|69|70)$/m);
 });
