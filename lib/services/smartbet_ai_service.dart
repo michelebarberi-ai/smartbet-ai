@@ -8,6 +8,7 @@ import '../ai/smartcore.dart';
 import '../ai/decision_engine.dart';
 
 import 'goalvdline_comparison_store.dart';
+import 'goalvdline_mobile_token_vault.dart';
 import 'goalvdline_shadow_service.dart';
 import 'match_dossier_builder.dart';
 import 'smartbet_contextual_shadow_capture_service.dart';
@@ -213,6 +214,28 @@ class SmartBetAiService {
   // ============================================================
 
   static const String backendUrl = 'https://smartbet-ai-y6gw.onrender.com';
+
+  // B65: rollout autorizzato per le installazioni gia provviste di token.
+  // OFF per default: non estendere silenziosamente la credenziale learning
+  // a un secondo servizio finche informativa, client e backend non siano pronti.
+  static const bool _enableMobileAuthForAi =
+      bool.fromEnvironment('GOALVDLINE_AI_MOBILE_AUTH', defaultValue: false);
+
+  static Future<Map<String, String>> _aiRequestHeaders() async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (!_enableMobileAuthForAi) return headers;
+    if (!backendUrl.startsWith('https://')) return headers;
+    try {
+      final token = await GoalVdLineMobileTokenVault().read();
+      if (token != null && GoalVdLineMobileTokenVault.validToken(token)) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    } catch (_) {
+      // Accesso Keychain non disponibile: nessun token inventato.
+      // Il backend puo restituire 401 quando il rollout verra attivato.
+    }
+    return headers;
+  }
   // ============================================================
   // ANALISI PARTITA
   // ============================================================
@@ -452,7 +475,7 @@ class SmartBetAiService {
 
       final response = await _client.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: await _aiRequestHeaders(),
         body: body,
       );
 
@@ -676,7 +699,7 @@ class SmartBetAiService {
 
       final response = await _client.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: await _aiRequestHeaders(),
         body: jsonEncode({
           'homeTeam': match.homeTeam,
           'awayTeam': match.awayTeam,
