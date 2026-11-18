@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartbet_ai_new/services/goalvdline_odds_scan_GoalVdLineOddsScanGuard.dart';
+import 'package:smartbet_ai_new/services/goalvdline_odds_scan_guard.dart';
 import 'package:smartbet_ai_new/services/odds_service.dart';
 
 void main() {
