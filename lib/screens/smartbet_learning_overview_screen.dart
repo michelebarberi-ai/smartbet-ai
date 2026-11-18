@@ -8,10 +8,12 @@ import '../services/smartbet_learning_overview_service.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_market_ease_index_service.dart';
+import '../services/smartbet_three_engine_comparison_service.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
 import '../widgets/smartbet_market_ease_index_panel.dart';
+import '../widgets/smartbet_three_engine_comparison_panel.dart';
 import '../widgets/smartbet_league_reliability_ranking_panel.dart';
 import 'smartbet_learning_monitor_screen.dart';
 
@@ -31,6 +33,7 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
   MarketEaseIndexReport? _marketEaseReport;
+  SmartBetThreeEngineComparisonReport? _threeEngineReport;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -67,6 +70,8 @@ class _SmartBetLearningOverviewScreenState
       // B66: strictly read-only MEI audit, never coupled to live picks.
       final marketEaseReport = const SmartBetMarketEaseIndexService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
+      final threeEngineReport = const SmartBetThreeEngineComparisonService()
+          .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       // B56: purely read-only historical quoted-pick audit.
       final quoteLabReport = const QuoteLabHistoricalService().evaluate(
         history: markets.records,
@@ -76,6 +81,7 @@ class _SmartBetLearningOverviewScreenState
       setState(() {
         _shadowMarketReport = shadowReport;
         _marketEaseReport = marketEaseReport;
+        _threeEngineReport = threeEngineReport;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -206,6 +212,8 @@ class _SmartBetLearningOverviewScreenState
                     ),
                   ]),
                 ],
+                if (_threeEngineReport != null)
+                  SmartBetThreeEngineComparisonPanel(report: _threeEngineReport!),
                 if (_marketEaseReport != null)
                   SmartBetMarketEaseIndexPanel(report: _marketEaseReport!),
                 if (_leagueMarketReport != null) ...[
