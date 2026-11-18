@@ -9,6 +9,8 @@ import '../services/smartbet_league_market_reliability_service.dart';
 import '../services/smartbet_league_market_shadow_service.dart';
 import '../services/smartbet_market_ease_index_service.dart';
 import '../widgets/smartbet_market_ease_index_panel.dart';
+import '../services/goalvdline_three_engine_paired_comparison_service.dart';
+import '../widgets/goalvdline_three_engine_paired_comparison_panel.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import '../widgets/smartbet_diagnostic_export_button.dart';
 import '../widgets/smartbet_league_market_reliability_panel.dart';
@@ -31,6 +33,7 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLeagueMarketReliabilityReport? _leagueMarketReport;
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
   SmartBetMarketEaseIndexReport? _marketEaseIndexReport;
+  GoalVdLinePairedThreeEngineReport? _threeEngineReport;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -70,6 +73,13 @@ class _SmartBetLearningOverviewScreenState
         records: markets.records,
         asOf: DateTime.now().toUtc(),
       );
+      // B65: valutazione paired su fixture e mercati identici,
+      // solo storico locale risolto; nessun provider o modifica dei coupon.
+      final threeEngineReport =
+          const GoalVdLineThreeEnginePairedComparisonService().evaluate(
+        records: markets.records,
+        asOf: DateTime.now().toUtc(),
+      );
       // B56: purely read-only historical quoted-pick audit.
       final quoteLabReport = const QuoteLabHistoricalService().evaluate(
         history: markets.records,
@@ -79,6 +89,7 @@ class _SmartBetLearningOverviewScreenState
       setState(() {
         _shadowMarketReport = shadowReport;
         _marketEaseIndexReport = marketEaseReport;
+        _threeEngineReport = threeEngineReport;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -220,6 +231,10 @@ class _SmartBetLearningOverviewScreenState
                   if (_marketEaseIndexReport != null)
                     SmartBetMarketEaseIndexPanel(
                       report: _marketEaseIndexReport!,
+                    ),
+                  if (_threeEngineReport != null)
+                    GoalVdLineThreeEnginePairedComparisonPanel(
+                      report: _threeEngineReport!,
                     ),
                 ],
                 if (_quoteLabReport != null)
