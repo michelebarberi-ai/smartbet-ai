@@ -34,6 +34,9 @@ class _SmartBetLearningOverviewScreenState
   SmartBetLeagueMarketShadowReport? _shadowMarketReport;
   MarketEaseIndexReport? _marketEaseReport;
   SmartBetThreeEngineComparisonReport? _threeEngineReport;
+  int _metaRecorded = 0;
+  int _metaResolved = 0;
+  int _metaDistinctFixtures = 0;
   QuoteLabHistoricalReport? _quoteLabReport;
   bool? _enabled;
   bool _loading = true;
@@ -70,6 +73,15 @@ class _SmartBetLearningOverviewScreenState
       // B66: strictly read-only MEI audit, never coupled to live picks.
       final marketEaseReport = const SmartBetMarketEaseIndexService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
+      final metaHistory = markets.records.where(
+        (r) => r.engine == SmartBetAnalysisEngine.metaAi &&
+            r.prospectiveEligible,
+      ).toList();
+      final metaResolved = metaHistory.where((r) =>
+          r.hasActualResult &&
+          (r.status == SmartBetAnalysisStatus.correct ||
+           r.status == SmartBetAnalysisStatus.wrong) &&
+          r.outcomeKnownBy != null).length;
       final threeEngineReport = const SmartBetThreeEngineComparisonService()
           .evaluate(records: markets.records, asOf: DateTime.now().toUtc());
       // B56: purely read-only historical quoted-pick audit.
@@ -82,6 +94,9 @@ class _SmartBetLearningOverviewScreenState
         _shadowMarketReport = shadowReport;
         _marketEaseReport = marketEaseReport;
         _threeEngineReport = threeEngineReport;
+        _metaRecorded = metaHistory.length;
+        _metaResolved = metaResolved;
+        _metaDistinctFixtures = metaHistory.map((r) => r.fixtureId).toSet().length;
         _quoteLabReport = quoteLabReport;
         _enabled = enabled;
         _summary = snapshot;
@@ -212,6 +227,22 @@ class _SmartBetLearningOverviewScreenState
                     ),
                   ]),
                 ],
+                _panel('Quarto cervello — Meta AI (SHADOW)', [
+                  _stat('Previsioni sintetizzate', '$_metaRecorded'),
+                  _stat('Partite distinte', '$_metaDistinctFixtures'),
+                  _stat('Pronostici con esito osservato', '$_metaResolved'),
+                  const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                      'Il quarto cervello combina SmartBet, Diego e la '
+                      'simulazione matematica solo sugli stessi mercati. '
+                      'Il simulatore non è contato come fonte indipendente. '
+                      'I pesi storici MEI richiedono campioni validi, '
+                      'altrimenti la sintesi rimane esplorativa. '
+                      'Nessun intervento sulle schedine.',
+                    ),
+                  ),
+                ]),
                 if (_threeEngineReport != null)
                   SmartBetThreeEngineComparisonPanel(report: _threeEngineReport!),
                 if (_marketEaseReport != null)
