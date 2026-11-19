@@ -73,8 +73,7 @@ jobs:
        github.ref != 'refs/heads/release/b70-testflight' &&
        github.ref != 'refs/heads/release/b71-testflight' &&
        github.ref != 'refs/heads/release/b73-testflight' &&
-       github.ref != 'refs/heads/release/b74-testflight' &&
-       github.ref != 'refs/heads/release/b75-testflight') ||
+       github.ref != 'refs/heads/release/b74-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
