@@ -43,13 +43,7 @@ jobs:
             if openssl cms -verify -inform DER -noverify \
                 -in "$RUNNER_TEMP/GoalVdLine.mobileprovision" \
                 -out "$RUNNER_TEMP/GoalVdLine.plist" 2>/dev/null; then
-              python3 - <<'PY'
-import os, plistlib
-with open(os.environ['RUNNER_TEMP']+'/GoalVdLine.plist','rb') as f:
-    p=plistlib.load(f)
-value=p.get('Entitlements',{}).get('aps-environment')
-print('Profile APNs production capability:', value=='production')
-PY
+              python3 -c "import os,plistlib; p=plistlib.load(open(os.environ['RUNNER_TEMP']+'/GoalVdLine.plist','rb')); print('Profile APNs production capability:',p.get('Entitlements',{}).get('aps-environment')=='production')"
             else
               echo "Profile format could not be inspected on Linux; no signing changes made."
             fi
