@@ -20,7 +20,9 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: ${{ github.repository == 'michelebarberi-ai/smartbet-ai' }}
+    # Missing variable means no runner and no API usage. Enable only after
+    # APNs signing, Neon, worker token, and blocked-screen test succeed.
+    if: ${{ github.repository == 'michelebarberi-ai/smartbet-ai' && vars.DAILY_PALINSESTO_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - name: Dispatch subscribed calendar summary (never betting coupons)
