@@ -31,7 +31,7 @@ class GoalVdLineThreeCouponSystem {
       pick.odd.isFinite &&
       GoalVdLineQuotePolicy.isPlayable(pick.odd);
 
-  /// Restituisce esattamente tre varianti distinte, oppure null.
+  /// Restituisce da una a tre varianti valide, senza inventare mercati.
   /// Non abbassa la soglia e non forza mercati inesistenti.
   static List<List<GoalVdLineSystemSelection>>? create({
     required List<GoalVdLineSystemSelection> original,
@@ -75,7 +75,7 @@ class GoalVdLineThreeCouponSystem {
       if (valid.isNotEmpty) options[base.fixtureId] = valid;
     }
 
-    if (options.isEmpty) return null;
+    if (options.isEmpty) return [List.of(original)];
     final uncertainFixtures = original
         .where((base) => options.containsKey(base.fixtureId))
         .map((base) => base.fixtureId)
@@ -101,12 +101,11 @@ class GoalVdLineThreeCouponSystem {
 
     String signature(List<GoalVdLineSystemSelection> coupon) =>
         coupon.map((e) => '${e.fixtureId}|${e.market}').join(';');
-    final signatures = <String>{
-      signature(original),
-      signature(balanced),
-      signature(adventurous),
-    };
-    if (signatures.length != 3) return null;
-    return [List.of(original), balanced, adventurous];
+    final result = <List<GoalVdLineSystemSelection>>[List.of(original)];
+    final used = <String>{signature(original)};
+    for (final variant in [balanced, adventurous]) {
+      if (used.add(signature(variant))) result.add(variant);
+    }
+    return result;
   }
 }
