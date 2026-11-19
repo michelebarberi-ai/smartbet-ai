@@ -45,9 +45,11 @@ test('B73: a protected morning dispatcher is not the old AutoSchedina worker',()
   assert.match(routes,/x-goalvdline-palinsesto-worker-token/);
   assert.doesNotMatch(source('backend/daily_palinsesto/dispatch.js'),
     /auto_coupon\/generation_coordinator|generateOfficialCoupon/);
-  const ios=source('lib/services/goalvdline_palinsesto_digest_registration.dart');
-  assert.doesNotMatch(ios,/\/auto-coupon\/|\/auto_coupon\/|generateOfficialCoupon/);
-  assert.match(ios,/requestDeviceToken/);
+  // iPhone client code is validated in the Flutter feature branch; this
+  // lean Render integration contains only Node and server routes.
+  const backend=source('backend/daily_palinsesto/dispatch.js');
+  assert.doesNotMatch(backend,/\/auto-coupon\/|generateOfficialCoupon/);
+  assert.match(backend,/sendDailyPalinsestoPush/);
 });
 
 test('B73: cron needs HTTPS and exact protected route; never guesses secrets',()=>{
