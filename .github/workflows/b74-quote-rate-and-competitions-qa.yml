@@ -1,0 +1,30 @@
+name: B74 quote pacing and competition visibility QA
+
+on:
+  push:
+    branches: [feature/b74-quota-league-visibility]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goalvdline-b74-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter setup
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter analysis
+        run: flutter analyze --no-pub --no-fatal-infos
+      - name: Full Flutter tests including B74 burst regression
+        run: flutter test --no-pub --reporter compact
