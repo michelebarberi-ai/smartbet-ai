@@ -1,0 +1,21 @@
+name: B73 Apple APNs capability read-only audit
+on:
+  push:
+    branches: [feature/b73-daily-palinsesto-push-delivery]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apple-bundle-capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read current Apple bundle push capability without changing profiles
+        env:
+          APPSTORE_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_PRIVATE_KEY_BASE64 }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          node --check backend/apple/apns_capability_audit.js
+          node backend/apple/apns_capability_audit.js
