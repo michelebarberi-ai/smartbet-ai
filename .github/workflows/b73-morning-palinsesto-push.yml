@@ -1,0 +1,35 @@
+name: GoalVdLine B73 daily palinsesto APNs (opt-in only)
+
+on:
+  schedule:
+    # GitHub cron is UTC: hourly from 05:05 to 10:05.
+    # The server enforces each subscriber's Europe/Rome morning time.
+    - cron: '5 5-10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b73-daily-palinsesto-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # Remains off until the real Apple production profile and APNs credentials
+    # have been verified. No free-tier runner minutes while disabled.
+    if: ${{ github.repository == 'michelebarberi-ai/smartbet-ai' && vars.DAILY_PALINSESTO_SCHEDULE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch subscribed calendar summary only (never betting coupons)
+        env:
+          DAILY_PALINSESTO_DISPATCH_URL: ${{ secrets.DAILY_PALINSESTO_DISPATCH_URL }}
+          DAILY_PALINSESTO_WORKER_TOKEN: ${{ secrets.DAILY_PALINSESTO_WORKER_TOKEN }}
+        run: |
+          if [ -z "$DAILY_PALINSESTO_DISPATCH_URL" ] || [ -z "$DAILY_PALINSESTO_WORKER_TOKEN" ]; then
+            echo "::error::B73 GitHub dispatch secrets are missing. No notification attempted."
+            exit 1
+          fi
+          node backend/daily_palinsesto/trigger_dispatch.js
