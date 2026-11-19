@@ -27,8 +27,8 @@ test('B68: only deliberate release/b68-testflight authorization uploads iOS', ()
 });
 
 test('B68: all regressions run before signing', () => {
-  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71 full backend regression before signing');
-  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71 full Flutter regression before signing');
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71/B73 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71/B73 full Flutter regression before signing');
   const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend >= 0);
   assert.ok(flutter > backend);
@@ -41,5 +41,5 @@ test('B68: all regressions run before signing', () => {
 
 test('B68: candidate metadata never silently regresses existing build numbers', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:67|68|69|70|71)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:67|68|69|70|71|73)$/m);
 });
