@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'api_rate_limiter.dart';
 
 class TeamFormData {
   final int teamId;
@@ -160,6 +161,10 @@ class TeamFormService {
 
   static const Duration _cacheDuration = Duration(minutes: 30);
 
+  // Multiple matches can refer to the same team. Share the real request,
+  // including between parallel preliminary analysis batches.
+  static final Map<String, Future<TeamFormData?>> _inFlight = {};
+
   // ============================================================
   // ULTIME PARTITE
   // ============================================================
@@ -184,12 +189,42 @@ class TeamFormService {
       return cached;
     }
 
+    // Same team/last-window requested by multiple matches: one network call.
+    final existing = _inFlight[cacheKey];
+    if (existing != null) return existing;
+    final operation = _fetchTeamForm(teamId: teamId, last: last,
+      cacheKey: cacheKey);
+    _inFlight[cacheKey] = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_inFlight[cacheKey], operation)) {
+        _inFlight.remove(cacheKey);
+      }
+    }
+  }
+
+  Future<TeamFormData?> _fetchTeamForm({
+    required int teamId,
+    required int last,
+    required String cacheKey,
+  }) async {
+    if (ApiRateLimiter.isCoolingDown) return null;
     final uri = Uri.parse('${ApiConfig.baseUrl}/fixtures').replace(
       queryParameters: {'team': teamId.toString(), 'last': last.toString()},
     );
 
     try {
-      final response = await _client.get(uri);
+      await ApiRateLimiter.wait();
+      // Another in-flight team request may have reported provider throttling.
+      if (ApiRateLimiter.isCoolingDown) return null;
+      final response = await _client.get(uri)
+          .timeout(const Duration(seconds: 18));
+      ApiRateLimiter.noteProviderResponse(
+        statusCode: response.statusCode,
+        body: response.statusCode == 200 ? '' : response.body,
+        retryAfter: response.headers['retry-after'],
+      );
 
       if (response.statusCode != 200) {
         return null;
