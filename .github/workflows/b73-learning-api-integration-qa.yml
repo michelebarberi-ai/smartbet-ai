@@ -31,3 +31,8 @@ jobs:
           for f in backend/daily_palinsesto/*.js; do node --check "$f"; done
       - name: Complete backend regression
         run: npm --prefix backend test
+      - name: Check published Render endpoint (public readiness booleans only)
+        run: |
+          curl --fail --silent --show-error --max-time 45 --retry 2 \
+            https://goalvdline-learning-api.onrender.com/learning/v1/status \
+            | node -e "let x='';process.stdin.on('data',d=>x+=d);process.stdin.on('end',()=>{let j=JSON.parse(x);if(j.service!=='SmartBet Central Learning'||typeof j.dailyPalinsestoRegistrationEnabled!=='boolean'||typeof j.dailyPalinsestoPushEnabled!=='boolean')process.exit(2);console.log(JSON.stringify({service:j.service,registrationReady:j.dailyPalinsestoRegistrationEnabled,pushReady:j.dailyPalinsestoPushEnabled}));})"
