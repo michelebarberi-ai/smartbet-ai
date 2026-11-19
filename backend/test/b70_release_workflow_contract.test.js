@@ -22,8 +22,8 @@ test('B70: exact release authorization required; no feature push uploads', () =>
 });
 
 test('B70: release runs full backend and Flutter regression before signing', () => {
-  const backend = wf.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71 full backend regression before signing');
-  const flutter = wf.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71 full Flutter regression before signing');
+  const backend = wf.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71/B73 full backend regression before signing');
+  const flutter = wf.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71/B73 full Flutter regression before signing');
   const signing = wf.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend > 0 && flutter > backend && signing > flutter);
   assert.match(wf.slice(backend, flutter), /npm --prefix backend test/);
@@ -43,5 +43,5 @@ test('B70: weekend, early Italian screen and competition-diverse shortlist wired
 
 test('B70: feature base must retain valid version prior to release', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:69|70|71)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:69|70|71|73)$/m);
 });
