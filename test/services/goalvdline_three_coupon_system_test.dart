@@ -50,16 +50,15 @@ void main() {
     expect(result[2][1].market, 'X2');
   });
 
-  test('nessuna forzatura se non ci sono tre varianti credibili', () {
-    expect(
-      GoalVdLineThreeCouponSystem.create(
-        original: [pick(1, '1X', 77), pick(2, '1', 95), pick(3, '2', 94)],
-        alternatives: {
-          1: [pick(1, 'GOAL', 66)],
-        },
-      ),
-      isNull,
+  test('una sola alternativa produce CORE e una variante valida', () {
+    final coupons = GoalVdLineThreeCouponSystem.create(
+      original: [pick(1, '1X', 77), pick(2, '1', 95), pick(3, '2', 94)],
+      alternatives: {1: [pick(1, 'GOAL', 66)]},
     );
+    expect(coupons, isNotNull);
+    expect(coupons!.length, 2);
+    expect(coupons[0][0].market, '1X');
+    expect(coupons[1][0].market, 'GOAL');
   });
 
   test('mercati sotto 65, quote errate e duplicati vengono scartati', () {
@@ -71,7 +70,7 @@ void main() {
           1: [pick(1, 'GOAL', 64), pick(1, 'X', 70, odd: 0)],
         },
       ),
-      isNull,
+      hasLength(1),
     );
     expect(
       GoalVdLineThreeCouponSystem.create(
@@ -119,7 +118,7 @@ void main() {
     };
     expect(GoalVdLineThreeCouponSystem.create(
       original: original, alternatives: invalidAlternatives,
-    ), isNull);
+    ), hasLength(1));
     expect(GoalVdLineThreeCouponSystem.create(
       original: [pick(1, '1X', 77, odd: 1.19), original[1], original[2]],
       alternatives: {1: [pick(1, 'GOAL', 70, odd: 1.21),

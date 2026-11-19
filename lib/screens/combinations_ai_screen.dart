@@ -513,7 +513,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       );
 
       // Per la scelta SmartBet restano validi i filtri reali.
-      if (probability <= 0 || bestOdd == null || bestOdd.odd <= _minimumOdd) {
+      // A quoted long shot is not a recommended alternative to a strong
+      // sporting prediction, even when the user disables the display filter.
+      if (probability < math.max(65, _minimumMarketProbability) ||
+          bestOdd == null || bestOdd.odd <= _minimumOdd) {
         continue;
       }
 
@@ -2652,6 +2655,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               minimumOdd: _minimumOdd,
             );
             if (multiPick == null ||
+                multiPick.probability < 65 ||
                 !_acceptsMarketProbability(multiPick.probability)) {
               continue;
             }

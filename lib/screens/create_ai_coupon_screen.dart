@@ -3197,6 +3197,14 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       final matchesById = <int, MatchModel>{
         for (final item in originalPicks) item.match.fixtureId: item.match,
       };
+      if (coupons.length < 3 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Disponibili ${coupons.length} schedine valide su 3: '
+            'nessun mercato o quota è stato inventato.',
+          )),
+        );
+      }
       await _showThreeSystemCoupons(coupons, matchesById);
     } catch (error) {
       if (mounted) {
@@ -3221,7 +3229,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   ) async {
     const names = ['ORIGINALE', 'ALTERNATIVA 1', 'ALTERNATIVA 2'];
     String summary() {
-      final buffer = StringBuffer('GOALVDLINE — 3 SCHEDINE, STESSE PARTITE\n');
+      final buffer = StringBuffer('GOALVDLINE — ${coupons.length} SCHEDINE, STESSE PARTITE\n');
       for (var index = 0; index < coupons.length; index++) {
         final coupon = coupons[index];
         final total = coupon.fold<double>(

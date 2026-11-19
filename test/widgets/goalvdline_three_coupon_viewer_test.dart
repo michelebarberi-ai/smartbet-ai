@@ -127,7 +127,7 @@ void main() {
       (tester) async {
     var shared = 0;
     await mount(tester, () => shared++);
-    await tester.tap(find.text('CONDIVIDI LE 3 SCHEDINE'));
+    await tester.tap(find.text('CONDIVIDI 3 SCHEDINE'));
     expect(shared, 1);
   });
 }

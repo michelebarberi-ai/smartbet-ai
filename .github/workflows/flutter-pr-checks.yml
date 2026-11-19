@@ -1,0 +1,48 @@
+name: SmartBet Flutter PR Checks
+
+on:
+  pull_request:
+    branches:
+      - release/b74-testflight
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-tests:
+    name: Flutter tests (no TestFlight)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      - name: Install Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Prepare non-secret test environment
+        run: |
+          if [ ! -f .env ]; then
+            printf 'FOOTBALL_DATA_API_KEY=ci-placeholder\n' > .env
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Validate three-coupon variants
+        run: flutter test --no-pub --reporter compact test/services/goalvdline_three_coupon_system_test.dart
+
+      - name: Run full Flutter regression suite
+        run: flutter test --no-pub --reporter compact
