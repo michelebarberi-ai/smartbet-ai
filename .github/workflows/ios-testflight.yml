@@ -353,6 +353,20 @@ jobs:
           echo "Provisioning profile: $PROFILE_NAME"
           echo "UUID: $PROFILE_UUID"
 
+          # B73: a notification permission prompt alone is NOT APNs.
+          # Reject the old Store profile, which lacks aps-environment.
+          if [[ "$GITHUB_REF" == "refs/heads/release/b73-testflight" ]]; then
+            APNS_ENTITLEMENT="$(security cms -D -i "$PROFILE_PATH" |
+              plutil -extract Entitlements.aps-environment raw - 2>/dev/null || true)"
+            if [[ "$APNS_ENTITLEMENT" != "production" ]]; then
+              echo "ERRORE: il profilo App Store non include aps-environment=production."
+              echo "Abilitare Push Notifications per il Bundle ID Apple e"
+              echo "rigenerare il profilo App Store prima della Build 73."
+              exit 1
+            fi
+            echo "APNs production entitlement verificato nel profilo di distribuzione."
+          fi
+
           echo "=== IDENTITA DI FIRMA ==="
           security find-identity             -v             -p codesigning             "$KEYCHAIN_PATH"
 
