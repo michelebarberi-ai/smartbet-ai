@@ -19,8 +19,8 @@ test('B71: TestFlight cannot upload on ordinary feature pushes', () => {
 });
 
 test('B71: full regression must finish before signing/upload', () => {
-  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71 full backend regression before signing');
-  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71 full Flutter regression before signing');
+  const backend = workflow.indexOf('- name: B64/B65/B66/B67/B68/B69/B70/B71/B73 full backend regression before signing');
+  const flutter = workflow.indexOf('- name: B62/B63/B64/B65/B66/B67/B68/B69/B70/B71/B73 full Flutter regression before signing');
   const signing = workflow.indexOf('- name: Prepare App Store Connect API key');
   assert.ok(backend > 0 && flutter > backend && signing > flutter);
   assert.match(workflow.slice(backend, flutter), /npm --prefix backend test/);
@@ -31,5 +31,5 @@ test('B71: full regression must finish before signing/upload', () => {
 
 test('B71: feature version is base build 70 and release is pinned separately', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:70|71)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:70|71|73)$/m);
 });
