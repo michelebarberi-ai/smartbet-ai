@@ -17,6 +17,7 @@ import '../services/smartbet_refundable_market_candidate_service.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
 import '../services/italy_schedule_filter.dart';
+import '../services/goalvdline_combinations_fixture_policy.dart';
 import '../services/smartbet_ai_service.dart';
 import '../services/smartbet_analysis_cache.dart';
 import '../services/smartbet_local_auditor.dart';
@@ -196,7 +197,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       const SmartBetXPremiumService();
 
   bool _loading = false;
-  // Il calendario globale e' la base, il filtro Italia solo quote per fixture.
+  // B74: filtro Italia applicato prima dell'analisi sportiva; la verifica
+  // della disponibilità sui singoli bookmaker resta obbligatoria alla fine.
   bool _italyScheduleOnly = true;
   final _competitionCatalog = const FootballCompetitionCatalogService();
   Map<String, FootballCompetitionCatalogEntry> _catalogByKey = const {};
@@ -209,20 +211,26 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   int? _periodAvailableFixtureCount;
   int? _selectedAvailableFixtureCount;
 
-  bool _competitionPasses(MatchModel match) =>
-      _selectedCompetitionKeys.isEmpty ||
-      _selectedCompetitionKeys.contains('id:${match.leagueId}') ||
-      _selectedCompetitionKeys.contains(CompetitionFilterSheet.keyFor(match));
+  // Unico filtro usato da Combinazioni, X Premium, Multimercato e selettore:
+  // competizione e periodo sono verificati prima di consumare richieste API.
+  List<MatchModel> _eligibleFixtures(
+    Iterable<MatchModel> matches, {
+    Set<String>? selectedCompetitionKeys,
+  }) =>
+      GoalVdLineCombinationsFixturePolicy.eligibleMatches(
+        matches,
+        italianScheduleOnly: _italyScheduleOnly,
+        selectedCompetitionKeys:
+            selectedCompetitionKeys ?? _selectedCompetitionKeys,
+        isUpcoming: _isUpcoming,
+      );
 
-  // La verifica marca/mercato e' ESCLUSIVAMENTE finale, dopo la previsione.
+  // La verifica marca/mercato resta ESCLUSIVAMENTE finale.
   bool _marketAvailableInItalianFeed(_CombinationCandidate pick) =>
       pick.odd != null && pick.odd!.isFinite && pick.odd! > _minimumOdd &&
       pick.bookmaker != null &&
       ItalyScheduleFilter.allows(pick.match) &&
       ItalianBookmakerMarketFilter.appearsInItalianMarket(pick.bookmaker!);
-
-  List<MatchModel> _applyCompetitionFilter(List<MatchModel> matches) =>
-      matches.where(_competitionPasses).toList();
 
   bool _checkingOdds = false;
   int _processed = 0;
@@ -1250,10 +1258,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   Future<List<MatchModel>> _automaticCandidatePool({
     required bool drawOnly,
   }) async {
-    final fixtures = _applyCompetitionFilter(
-        (await _loadMatchesForSelectedPeriod())
-            .where((match) => match.fixtureId > 0 &&
-                match.hasTeamIds && _isUpcoming(match)).toList());
+    final fixtures = _eligibleFixtures(
+      await _loadMatchesForSelectedPeriod(),
+    );
     _autoAvailableCount = fixtures.length;
     _autoExaminedCount = 0;
     _autoDeepCount = 0;
@@ -2227,9 +2234,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           .prepare();
       final allMatches = await _loadMatchesForSelectedPeriod();
 
-      final matches = _applyCompetitionFilter(
-        allMatches.where((m) => m.fixtureId > 0 &&
-            m.hasTeamIds && _isUpcoming(m)).toList());
+      final matches = _eligibleFixtures(allMatches);
 
       if (!mounted) {
         return;
@@ -2239,6 +2244,21 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         _total = matches.length;
         _combinationFixtureCount = matches.length;
       });
+
+      if (matches.isEmpty) {
+        setState(() {
+          _loading = false;
+          _checkingOdds = false;
+          _errorMessage = _selectedCompetitionKeys.isEmpty
+              ? 'Nessuna partita futura compatibile con il Palinsesto '
+                  'Italia nel periodo scelto. Puoi cambiare periodo '
+                  'o disattivare il filtro.'
+              : 'Nessuna partita futura dei campionati selezionati '
+                  'è compatibile con i filtri e il periodo scelto. '
+                  'Modifica i campionati o il periodo.';
+        });
+        return;
+      }
 
       final allCandidates = <_CombinationCandidate>[];
 
@@ -3144,8 +3164,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             debugPrint('COMBINAZIONI CATALOGO: $error');
             return <FootballCompetitionCatalogEntry>[];
           });
-      final available = allMatches.where((m) =>
-          m.fixtureId > 0 && m.hasTeamIds && _isUpcoming(m)).toList();
+      final available = _eligibleFixtures(
+        allMatches,
+        selectedCompetitionKeys: const <String>{},
+      );
       final catalog = await catalogFuture;
       if (!mounted) return;
 
@@ -3161,11 +3183,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       setState(() {
         _catalogByKey = {for (final item in catalog) item.selectionKey: item};
         _periodAvailableFixtureCount = available.length;
-        _selectedAvailableFixtureCount = selected.isEmpty
-            ? available.length
-            : available.where((match) =>
-                selected.contains('id:${match.leagueId}') ||
-                selected.contains(CompetitionFilterSheet.keyFor(match))).length;
+        _selectedAvailableFixtureCount = _eligibleFixtures(
+          available,
+          selectedCompetitionKeys: selected,
+        ).length;
         _selectedCompetitionKeys
           ..clear()
           ..addAll(selected);
@@ -4922,6 +4943,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                   : (value) {
                       setState(() {
                         _italyScheduleOnly = value;
+                        // The available-fixture count belongs to the previous
+                        // Italian/global filter; don't display a stale count.
+                        _periodAvailableFixtureCount = null;
+                        _selectedAvailableFixtureCount = null;
                         _results.clear();
                         _xPremiumSelectedMatches.clear();
                         _xPremiumResults.clear();
