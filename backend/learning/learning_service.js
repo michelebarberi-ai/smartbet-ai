@@ -168,6 +168,11 @@ class LearningService {
     if (revoked && typeof this.repository.deleteAutoCouponPreferences === 'function') {
       await this.repository.deleteAutoCouponPreferences(hashClientId(clientId, this.subjectSalt));
     }
+    if (revoked &&
+        typeof this.repository.deleteDailyPalinsestoSubscriptionIfAvailable === 'function') {
+      await this.repository.deleteDailyPalinsestoSubscriptionIfAvailable(
+        hashClientId(clientId, this.subjectSalt));
+    }
     return {status: 200, body: {success: true, revoked}};
   }
 
