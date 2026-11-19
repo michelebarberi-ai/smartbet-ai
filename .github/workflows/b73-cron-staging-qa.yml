@@ -1,0 +1,18 @@
+name: B73 default-branch scheduler contract QA
+on:
+  push:
+    branches: [feature/b73-palinsesto-cron-default]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure GitHub trigger is inert until repo opt-in
+        run: |
+          grep -q "vars.DAILY_PALINSESTO_ENABLED == 'true'" \
+            .github/workflows/b73-morning-palinsesto-push.yml
+          node --test backend/test/b73_cron_trigger_readiness.test.js
