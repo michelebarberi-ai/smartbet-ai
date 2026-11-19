@@ -43,5 +43,5 @@ test('B70: weekend, early Italian screen and competition-diverse shortlist wired
 
 test('B70: feature base must retain valid version prior to release', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:69|70|71|73)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:69|70|71|73|74)$/m);
 });
