@@ -4812,6 +4812,24 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   Text('${forecast.match.homeTeam} - '
                       '${forecast.match.awayTeam}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
+                  // B74: retain the competition in read-only estimates too.
+                  // The grouped coupon view already displays it, but when
+                  // real odds are unavailable only this preview is visible.
+                  if (forecast.match.country.trim().isNotEmpty ||
+                      forecast.match.league.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if (forecast.match.country.trim().isNotEmpty)
+                          forecast.match.country.trim(),
+                        if (forecast.match.league.trim().isNotEmpty)
+                          forecast.match.league.trim(),
+                      ].join(' • '),
+                      key: const Key('b74-unquoted-forecast-competition'),
+                      style: const TextStyle(
+                        color: Colors.white54, fontSize: 11),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text('${forecast.market} · '
                       'stima del modello ${forecast.probability}% · '
