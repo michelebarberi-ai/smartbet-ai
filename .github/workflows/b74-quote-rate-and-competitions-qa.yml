@@ -2,7 +2,7 @@ name: B74 quote pacing and competition visibility QA
 
 on:
   push:
-    branches: [feature/b74-quota-league-visibility]
+    branches: [feature/b74-quota-league-visibility, feature/b74-combinations-filter-first]
   workflow_dispatch:
 
 permissions:
