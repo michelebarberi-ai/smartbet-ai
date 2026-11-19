@@ -323,6 +323,9 @@ class TeamDataResolver {
         }
       }
 
+      // Do not query either season while the shared sports provider is in
+      // cooldown. Leave this lookup retryable on a later analysis.
+      if (ApiRateLimiter.isCoolingDown) return null;
       final leagues = await _getTeamLeagues(teamId: teamId, season: season);
 
       final ordered = _sortLeagueCandidates(leagues);
@@ -355,7 +358,11 @@ class TeamDataResolver {
         break;
       }
 
-      _leagueOnlyCache[cacheKey] = resolved;
+      // A temporary provider outage is not evidence that this team has no
+      // league; do not permanently cache a null competition result.
+      if (!ApiRateLimiter.isCoolingDown) {
+        _leagueOnlyCache[cacheKey] = resolved;
+      }
 
       if (resolved != null) {
         final persistentStore = leagueCacheStore;
@@ -814,9 +821,17 @@ class TeamDataResolver {
     print('URL: $uri');
 
     try {
+      if (ApiRateLimiter.isCoolingDown) return [];
       await ApiRateLimiter.wait();
+      if (ApiRateLimiter.isCoolingDown) return [];
 
-      final response = await _client.get(uri);
+      final response = await _client.get(uri)
+          .timeout(const Duration(seconds: 18));
+      ApiRateLimiter.noteProviderResponse(
+        statusCode: response.statusCode,
+        body: response.statusCode == 200 ? '' : response.body,
+        retryAfter: response.headers['retry-after'],
+      );
 
       print('LEAGUES STATUS: ${response.statusCode}');
 
