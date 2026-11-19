@@ -255,15 +255,15 @@ class _GoalVdLineThreeCouponViewerState
 
   @override
   Widget build(BuildContext context) {
-    if (widget.coupons.length != 3 || widget.coupons.any((c) => c.isEmpty)) {
-      return const Center(child: Text('Tre schedine non disponibili.'));
+    if (widget.coupons.isEmpty || widget.coupons.length > 3 || widget.coupons.any((c) => c.isEmpty)) {
+      return const Center(child: Text('Schedine non disponibili.'));
     }
     final current = widget.coupons[_selectedIndex];
     return Column(
       children: [
         const SizedBox(height: 12),
-        const Text(
-          '3 SCHEDINE — STESSE PARTITE',
+        Text(
+          '${widget.coupons.length} SCHEDINE — STESSE PARTITE',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         const Padding(
@@ -279,7 +279,7 @@ class _GoalVdLineThreeCouponViewerState
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
-            children: List.generate(3, (index) => Padding(
+            children: List.generate(widget.coupons.length, (index) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
               child: ChoiceChip(
                 key: ValueKey('b50-three-coupon-tab-$index'),
@@ -320,7 +320,7 @@ class _GoalVdLineThreeCouponViewerState
             child: OutlinedButton.icon(
               onPressed: widget.onShareAll,
               icon: const Icon(Icons.ios_share),
-              label: const Text('CONDIVIDI LE 3 SCHEDINE'),
+              label: Text('CONDIVIDI ${widget.coupons.length} SCHEDINE'),
             ),
           ),
         ),
