@@ -32,6 +32,28 @@ jobs:
         run: flutter analyze --no-pub --no-fatal-infos
       - name: Full Flutter tests
         run: flutter test --no-pub --reporter compact
+      - name: Inspect App Store signing profile for APNs capability (no upload)
+        env:
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
+            echo "Profile secret not connected to this QA workflow."
+          else
+            printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/GoalVdLine.mobileprovision"
+            if openssl cms -verify -inform DER -noverify \
+                -in "$RUNNER_TEMP/GoalVdLine.mobileprovision" \
+                -out "$RUNNER_TEMP/GoalVdLine.plist" 2>/dev/null; then
+              python3 - <<'PY'
+import os, plistlib
+with open(os.environ['RUNNER_TEMP']+'/GoalVdLine.plist','rb') as f:
+    p=plistlib.load(f)
+value=p.get('Entitlements',{}).get('aps-environment')
+print('Profile APNs production capability:', value=='production')
+PY
+            else
+              echo "Profile format could not be inspected on Linux; no signing changes made."
+            fi
+          fi
       - name: Inspect live Render readiness (safe boolean fields only)
         run: |
           curl --fail --silent --show-error --max-time 45 --retry 2 \
