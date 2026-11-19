@@ -2569,6 +2569,22 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       final oddsService = OddsService();
       final bookmakerQuotedFixtures = <int>{};
       final validCandidates = <_CombinationCandidate>[];
+      var quoteProviderUnavailable = false;
+      // A provider cooldown is not proof that selected competitions have no
+      // bookmaker markets. Read diagnostics already collected by OddsService.
+      void inspectQuoteFailure(int fixtureId) {
+        final diagnostic = oddsService.diagnosticFor(
+          fixtureId: fixtureId,
+          italianBookmakerOnly: _italyScheduleOnly,
+        );
+        final status = diagnostic?.status;
+        if (status == OddsLookupStatus.quotaOrRateLimit ||
+            status == OddsLookupStatus.providerCooldownActive ||
+            status == OddsLookupStatus.upstreamUnavailable ||
+            status == OddsLookupStatus.networkError) {
+          quoteProviderUnavailable = true;
+        }
+      }
       final reserveCount = math.max(2, (_topCount * 0.50).ceil());
 
       final systemPoolTarget = math.min(
@@ -2623,6 +2639,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
               italianBookmakerOnly: _italyScheduleOnly,
             );
+              inspectQuoteFailure(item.match.fixtureId);
             if (marketOdds == null) continue;
             if (marketOdds.bestByOutcome.isNotEmpty) {
               bookmakerQuotedFixtures.add(item.match.fixtureId);
@@ -2671,6 +2688,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
               italianBookmakerOnly: _italyScheduleOnly,
             );
+              inspectQuoteFailure(item.match.fixtureId);
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
               bookmakerQuotedFixtures.add(item.match.fixtureId);
@@ -2698,6 +2716,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               fixtureId: item.match.fixtureId,
               italianBookmakerOnly: _italyScheduleOnly,
             );
+              inspectQuoteFailure(item.match.fixtureId);
 
             if (marketOdds != null && marketOdds.bestByOutcome.isNotEmpty) {
               bookmakerQuotedFixtures.add(item.match.fixtureId);
@@ -2811,7 +2830,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           _systemResults.clear();
           _loading = false;
           _checkingOdds = false;
-          _errorMessage = _selectedMarket != 'COMBO CHANCE' &&
+          _errorMessage = quoteProviderUnavailable
+              ? 'Il fornitore quote è temporaneamente limitato o non '
+                  'raggiungibile. Le partite e le previsioni sportive '
+                  'sono presenti, ma le quote reali non possono essere '
+                  'verificate adesso. Riprova dopo il ripristino del servizio.'
+              : _selectedMarket != 'COMBO CHANCE' &&
                   bookmakerQuotedFixtures.isEmpty
               ? 'Il feed non restituisce quote bookmaker per queste partite. '
                   'Le previsioni sportive sono distinte dalle schedine: '
