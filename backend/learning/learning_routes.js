@@ -1,6 +1,11 @@
 'use strict';
 
-const {validToken} = require('./learning_core');
+const {validToken,hashClientId} = require('./learning_core');
+const {encryptDeviceToken} = require('../auto_coupon/device_registration');
+const {DailyPalinsestoSubscriptionRepository} = require('../daily_palinsesto/subscription_repository');
+const {dispatchDailyPalinsesto} = require('../daily_palinsesto/dispatch');
+const {digestPushReady} = require('../daily_palinsesto/apns_sender');
+const {fetchDailyFixtures} = require('../daily_palinsesto/provider');
 const {LearningRepository} = require('./learning_repository');
 const {LearningService} = require('./learning_service');
 const {registerAutoCouponWorkerRoute} = require('../auto_coupon/worker_route');
@@ -10,7 +15,8 @@ const {registerAutoCouponPushDispatchRoute} = require('../auto_coupon/push_dispa
 const {registerOnDemandCouponRoutes} = require('../auto_coupon/on_demand_coupon_routes');
 
 function registerLearningRoutes(app, {requestApiFootball, env = process.env, now = () => new Date(), learningService = null, generateOfficialCoupon = null, onDemandWorkerRunning = false,
-  verifyExternalWorker = null, wakeExternalWorker = null}) {
+  verifyExternalWorker = null, wakeExternalWorker = null,
+  requestDailyFixtures = null}) {
   const requested = env.LEARNING_SERVER_ENABLED === 'true';
   const configured = requested && !!env.DATABASE_URL &&
     typeof env.LEARNING_ADMIN_TOKEN === 'string' && env.LEARNING_ADMIN_TOKEN.length >= 32 &&
@@ -20,6 +26,17 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
   const historicalEnabled = mobileEnabled && env.LEARNING_RETRO_INGEST_ENABLED === 'true';
   const autoCouponPrefsEnabled = mobileEnabled && env.AUTO_COUPON_PREFERENCES_ENABLED === 'true';
   const pushRegistrationEnabled = autoCouponPrefsEnabled && registrationReady(env);
+  // Completely separate from scheduled automatic betting coupons.
+  // A schema-ready flag is only set after a separately authorized migration.
+  const dailyPalinsestoRegistrationEnabled = mobileEnabled &&
+    env.DAILY_PALINSESTO_SCHEMA_READY === 'true' &&
+    env.DAILY_PALINSESTO_REGISTRATION_ENABLED === 'true' &&
+    /^[0-9a-fA-F]{64}$/.test(env.DAILY_PALINSESTO_PUSH_TOKEN_ENCRYPTION_KEY || '') &&
+    ['production','sandbox'].includes(env.APNS_ENVIRONMENT);
+  const dailyPalinsestoDispatchReady = dailyPalinsestoRegistrationEnabled &&
+    digestPushReady(env) &&
+    typeof env.DAILY_PALINSESTO_WORKER_TOKEN === 'string' &&
+    env.DAILY_PALINSESTO_WORKER_TOKEN.length >= 32;
   // Worker requires both an explicit flag and a verified official engine adapter.
   const workerReady = autoCouponPrefsEnabled &&
     env.AUTO_COUPON_WORKER_ENABLED === 'true' &&
@@ -39,6 +56,8 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
       autoCouponWorkerReady: workerReady,
       autoCouponDeviceRegistrationEnabled: pushRegistrationEnabled,
       autoCouponPushDispatchReady: pushDispatchReady,
+      dailyPalinsestoRegistrationEnabled,
+      dailyPalinsestoPushEnabled: dailyPalinsestoDispatchReady,
       onDemandCouponRequestsEnabled: onDemandWorkerRunning === true && mobileEnabled &&
         env.ON_DEMAND_COUPON_REQUESTS_ENABLED==='true' &&
         typeof generateOfficialCoupon==='function',
@@ -220,6 +239,89 @@ function registerLearningRoutes(app, {requestApiFootball, env = process.env, now
       res.set('Cache-Control', 'no-store');
       return res.status(result.status).json(result.body);
     }, res));
+
+  // B73: explicit iPhone consent; this never subscribes a user from the
+  // old automatic-coupon settings, and it never generates betting coupons.
+  app.post('/learning/v1/mobile/palinsesto/subscribe', authorizeMobile,
+    (req, res) => handle(async () => {
+      if (!dailyPalinsestoRegistrationEnabled) return res.status(503).json({
+        success:false,error:'Riepilogo programmato non ancora attivo.',
+      });
+      const body=req.body;
+      if (!body || typeof body!=='object' || Array.isArray(body) ||
+          Object.keys(body).sort().join(',')!=='deviceToken,hour,minute' ||
+          typeof body.deviceToken!=='string' ||
+          !/^[0-9a-fA-F]{64}$/.test(body.deviceToken) ||
+          !Number.isInteger(body.hour) || body.hour<0 || body.hour>23 ||
+          !Number.isInteger(body.minute) || body.minute<0 || body.minute>59) {
+        return res.status(400).json({success:false,error:'Parametri non validi.'});
+      }
+      const main=getService().repository;
+      await main.initialize();
+      const subjectHash=hashClientId(req.learningClientId,env.LEARNING_SUBJECT_SALT);
+      const encrypted=encryptDeviceToken({
+        deviceToken:body.deviceToken,subjectHash,
+        environment:env.APNS_ENVIRONMENT,
+        keyHex:env.DAILY_PALINSESTO_PUSH_TOKEN_ENCRYPTION_KEY,
+      });
+      const repository=new DailyPalinsestoSubscriptionRepository(main.pool);
+      await repository.upsert({
+        subjectHash,hour:body.hour,minute:body.minute,
+        environment:env.APNS_ENVIRONMENT,...encrypted,
+      });
+      return res.json({success:true,registered:true,
+        pushActive:dailyPalinsestoDispatchReady});
+    }, res));
+
+  app.post('/learning/v1/mobile/palinsesto/unsubscribe', authorizeMobile,
+    (req, res) => handle(async () => {
+      if (!mobileEnabled || env.DAILY_PALINSESTO_SCHEMA_READY!=='true') {
+        return res.status(503).json({success:false,error:'Servizio non disponibile.'});
+      }
+      if (req.body && (typeof req.body!=='object' ||
+          Array.isArray(req.body) || Object.keys(req.body).length)) {
+        return res.status(400).json({success:false,error:'Parametri non validi.'});
+      }
+      const main=getService().repository;
+      await main.initialize();
+      const repository=new DailyPalinsestoSubscriptionRepository(main.pool);
+      await repository.unsubscribe(
+        hashClientId(req.learningClientId,env.LEARNING_SUBJECT_SALT));
+      return res.json({success:true,registered:false,pushActive:false});
+    },res));
+
+  // Dedicated morning worker, callable only by trusted scheduling code.
+  // One fixture calendar read across the batch; no timer started here.
+  app.post('/learning/v1/palinsesto/worker/dispatch', (req,res) =>
+    handle(async()=>{
+      if (!dailyPalinsestoDispatchReady) return res.status(503).json({
+        success:false,error:'Invio palinsesto non abilitato.',
+      });
+      if (!validToken(req.get('x-goalvdline-palinsesto-worker-token'),
+        env.DAILY_PALINSESTO_WORKER_TOKEN)) {
+        return res.status(401).json({success:false,error:'Non autorizzato.'});
+      }
+      const body=req.body || {};
+      if (typeof body!=='object' || Array.isArray(body) ||
+          Object.keys(body).some(x=>!['limit','afterSubjectHash'].includes(x)) ||
+          (body.limit!==undefined && (!Number.isInteger(body.limit) ||
+           body.limit<1 || body.limit>25)) ||
+          (body.afterSubjectHash!==undefined && body.afterSubjectHash!==null &&
+           (typeof body.afterSubjectHash!=='string' ||
+            !/^[0-9a-f]{64}$/.test(body.afterSubjectHash)))) {
+        return res.status(400).json({success:false,error:'Parametri non validi.'});
+      }
+      const main=getService().repository;
+      await main.initialize();
+      const repository=new DailyPalinsestoSubscriptionRepository(main.pool);
+      const result=await dispatchDailyPalinsesto({
+        repository,env,now,
+        fetchDailyFixtures:requestDailyFixtures ||
+          (dayKey=>fetchDailyFixtures(dayKey,{env})),
+        limit:body.limit??20,afterSubjectHash:body.afterSubjectHash??null,
+      });
+      return res.json({success:true,...result});
+    },res));
 
   // Protected server-to-server route. No scheduling, no push and no invented
   // predictions. If an official generator is absent it fails closed.
