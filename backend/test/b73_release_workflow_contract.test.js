@@ -25,5 +25,5 @@ test('B73: full Flutter and backend regressions run before signing',()=>{
 });
 test('B73: feature stays at prior build until release branch is created',()=>{
   const p=fs.readFileSync(path.join(__dirname,'../../pubspec.yaml'),'utf8');
-  assert.match(p,/^version: 1\.2\.5\+(?:71|73)$/m);
+  assert.match(p,/^version: 1\.2\.5\+(?:71|73|74)$/m);
 });
