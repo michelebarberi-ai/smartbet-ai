@@ -1,0 +1,45 @@
+name: B73 inspect public signing certificate identity (no private key output)
+on:
+  push:
+    branches: [release/b73-testflight]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-public-cert:
+    if: ${{ github.repository == 'michelebarberi-ai/smartbet-ai' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare existing signing certificate and APNs profile (public data only)
+        env:
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$IOS_DISTRIBUTION_P12_BASE64"
+          test -n "$IOS_DISTRIBUTION_P12_PASSWORD"
+          test -n "$IOS_PROVISIONING_PROFILE_BASE64"
+          umask 077
+          printf '%s' "$IOS_DISTRIBUTION_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.mobileprovision"
+          openssl pkcs12 -in "$RUNNER_TEMP/signing.p12" -passin env:IOS_DISTRIBUTION_P12_PASSWORD -nokeys -clcerts -out "$RUNNER_TEMP/signing.pem" 2>/dev/null ||
+            openssl pkcs12 -legacy -in "$RUNNER_TEMP/signing.p12" -passin env:IOS_DISTRIBUTION_P12_PASSWORD -nokeys -clcerts -out "$RUNNER_TEMP/signing.pem" 2>/dev/null
+          echo "=== CERTIFICATE SAVED ON GITHUB (PUBLIC DATA) ==="
+          openssl x509 -in "$RUNNER_TEMP/signing.pem" -noout -subject -serial -dates -fingerprint -sha1
+          echo "=== CERTIFICATE SELECTED IN NEW APPLE PROFILE (PUBLIC DATA) ==="
+          openssl cms -verify -inform DER -noverify -in "$RUNNER_TEMP/signing.mobileprovision" -out "$RUNNER_TEMP/profile.plist" >/dev/null 2>&1
+          python3 - <<'PY'
+          import os, plistlib, subprocess
+          p = os.path.join(os.environ['RUNNER_TEMP'],'profile.plist')
+          v = plistlib.load(open(p,'rb'))
+          print('Profile name:',v.get('Name','unknown'))
+          print('APNs production:',v.get('Entitlements',{}).get('aps-environment')=='production')
+          for i,der in enumerate(v.get('DeveloperCertificates',[])):
+              cert=os.path.join(os.environ['RUNNER_TEMP'],f'profile_cert_{i}.der')
+              with open(cert,'wb') as f: f.write(der)
+              result=subprocess.run(['openssl','x509','-inform','DER','-in',cert,'-noout','-serial','-dates','-fingerprint','-sha1'],check=True,capture_output=True,text=True)
+              print('Profile certificate',i,':',result.stdout.strip())
+          PY
+          rm -f "$RUNNER_TEMP/signing.p12" "$RUNNER_TEMP/signing.pem" "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP"/profile_cert_*.der
