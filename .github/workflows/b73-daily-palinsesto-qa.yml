@@ -32,3 +32,8 @@ jobs:
         run: flutter analyze --no-pub --no-fatal-infos
       - name: Full Flutter tests
         run: flutter test --no-pub --reporter compact
+      - name: Inspect live Render readiness (safe boolean fields only)
+        run: |
+          curl --fail --silent --show-error --max-time 45 --retry 2 \
+            https://goalvdline-learning-api.onrender.com/learning/v1/status \
+            | node -e "let x='';process.stdin.on('data',d=>x+=d);process.stdin.on('end',()=>{let j=JSON.parse(x);if(j.service!=='SmartBet Central Learning')process.exit(2);console.log(JSON.stringify({registrationReady:j.dailyPalinsestoRegistrationEnabled,pushReady:j.dailyPalinsestoPushEnabled}));})"
