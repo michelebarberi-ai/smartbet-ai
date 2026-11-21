@@ -41,5 +41,5 @@ test('B68: all regressions run before signing', () => {
 
 test('B68: candidate metadata never silently regresses existing build numbers', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:67|68|69|70|71|73|74)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:67|68|69|70|71|73|74|75)$/m);
 });
