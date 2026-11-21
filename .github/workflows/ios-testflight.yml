@@ -35,6 +35,7 @@ jobs:
     # Start exactly one B45 upload only for the deliberate release commit.
     # Preserve legacy branches and allow a manual workflow dispatch if needed.
     # Build 75 release authorization uses the exact commit message below.
+    # B75 backend release-contract version allowlists updated for 1.2.5+75.
     if: >-
       (github.ref != 'refs/heads/release/b45-testflight' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
