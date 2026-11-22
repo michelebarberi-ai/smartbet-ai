@@ -87,6 +87,15 @@ class CompetitionFilterSheet {
     };
     if (allKeys.isEmpty) return null;
 
+    // The seasonal catalog includes competitions without upcoming fixtures.
+    // Do not treat a selection without any matches as an available league.
+    final availableKeys = availabilityCounts.isEmpty
+        ? <String>{...allKeys}
+        : <String>{
+            for (final entry in availabilityCounts.entries)
+              if (entry.value > 0 && allKeys.contains(entry.key)) entry.key,
+          };
+
     final preferenceStore = await SharedPreferences.getInstance();
     final favorites = <String>{
       ...(preferenceStore.getStringList(_favoritesStorageKey) ?? <String>[]).map(_favoriteKey),
@@ -94,8 +103,8 @@ class CompetitionFilterSheet {
     if (!context.mounted) return null;
 
     final initial = selectedKeys.isEmpty
-        ? <String>{...allKeys}
-        : <String>{...selectedKeys.where(allKeys.contains)};
+        ? <String>{...availableKeys}
+        : <String>{...selectedKeys.where(availableKeys.contains)};
 
     var selected = initial;
     var favoriteKeys = favorites;
@@ -109,7 +118,9 @@ class CompetitionFilterSheet {
 
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final allSelected = selected.length == allKeys.length;
+            final allSelected = availableKeys.isNotEmpty &&
+                selected.length == availableKeys.length &&
+                selected.containsAll(availableKeys);
             // Conteggi delle fixture realmente presenti nel periodo richiesto:
             // non includono le competizioni del solo catalogo stagionale.
             // Sono candidate all'analisi, non pronostici già validati.
@@ -119,7 +130,9 @@ class CompetitionFilterSheet {
             final selectedFixtures = selected.fold<int>(
               0, (sum, key) => sum + (availabilityCounts[key] ?? 0),
             );
-            final favoriteAvailable = allKeys.where((key) => favoriteKeys.contains(favoriteKeyFor(key))).toSet();
+            final favoriteAvailable = availableKeys
+                .where((key) => favoriteKeys.contains(favoriteKeyFor(key)))
+                .toSet();
             final matchingCountries = <String, Map<String, String>>{};
             for (final country in countries) {
               final filtered = <String, String>{};
@@ -233,7 +246,7 @@ class CompetitionFilterSheet {
                     }
                   },
                 ),
-                onChanged: (value) {
+                onChanged: availableKeys.contains(entry.key) ? (value) {
                   setModalState(() {
                     final next = <String>{...selected};
                     if (value == true) {
@@ -243,7 +256,7 @@ class CompetitionFilterSheet {
                     }
                     selected = next;
                   });
-                },
+                } : null,
               );
             }
 
@@ -306,7 +319,7 @@ class CompetitionFilterSheet {
                       value: allSelected,
                       activeColor: _accent,
                       title: const Text(
-                        'Tutte le competizioni del catalogo',
+                        'Tutti i campionati con partite disponibili',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -321,7 +334,7 @@ class CompetitionFilterSheet {
                       onChanged: (value) {
                         setModalState(() {
                           selected = value == true
-                              ? <String>{...allKeys}
+                              ? <String>{...availableKeys}
                               : <String>{};
                         });
                       },
@@ -420,7 +433,7 @@ class CompetitionFilterSheet {
                               ? null
                               : () => Navigator.pop(
                                   context,
-                                  selected.length == allKeys.length
+                                  allSelected
                                       ? <String>{}
                                       : selected,
                                 ),
