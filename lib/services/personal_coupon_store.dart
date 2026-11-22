@@ -129,14 +129,25 @@ class PersonalSelection {
   final double? odds;
   /// Sporting probability on a 0-100 scale; not derived from bookmaker odds.
   final double? probability;
+  /// Fixture metadata is snapshotted with each saved pick, without API calls.
+  /// Nullable for coupons created before this schema extension.
+  final String? country;
+  final String? league;
+  final DateTime? kickoffAt;
+  final String? bookmaker;
   final DateTime capturedAt;
   const PersonalSelection({required this.fixtureId, required this.match,
     required this.market, required this.source, required this.capturedAt,
-    this.odds, this.probability});
+    this.odds, this.probability, this.country, this.league, this.kickoffAt,
+    this.bookmaker});
 
   Map<String, dynamic> toJson() => {
     'fixtureId': fixtureId, 'match': match, 'market': market,
     'source': source, 'odds': odds, 'probability': probability,
+    if (country != null) 'country': country,
+    if (league != null) 'league': league,
+    if (kickoffAt != null) 'kickoffAt': kickoffAt!.toUtc().toIso8601String(),
+    if (bookmaker != null) 'bookmaker': bookmaker,
     'capturedAt': capturedAt.toIso8601String(),
   };
   factory PersonalSelection.fromJson(Map<String, dynamic> json) =>
@@ -147,6 +158,11 @@ class PersonalSelection {
         source: json['source'] as String,
         odds: (json['odds'] as num?)?.toDouble(),
         probability: (json['probability'] as num?)?.toDouble(),
+        country: json['country'] is String ? json['country'] as String : null,
+        league: json['league'] is String ? json['league'] as String : null,
+        kickoffAt: DateTime.tryParse(json['kickoffAt']?.toString() ?? ''),
+        bookmaker: json['bookmaker'] is String
+            ? json['bookmaker'] as String : null,
         capturedAt: DateTime.parse(json['capturedAt'] as String),
       );
 }

@@ -1182,6 +1182,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 AddToPersonalCouponButton(
                   fixtureId: match.fixtureId.toString(),
                   match: '${match.homeTeam} - ${match.awayTeam}',
+                  country: match.country,
+                  league: match.league,
+                  kickoffAt: DateTime.tryParse(match.date),
                   market: result.prediction,
                   source: 'Analisi Partite',
                 ),

@@ -9,11 +9,16 @@ class AddToPersonalCouponButton extends StatelessWidget {
   final String source;
   final double? odds;
   final double? probability;
+  final String? country;
+  final String? league;
+  final DateTime? kickoffAt;
+  final String? bookmaker;
   /// Icon-only variant for individual exact-score alternatives.
   final bool compact;
   const AddToPersonalCouponButton({
     super.key, required this.fixtureId, required this.match,
     required this.market, required this.source, this.odds, this.probability,
+    this.country, this.league, this.kickoffAt, this.bookmaker,
     this.compact = false,
   });
 
@@ -121,7 +126,8 @@ class AddToPersonalCouponButton extends StatelessWidget {
     final added = await store.addSelection(selected, PersonalSelection(
       fixtureId: fixtureId, match: match, market: market,
       source: source, odds: odds, probability: probability,
-      capturedAt: DateTime.now(),
+      country: country, league: league, kickoffAt: kickoffAt,
+      bookmaker: bookmaker, capturedAt: DateTime.now(),
     ));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

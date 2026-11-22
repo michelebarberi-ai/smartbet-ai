@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/personal_coupon_store.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../widgets/personal_coupon_match_tile.dart';
 
 class PersonalCouponsScreen extends StatefulWidget {
   const PersonalCouponsScreen({super.key});
@@ -9,11 +11,26 @@ class PersonalCouponsScreen extends StatefulWidget {
 
 class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
   final store = PersonalCouponStore.instance;
+  final history = SmartBetAnalysisHistoryStore.instance;
+
+  /// Previous versions saved no country or league; recover those fields
+  /// from the already persisted prediction archive without any network call.
+  SmartBetAnalysisRecord? _archivedMatch(PersonalSelection selection) {
+    for (final record in history.records) {
+      if (record.fixtureId.toString() == selection.fixtureId &&
+          (record.country.trim().isNotEmpty ||
+           record.league.trim().isNotEmpty)) {
+        return record;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
     store.initialize();
+    history.initialize();
   }
 
   Future<String?> _askName({String? initial}) async {
@@ -67,7 +84,7 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
       label: const Text('Nuova schedina'),
     ),
     body: AnimatedBuilder(
-      animation: store,
+      animation: Listenable.merge([store, history]),
       builder: (context, _) {
         if (store.coupons.isEmpty) {
           return const Center(child: Padding(
@@ -91,22 +108,13 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
               ),
               children: [
                 for (final pick in coupon.selections)
-                  ListTile(
-                    title: Text(pick.match),
-                    subtitle: Text([
-                      pick.market,
-                      pick.source,
-                      if (pick.probability != null)
-                        'AI ${pick.probability!.toStringAsFixed(1)}%',
-                      if (pick.odds != null && pick.odds!.isFinite)
-                        'Quota ${pick.odds!.toStringAsFixed(2)}',
-                    ].join(' · ')),
-                    trailing: IconButton(
-                      tooltip: 'Rimuovi pronostico',
-                      icon: const Icon(Icons.close),
-                      onPressed: () => store.removeSelection(
-                          coupon.id, pick.fixtureId, pick.market),
-                    ),
+                  PersonalCouponMatchTile(
+                    key: ValueKey('personal-selection-${coupon.id}-'
+                        '${pick.fixtureId}-${pick.market}'),
+                    selection: pick,
+                    archivedMatch: _archivedMatch(pick),
+                    onRemove: () => store.removeSelection(
+                        coupon.id, pick.fixtureId, pick.market),
                   ),
                 if (coupon.selections.isNotEmpty)
                   const Padding(

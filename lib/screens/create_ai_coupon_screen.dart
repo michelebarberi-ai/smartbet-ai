@@ -5289,6 +5289,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             child: AddToPersonalCouponButton(
               fixtureId: item.match.fixtureId.toString(),
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
+              bookmaker: item.bookmaker,
               market: item.market,
               source: 'Crea Schedina',
               probability: item.probability.toDouble(),

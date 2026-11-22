@@ -1655,6 +1655,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           AddToPersonalCouponButton(
             fixtureId: item.match.fixtureId.toString(),
             match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+            country: item.match.country,
+            league: item.match.league,
+            kickoffAt: DateTime.tryParse(item.match.date),
             market: 'X',
             source: 'X Premium',
             probability: item.assessment.simulatedDraw == null
@@ -2090,6 +2093,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 child: AddToPersonalCouponButton(
                   fixtureId: item.match.fixtureId.toString(),
                   match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                  country: item.match.country,
+                  league: item.match.league,
+                  kickoffAt: DateTime.tryParse(item.match.date),
                   market: selection.market,
                   source: 'Ranking Multimercato',
                   probability: selection.probability * 100,
@@ -4814,6 +4820,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             child: AddToPersonalCouponButton(
               fixtureId: item.match.fixtureId.toString(),
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
+              bookmaker: item.bookmaker,
               market: item.market,
               source: 'Combinazioni AI',
               probability: item.probability.toDouble(),
