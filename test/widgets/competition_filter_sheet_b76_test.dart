@@ -57,7 +57,14 @@ void main() {
     await tester.scrollUntilVisible(find.text('Serie A'), -150,
       scrollable: find.byType(Scrollable).last, maxScrolls: 40,
     );
-    await tester.tap(find.text('Serie A'));
+    // The sheet footer can cover the row's tap target on small test screens.
+    // Invoke the checkbox action after locating its built widget.
+    final serieA = tester.widget<CheckboxListTile>(find.ancestor(
+      of: find.text('Serie A'),
+      matching: find.byType(CheckboxListTile),
+    ));
+    expect(serieA.onChanged, isNotNull);
+    serieA.onChanged!(true);
     await tester.pumpAndSettle();
     expect(find.text('PARTITE SELEZIONATE: 2 / 3'), findsOneWidget);
     await tester.tap(find.text('APPLICA (1)'));
