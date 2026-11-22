@@ -40,6 +40,21 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
     return result?.isNotEmpty == true ? result : null;
   }
 
+  /// Multiplication is informative only for different fixtures with real odds.
+  /// A second market on the same match must never inflate a total.
+  double? _combinedOdds(PersonalCoupon coupon) {
+    if (coupon.selections.isEmpty) return null;
+    final ids = coupon.selections.map((e) => e.fixtureId).toSet();
+    if (ids.length != coupon.selections.length) return null;
+    var result = 1.0;
+    for (final pick in coupon.selections) {
+      final odd = pick.odds;
+      if (odd == null || !odd.isFinite || odd <= 1.20) return null;
+      result *= odd;
+    }
+    return result.isFinite ? result : null;
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Le mie schedine')),
@@ -66,20 +81,40 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
           itemCount: store.coupons.length,
           itemBuilder: (context, index) {
             final coupon = store.coupons[index];
+            final total = _combinedOdds(coupon);
             return Card(child: ExpansionTile(
               leading: const Icon(Icons.confirmation_number_outlined),
               title: Text(coupon.name),
-              subtitle: Text('${coupon.selections.length} pronostici'),
+              subtitle: Text(
+                '${coupon.selections.length} pronostici'
+                '${total == null ? '' : ' · Quota indicativa ${total.toStringAsFixed(2)}'}',
+              ),
               children: [
                 for (final pick in coupon.selections)
                   ListTile(
                     title: Text(pick.match),
-                    subtitle: Text('${pick.market} · ${pick.source}'),
+                    subtitle: Text([
+                      pick.market,
+                      pick.source,
+                      if (pick.probability != null)
+                        'AI ${pick.probability!.toStringAsFixed(1)}%',
+                      if (pick.odds != null && pick.odds!.isFinite)
+                        'Quota ${pick.odds!.toStringAsFixed(2)}',
+                    ].join(' · ')),
                     trailing: IconButton(
                       tooltip: 'Rimuovi pronostico',
                       icon: const Icon(Icons.close),
                       onPressed: () => store.removeSelection(
                           coupon.id, pick.fixtureId, pick.market),
+                    ),
+                  ),
+                if (coupon.selections.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Text(
+                      'Quote indicative: verifica sempre mercati e disponibilità. '
+                      'Mercati diversi della stessa partita non si moltiplicano.',
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                   ),
                 Row(mainAxisAlignment: MainAxisAlignment.end, children: [

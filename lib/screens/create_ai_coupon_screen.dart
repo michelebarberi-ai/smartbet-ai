@@ -5029,6 +5029,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
               market: item.market,
               source: 'Crea Schedina',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
             ),
           ),
           Row(

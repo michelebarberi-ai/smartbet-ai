@@ -1290,6 +1290,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
               market: item.market,
               source: 'Risultati del Giorno',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
             ),
           ),
           Row(

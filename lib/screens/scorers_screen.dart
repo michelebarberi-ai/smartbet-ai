@@ -841,6 +841,7 @@ class _ScorersScreenState extends State<ScorersScreen> {
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
               market: 'Marcatore: ${item.playerName}',
               source: 'Possibili Marcatori',
+              probability: item.probability * 100,
             ),
           ),
           Row(

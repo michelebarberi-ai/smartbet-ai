@@ -902,6 +902,7 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
             match: '${widget.match.homeTeam} - ${widget.match.awayTeam}',
             market: title,
             source: 'Analisi Live AI',
+            probability: value.toDouble(),
           ),
         ],
       ),

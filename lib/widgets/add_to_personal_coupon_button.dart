@@ -8,9 +8,10 @@ class AddToPersonalCouponButton extends StatelessWidget {
   final String market;
   final String source;
   final double? odds;
+  final double? probability;
   const AddToPersonalCouponButton({
     super.key, required this.fixtureId, required this.match,
-    required this.market, required this.source, this.odds,
+    required this.market, required this.source, this.odds, this.probability,
   });
 
   Future<void> _add(BuildContext context) async {
@@ -21,7 +22,12 @@ class AddToPersonalCouponButton extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: AnimatedBuilder(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
+          ),
+          child: SingleChildScrollView(
+            child: AnimatedBuilder(
           animation: store,
           builder: (context, _) => Padding(
             padding: const EdgeInsets.all(18),
@@ -68,15 +74,27 @@ class AddToPersonalCouponButton extends StatelessWidget {
               ),
             ]),
           ),
+            ),
+          ),
         ),
       ),
     );
     if (selected == null) return;
     final target = store.coupons.where((e) => e.id == selected).toList();
     if (target.isEmpty) return;
-    final otherMarkets = target.first.selections.where(
-      (e) => e.fixtureId == fixtureId && e.market != market,
+    final sameMatch = target.first.selections.where(
+      (e) => e.fixtureId == fixtureId,
     ).toList();
+    if (sameMatch.any((e) =>
+        e.market.trim().toLowerCase() == market.trim().toLowerCase())) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pronostico già presente in questa schedina')),
+        );
+      }
+      return;
+    }
+    final otherMarkets = sameMatch;
     if (otherMarkets.isNotEmpty && context.mounted) {
       final proceed = await showDialog<bool>(
         context: context,
@@ -97,13 +115,16 @@ class AddToPersonalCouponButton extends StatelessWidget {
       );
       if (proceed != true) return;
     }
-    await store.addSelection(selected, PersonalSelection(
+    final added = await store.addSelection(selected, PersonalSelection(
       fixtureId: fixtureId, match: match, market: market,
-      source: source, odds: odds, capturedAt: DateTime.now(),
+      source: source, odds: odds, probability: probability,
+      capturedAt: DateTime.now(),
     ));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pronostico aggiunto alla schedina personale')),
+        SnackBar(content: Text(added
+            ? 'Pronostico aggiunto alla schedina personale'
+            : 'Pronostico già presente o schedina non disponibile')),
       );
     }
   }

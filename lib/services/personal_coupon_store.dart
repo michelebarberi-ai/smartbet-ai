@@ -31,8 +31,9 @@ class PersonalCouponStore extends ChangeNotifier {
 
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(
+    final saved = await prefs.setString(_key, jsonEncode(
         _coupons.map((e) => e.toJson()).toList()));
+    if (!saved) throw StateError('Salvataggio schedine personali non riuscito');
     notifyListeners();
   }
 
@@ -64,19 +65,23 @@ class PersonalCouponStore extends ChangeNotifier {
     await _save();
   }
 
-  Future<void> addSelection(String id, PersonalSelection selection) async {
+  /// Returns false when the pick is already saved or the slip no longer exists.
+  Future<bool> addSelection(String id, PersonalSelection selection) async {
     await initialize();
     final index = _coupons.indexWhere((e) => e.id == id);
-    if (index < 0) return;
+    if (index < 0) return false;
     final coupon = _coupons[index];
+    final marketKey = selection.market.trim().toLowerCase();
     if (coupon.selections.any((e) =>
-        e.fixtureId == selection.fixtureId && e.market == selection.market)) {
-      return;
+        e.fixtureId == selection.fixtureId &&
+        e.market.trim().toLowerCase() == marketKey)) {
+      return false;
     }
     _coupons[index] = coupon.copyWith(
       selections: [...coupon.selections, selection],
     );
     await _save();
+    return true;
   }
 
   Future<void> removeSelection(String id, String fixtureId, String market) async {
@@ -122,14 +127,17 @@ class PersonalSelection {
   final String market;
   final String source;
   final double? odds;
+  /// Sporting probability on a 0-100 scale; not derived from bookmaker odds.
+  final double? probability;
   final DateTime capturedAt;
   const PersonalSelection({required this.fixtureId, required this.match,
     required this.market, required this.source, required this.capturedAt,
-    this.odds});
+    this.odds, this.probability});
 
   Map<String, dynamic> toJson() => {
     'fixtureId': fixtureId, 'match': match, 'market': market,
-    'source': source, 'odds': odds, 'capturedAt': capturedAt.toIso8601String(),
+    'source': source, 'odds': odds, 'probability': probability,
+    'capturedAt': capturedAt.toIso8601String(),
   };
   factory PersonalSelection.fromJson(Map<String, dynamic> json) =>
       PersonalSelection(
@@ -138,6 +146,7 @@ class PersonalSelection {
         market: json['market'] as String,
         source: json['source'] as String,
         odds: (json['odds'] as num?)?.toDouble(),
+        probability: (json['probability'] as num?)?.toDouble(),
         capturedAt: DateTime.parse(json['capturedAt'] as String),
       );
 }
