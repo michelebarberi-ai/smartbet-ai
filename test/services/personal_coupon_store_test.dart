@@ -12,6 +12,9 @@ void main() {
     await store.create('Weekend');
     final slip = store.coupons.last;
     expect(slip.name, 'Weekend');
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('goalvdline_personal_coupons_v1'),
+        contains('Weekend'));
 
     final pick = PersonalSelection(
       fixtureId: '123', match: 'Casa - Ospite', market: 'Over 2.5',

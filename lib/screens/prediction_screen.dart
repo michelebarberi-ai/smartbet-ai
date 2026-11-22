@@ -1229,6 +1229,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Risultati del Giorno (analisi sportiva)',
+              probability: item.probability.toDouble(),
+            ),
+          ),
           Text('$position. ${item.match.homeTeam} - ${item.match.awayTeam}',
               style: const TextStyle(
                 color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold,
@@ -1461,29 +1471,65 @@ class _PredictionScreenState extends State<PredictionScreen> {
           Row(
             children: [
               Expanded(
-                child: _exactScoreBox(
-                  label: '1°',
-                  score: item.exactPrimary.label,
-                  probability: item.exactPrimary.probability,
-                  primary: true,
+                child: Column(
+                  children: [
+                    _exactScoreBox(
+                      label: '1°',
+                      score: item.exactPrimary.label,
+                      probability: item.exactPrimary.probability,
+                      primary: true,
+                    ),
+                    AddToPersonalCouponButton(
+                      fixtureId: item.match.fixtureId.toString(),
+                      match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      market: 'Risultato esatto ${item.exactPrimary.label}',
+                      source: 'Risultati esatti',
+                      probability: item.exactPrimary.probability * 100,
+                      compact: true,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 7),
               Expanded(
-                child: _exactScoreBox(
-                  label: '2°',
-                  score: item.exactAlternative.label,
-                  probability: item.exactAlternative.probability,
-                  primary: false,
+                child: Column(
+                  children: [
+                    _exactScoreBox(
+                      label: '2°',
+                      score: item.exactAlternative.label,
+                      probability: item.exactAlternative.probability,
+                      primary: false,
+                    ),
+                    AddToPersonalCouponButton(
+                      fixtureId: item.match.fixtureId.toString(),
+                      match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      market: 'Risultato esatto ${item.exactAlternative.label}',
+                      source: 'Risultati esatti',
+                      probability: item.exactAlternative.probability * 100,
+                      compact: true,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 7),
               Expanded(
-                child: _exactScoreBox(
-                  label: '3°',
-                  score: item.exactThird.label,
-                  probability: item.exactThird.probability,
-                  primary: false,
+                child: Column(
+                  children: [
+                    _exactScoreBox(
+                      label: '3°',
+                      score: item.exactThird.label,
+                      probability: item.exactThird.probability,
+                      primary: false,
+                    ),
+                    AddToPersonalCouponButton(
+                      fixtureId: item.match.fixtureId.toString(),
+                      match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      market: 'Risultato esatto ${item.exactThird.label}',
+                      source: 'Risultati esatti',
+                      probability: item.exactThird.probability * 100,
+                      compact: true,
+                    ),
+                  ],
                 ),
               ),
             ],

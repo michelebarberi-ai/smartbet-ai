@@ -9,9 +9,12 @@ class AddToPersonalCouponButton extends StatelessWidget {
   final String source;
   final double? odds;
   final double? probability;
+  /// Icon-only variant for individual exact-score alternatives.
+  final bool compact;
   const AddToPersonalCouponButton({
     super.key, required this.fixtureId, required this.match,
     required this.market, required this.source, this.odds, this.probability,
+    this.compact = false,
   });
 
   Future<void> _add(BuildContext context) async {
@@ -130,9 +133,15 @@ class AddToPersonalCouponButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => TextButton.icon(
-    onPressed: () => _add(context),
-    icon: const Icon(Icons.add_circle_outline),
-    label: const Text('Aggiungi alla mia schedina'),
-  );
+  Widget build(BuildContext context) => compact
+      ? IconButton(
+          onPressed: () => _add(context),
+          tooltip: 'Aggiungi $market alla mia schedina',
+          icon: const Icon(Icons.add_circle_outline),
+        )
+      : TextButton.icon(
+          onPressed: () => _add(context),
+          icon: const Icon(Icons.add_circle_outline),
+          label: const Text('Aggiungi alla mia schedina'),
+        );
 }
