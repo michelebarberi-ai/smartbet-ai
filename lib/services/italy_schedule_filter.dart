@@ -215,7 +215,15 @@ class ItalyScheduleFilter {
   }
 
   static bool _leagueIs(String league, List<String> values) {
-    return values.any((value) => league.contains(_normalize(value)));
+    return values.any((value) {
+      final name = _normalize(value);
+      // Avoid admitting unrelated competitions through partial names
+      // (for example 'Serie Amateur' matching 'Serie A').
+      return league == name ||
+          league.startsWith('$name - ') ||
+          league.startsWith('$name group ') ||
+          league.startsWith('$name girone ');
+    });
   }
 
   static String _normalize(String value) {
