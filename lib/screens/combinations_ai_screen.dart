@@ -1652,6 +1652,12 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          AddToPersonalCouponButton(
+            fixtureId: item.match.fixtureId.toString(),
+            match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+            market: 'X',
+            source: 'X Premium',
+          ),
           Text(
             '$rank. ${item.match.homeTeam} - ${item.match.awayTeam}',
             style: const TextStyle(
