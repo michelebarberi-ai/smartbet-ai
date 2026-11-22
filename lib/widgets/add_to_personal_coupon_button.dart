@@ -139,9 +139,15 @@ class AddToPersonalCouponButton extends StatelessWidget {
           tooltip: 'Aggiungi $market alla mia schedina',
           icon: const Icon(Icons.add_circle_outline),
         )
-      : TextButton.icon(
+      : OutlinedButton.icon(
           onPressed: () => _add(context),
-          icon: const Icon(Icons.add_circle_outline),
-          label: const Text('Aggiungi alla mia schedina'),
+          icon: const Icon(Icons.playlist_add_rounded, size: 19),
+          label: const Text('Salva nella mia schedina'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF95D5B2),
+            side: const BorderSide(color: Color(0xFF426B60)),
+            shape: const StadiumBorder(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
         );
 }

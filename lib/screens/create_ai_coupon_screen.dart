@@ -30,7 +30,6 @@ import '../services/dual_engine_analysis_service.dart';
 import '../services/smartbet_analysis_registration_service.dart';
 import '../widgets/dual_engine_summary.dart';
 import '../widgets/goalvdline_three_brains_expansion.dart';
-import '../widgets/goalvdline_on_demand_coupon_panel.dart';
 import '../widgets/goalvdline_three_coupon_viewer.dart';
 import '../services/goalvdline_market_relation_service.dart';
 import '../services/smartbet_live_calibration_service.dart';
@@ -4575,14 +4574,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                 backgroundColor: const Color(0xFF00C853),
               ),
             ),
-            // Only today/automatic is supported by the remote beta.
-            // Do not replace the audited local coupon engine until parity is
-            // proven on a staging iPhone with Render and Neon.
-            if (_period == _CouponPeriod.today)
-              GoalVdLineOnDemandCouponPanel(
-                events: _count,
-                minimumProbability: _minimumCouponProbability,
-              ),
           ] else ...[
             _manualSelectionPanel(),
             const SizedBox(height: 12),
@@ -5022,17 +5013,6 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: AddToPersonalCouponButton(
-              fixtureId: item.match.fixtureId.toString(),
-              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
-              market: item.market,
-              source: 'Crea Schedina',
-              probability: item.probability.toDouble(),
-              odds: item.odd,
-            ),
-          ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -5300,6 +5280,19 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                   : Colors.white38,
               fontSize: 10,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Crea Schedina',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
             ),
           ),
         ],

@@ -4517,17 +4517,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: AddToPersonalCouponButton(
-              fixtureId: item.match.fixtureId.toString(),
-              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
-              market: item.market,
-              source: 'Combinazioni AI',
-              probability: item.probability.toDouble(),
-              odds: item.odd,
-            ),
-          ),
           Row(
             children: [
               Container(
@@ -4817,6 +4806,19 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             'Rischio pre-analisi: ${result.risk}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Combinazioni AI',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
+            ),
           ),
         ],
       ),
