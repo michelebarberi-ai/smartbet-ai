@@ -34,6 +34,28 @@ MatchModel fixture({
 }
 
 void main() {
+  test('B76: no partial league-name matches in Italian schedule', () {
+    for (final league in [
+      'Serie Amateur',
+      'Serie B Women',
+      'Serie C Youth League',
+      'Premier League North',
+      'Championship Development',
+    ]) {
+      final country = league.startsWith('Premier') ||
+              league.startsWith('Championship')
+          ? 'England'
+          : 'Italy';
+      expect(ItalyScheduleFilter.allows(
+          fixture(country: country, league: league)), isFalse,
+          reason: league);
+    }
+    expect(ItalyScheduleFilter.allows(
+        fixture(league: 'Serie D - Girone A')), isTrue);
+    expect(ItalyScheduleFilter.allows(
+        fixture(country: 'England', league: 'Premier League')), isTrue);
+  });
+
   test('B63: Premier League Cup e PL2 sono competizioni U21, non senior', () {
     for (final league in [
       'Premier League Cup',
