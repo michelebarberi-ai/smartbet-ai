@@ -1655,6 +1655,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           AddToPersonalCouponButton(
             fixtureId: item.match.fixtureId.toString(),
             match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+            country: item.match.country,
+            league: item.match.league,
+            kickoffAt: DateTime.tryParse(item.match.date),
             market: 'X',
             source: 'X Premium',
             probability: item.assessment.simulatedDraw == null
@@ -2090,6 +2093,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 child: AddToPersonalCouponButton(
                   fixtureId: item.match.fixtureId.toString(),
                   match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                  country: item.match.country,
+                  league: item.match.league,
+                  kickoffAt: DateTime.tryParse(item.match.date),
                   market: selection.market,
                   source: 'Ranking Multimercato',
                   probability: selection.probability * 100,
@@ -4517,17 +4523,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: AddToPersonalCouponButton(
-              fixtureId: item.match.fixtureId.toString(),
-              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
-              market: item.market,
-              source: 'Combinazioni AI',
-              probability: item.probability.toDouble(),
-              odds: item.odd,
-            ),
-          ),
           Row(
             children: [
               Container(
@@ -4817,6 +4812,23 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           Text(
             'Rischio pre-analisi: ${result.risk}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
+              bookmaker: item.bookmaker,
+              market: item.market,
+              source: 'Combinazioni AI',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
+            ),
           ),
         ],
       ),

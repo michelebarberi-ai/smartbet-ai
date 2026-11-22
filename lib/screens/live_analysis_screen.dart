@@ -900,6 +900,8 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
           AddToPersonalCouponButton(
             fixtureId: widget.match.fixtureId.toString(),
             match: '${widget.match.homeTeam} - ${widget.match.awayTeam}',
+            country: widget.match.country,
+            league: widget.match.leagueName,
             market: title,
             source: 'Analisi Live AI',
             probability: value.toDouble(),

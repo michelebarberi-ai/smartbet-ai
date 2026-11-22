@@ -1234,6 +1234,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
             child: AddToPersonalCouponButton(
               fixtureId: item.match.fixtureId.toString(),
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
               market: item.market,
               source: 'Risultati del Giorno (analisi sportiva)',
               probability: item.probability.toDouble(),
@@ -1298,6 +1301,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
             child: AddToPersonalCouponButton(
               fixtureId: item.match.fixtureId.toString(),
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
               market: item.market,
               source: 'Risultati del Giorno',
               probability: item.probability.toDouble(),
@@ -1482,6 +1488,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     AddToPersonalCouponButton(
                       fixtureId: item.match.fixtureId.toString(),
                       match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      country: item.match.country,
+                      league: item.match.league,
+                      kickoffAt: DateTime.tryParse(item.match.date),
                       market: 'Risultato esatto ${item.exactPrimary.label}',
                       source: 'Risultati esatti',
                       probability: item.exactPrimary.probability * 100,
@@ -1503,6 +1512,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     AddToPersonalCouponButton(
                       fixtureId: item.match.fixtureId.toString(),
                       match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      country: item.match.country,
+                      league: item.match.league,
+                      kickoffAt: DateTime.tryParse(item.match.date),
                       market: 'Risultato esatto ${item.exactAlternative.label}',
                       source: 'Risultati esatti',
                       probability: item.exactAlternative.probability * 100,
@@ -1524,6 +1536,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     AddToPersonalCouponButton(
                       fixtureId: item.match.fixtureId.toString(),
                       match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                      country: item.match.country,
+                      league: item.match.league,
+                      kickoffAt: DateTime.tryParse(item.match.date),
                       market: 'Risultato esatto ${item.exactThird.label}',
                       source: 'Risultati esatti',
                       probability: item.exactThird.probability * 100,

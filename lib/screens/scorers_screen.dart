@@ -839,6 +839,9 @@ class _ScorersScreenState extends State<ScorersScreen> {
             child: AddToPersonalCouponButton(
               fixtureId: item.match.fixtureId.toString(),
               match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              country: item.match.country,
+              league: item.match.league,
+              kickoffAt: DateTime.tryParse(item.match.date),
               market: 'Marcatore: ${item.playerName}',
               source: 'Possibili Marcatori',
               probability: item.probability * 100,
