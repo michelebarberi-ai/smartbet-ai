@@ -7,6 +7,7 @@ import 'coupon_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/add_to_personal_coupon_button.dart';
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
 import '../models/match_model.dart';
@@ -1176,6 +1177,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   ],
                 ),
 
+                const SizedBox(height: 8),
+
+                AddToPersonalCouponButton(
+                  fixtureId: match.fixtureId.toString(),
+                  match: '${match.homeTeam} - ${match.awayTeam}',
+                  market: result.prediction,
+                  source: 'Analisi Partite',
+                ),
                 const SizedBox(height: 8),
 
                 // PROGRESS
