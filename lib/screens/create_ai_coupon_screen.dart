@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../widgets/add_to_personal_coupon_button.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -5021,6 +5022,17 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Crea Schedina',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
+            ),
+          ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

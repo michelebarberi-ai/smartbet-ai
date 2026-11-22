@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../widgets/add_to_personal_coupon_button.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -1651,6 +1652,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          AddToPersonalCouponButton(
+            fixtureId: item.match.fixtureId.toString(),
+            match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+            market: 'X',
+            source: 'X Premium',
+            probability: item.assessment.simulatedDraw == null
+                ? null : item.assessment.simulatedDraw! * 100,
+          ),
           Text(
             '$rank. ${item.match.homeTeam} - ${item.match.awayTeam}',
             style: const TextStyle(
@@ -2075,6 +2084,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (selection != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: AddToPersonalCouponButton(
+                  fixtureId: item.match.fixtureId.toString(),
+                  match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+                  market: selection.market,
+                  source: 'Ranking Multimercato',
+                  probability: selection.probability * 100,
+                ),
+              ),
             Text(
               '${item.match.homeTeam} - ${item.match.awayTeam}',
               style: const TextStyle(
@@ -4497,6 +4517,17 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Combinazioni AI',
+              probability: item.probability.toDouble(),
+              odds: item.odd,
+            ),
+          ),
           Row(
             children: [
               Container(

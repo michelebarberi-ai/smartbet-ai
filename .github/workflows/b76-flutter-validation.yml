@@ -1,0 +1,81 @@
+name: B76 Flutter validation
+
+on:
+  pull_request:
+    branches: [release/b75-testflight]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'backend/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/b76-flutter-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b76-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-test:
+    name: Full backend regression (no upload)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend dependencies
+        run: npm --prefix backend ci --no-audit --no-fund
+      - name: Run complete backend test suite
+        run: npm --prefix backend test
+
+  flutter-test:
+    name: Full Flutter regression (no upload)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare non-secret test environment
+        run: |
+          if [ ! -f .env ]; then
+            printf 'FOOTBALL_DATA_API_KEY=ci-placeholder\n' > .env
+          fi
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze the whole Flutter project (errors are fatal)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run the entire Flutter test suite
+        run: flutter test --no-pub --reporter compact
+
+  ios-compile:
+    name: Compile iOS without signing or TestFlight
+    needs: flutter-test
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare non-secret test environment
+        run: |
+          if [ ! -f .env ]; then
+            printf 'FOOTBALL_DATA_API_KEY=ci-placeholder\n' > .env
+          fi
+      - name: Resolve Flutter and CocoaPods dependencies
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          cd ios
+          pod install
+      - name: Compile iOS without code signing
+        run: flutter build ios --release --no-codesign --no-pub

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/add_to_personal_coupon_button.dart';
 
 import '../ai/smartcore.dart';
 import '../models/analysis_result.dart';
@@ -833,6 +834,16 @@ class _ScorersScreenState extends State<ScorersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: AddToPersonalCouponButton(
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: 'Marcatore: ${item.playerName}',
+              source: 'Possibili Marcatori',
+              probability: item.probability * 100,
+            ),
+          ),
           Row(
             children: [
               Container(

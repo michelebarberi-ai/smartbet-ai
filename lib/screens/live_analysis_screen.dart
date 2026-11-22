@@ -2,6 +2,7 @@ import '../widgets/competition_filter_sheet.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/add_to_personal_coupon_button.dart';
 
 import '../ai/live_analysis_engine.dart';
 import '../services/live_match_service.dart';
@@ -863,8 +864,10 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white10),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Row(children: [
           Icon(icon, color: const Color(0xFF00C853), size: 21),
           const SizedBox(width: 11),
           Expanded(
@@ -892,6 +895,14 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
+          ),
+          ]),
+          AddToPersonalCouponButton(
+            fixtureId: widget.match.fixtureId.toString(),
+            match: '${widget.match.homeTeam} - ${widget.match.awayTeam}',
+            market: title,
+            source: 'Analisi Live AI',
+            probability: value.toDouble(),
           ),
         ],
       ),

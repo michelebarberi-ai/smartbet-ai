@@ -5,23 +5,23 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.dark,
 
-    scaffoldBackgroundColor: const Color(0xFF111827),
+    scaffoldBackgroundColor: const Color(0xFF091827),
 
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF00C853),
+      seedColor: const Color(0xFF27E887),
       brightness: Brightness.dark,
     ),
 
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF111827),
+      backgroundColor: Color(0xFF091827),
       foregroundColor: Colors.white,
       centerTitle: true,
       elevation: 0,
     ),
 
     cardTheme: CardThemeData(
-      color: const Color(0xFF1F2937),
-      elevation: 5,
+      color: const Color(0xFF142B40),
+      elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
 
