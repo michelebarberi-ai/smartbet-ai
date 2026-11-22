@@ -519,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final comparisonStore = _comparisonStore;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111827),
+      backgroundColor: const Color(0xFF091827),
       body: SafeArea(
         child: AnimatedBuilder(
           animation: Listenable.merge([
@@ -558,18 +558,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     lastUpdate: dashboard.lastUpdate,
                   ),
 
-                  const SizedBox(height: 35),
+                  const SizedBox(height: 22),
 
                   const Text(
-                    'I tuoi strumenti',
+                    'Esplora GoalVdLine',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
+                      fontSize: 23,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   const MenuGrid(),
                   const SizedBox(height: 25),
 
