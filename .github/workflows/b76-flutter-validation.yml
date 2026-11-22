@@ -6,6 +6,7 @@ on:
     paths:
       - 'lib/**'
       - 'test/**'
+      - 'backend/**'
       - 'pubspec.yaml'
       - '.github/workflows/b76-flutter-validation.yml'
   workflow_dispatch:
@@ -18,6 +19,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend-test:
+    name: Full backend regression (no upload)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend dependencies
+        run: npm --prefix backend ci --no-audit --no-fund
+      - name: Run complete backend test suite
+        run: npm --prefix backend test
+
   flutter-test:
     name: Full Flutter regression (no upload)
     runs-on: ubuntu-latest
