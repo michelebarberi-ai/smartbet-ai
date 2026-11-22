@@ -864,8 +864,10 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white10),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Row(children: [
           Icon(icon, color: const Color(0xFF00C853), size: 21),
           const SizedBox(width: 11),
           Expanded(
@@ -894,6 +896,7 @@ class _LiveMatchDetailScreenState extends State<_LiveMatchDetailScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
+          ]),
           AddToPersonalCouponButton(
             fixtureId: widget.match.fixtureId.toString(),
             match: '${widget.match.homeTeam} - ${widget.match.awayTeam}',
