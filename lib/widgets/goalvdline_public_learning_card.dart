@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_scorer_learning_service.dart';
+import 'goalvdline_home_league_ranking_panel.dart';
 
 /// A minimal, non-technical public summary.
 /// It intentionally excludes legacy retrospective copies and never presents
@@ -193,9 +194,9 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'GoalVdLine confronta le previsioni con i risultati reali '
-              'per verificare nel tempo la precisione dei suoi modelli.',
-              style: TextStyle(color: Colors.white70),
+              'Precisione storica delle previsioni confrontate '
+              'con i risultati reali.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 8),
             Text(
@@ -216,7 +217,7 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
                 style: const TextStyle(color: Colors.white60, fontSize: 12),
               ),
             const SizedBox(height: 12),
-            const Text('Risultati storici dei tre motori',
+            const Text('Risultati storici e affidabilità',
               style: TextStyle(color: Colors.white70, fontSize: 12,
                 fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
@@ -241,12 +242,36 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
               'Le tre percentuali non sono direttamente confrontabili.',
               style: TextStyle(color: Colors.white54, fontSize: 10),
             ),
+            GoalVdLineHomeLeagueRankingPanel(
+              records: records,
+              asOf: asOf,
+            ),
             const SizedBox(height: 8),
-            const Text(
-              'Le percentuali sui singoli pronostici sono stime, '
-              'non risultati garantiti. Le analisi retrospettive non '
-              'contano come previsioni certificate.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                unselectedWidgetColor: Colors.white60,
+              ),
+              child: const ExpansionTile(
+                key: Key('b77-home-learning-methodology'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.only(bottom: 4),
+                dense: true,
+                title: Text(
+                  'Come vengono calcolati i risultati',
+                  style: TextStyle(color: Color(0xFF95D5B2), fontSize: 11),
+                ),
+                children: [
+                  Text(
+                    'Le percentuali sui singoli pronostici sono stime, '
+                    'non risultati garantiti. Le analisi retrospettive '
+                    'non contano come previsioni certificate. '
+                    'Le classifiche per campionato usano esclusivamente '
+                    'esiti prepartita verificati su questo dispositivo.',
+                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
