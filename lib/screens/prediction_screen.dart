@@ -1286,10 +1286,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: AddToPersonalCouponButton(
-              fixtureId: ${m}.fixtureId.toString(),
-              match: '${${m}.homeTeam} - ${${m}.awayTeam}',
-              market: ${market},
-              source: '${source}',
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Risultati del Giorno',
             ),
           ),
           Row(
