@@ -72,6 +72,31 @@ class AddToPersonalCouponButton extends StatelessWidget {
       ),
     );
     if (selected == null) return;
+    final target = store.coupons.where((e) => e.id == selected).toList();
+    if (target.isEmpty) return;
+    final otherMarkets = target.first.selections.where(
+      (e) => e.fixtureId == fixtureId && e.market != market,
+    ).toList();
+    if (otherMarkets.isNotEmpty && context.mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Stessa partita, mercati diversi'),
+          content: const Text(
+            'Questa schedina contiene già una selezione della stessa partita. '
+            'Le quote non possono essere moltiplicate automaticamente. '
+            'Vuoi conservarle entrambe per una revisione manuale?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annulla')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Aggiungi comunque')),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
     await store.addSelection(selected, PersonalSelection(
       fixtureId: fixtureId, match: match, market: market,
       source: source, odds: odds, capturedAt: DateTime.now(),
