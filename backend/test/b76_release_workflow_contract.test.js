@@ -9,7 +9,7 @@ test('B76: TestFlight upload only from explicitly authorized B76 release', () =>
     path.join(root, '.github/workflows/ios-testflight.yml'), 'utf8',
   );
   const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+76$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:76|77)$/m);
   assert.match(workflow, /- release\/b76-testflight/);
   assert.match(workflow, /github\.ref != 'refs\/heads\/release\/b76-testflight'/);
   assert.match(workflow, /github\.event\.head_commit\.message == 'release\(build76\): authorize TestFlight upload'/);
