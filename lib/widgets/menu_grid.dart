@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/analysis_screen.dart';
+import '../screens/personal_coupons_screen.dart';
 import '../screens/combinations_ai_screen.dart';
 import '../screens/create_ai_coupon_screen.dart';
 import '../screens/live_analysis_screen.dart';
@@ -15,6 +16,13 @@ class MenuGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <_MenuItem>[
+      _MenuItem(
+        icon: Icons.confirmation_number_outlined,
+        title: 'Le mie\\nSchedine',
+        color: const Color(0xFF27E887),
+        onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const PersonalCouponsScreen())),
+      ),
       _MenuItem(
         icon: Icons.live_tv,
         title: 'Analisi Live\nAI',
