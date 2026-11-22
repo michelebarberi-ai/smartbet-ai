@@ -67,7 +67,7 @@ class PersonalCouponMatchTile extends StatelessWidget {
       if (probability != null && probability.isFinite &&
           probability >= 0 && probability <= 100)
         'AI ${probability.toStringAsFixed(1)}%',
-      if (oddsValid) 'Quota ${odds!.toStringAsFixed(2)}',
+      if (oddsValid) 'Quota ${odds.toStringAsFixed(2)}',
     ].join(' · ');
 
     return Theme(
@@ -140,7 +140,7 @@ class PersonalCouponMatchTile extends StatelessWidget {
                       : 'Non disponibile',
                 ),
                 _detail('Quota',
-                  oddsValid ? odds!.toStringAsFixed(2) : 'Non disponibile'),
+                  oddsValid ? odds.toStringAsFixed(2) : 'Non disponibile'),
                 if (selection.bookmaker?.trim().isNotEmpty == true)
                   _detail('Bookmaker', selection.bookmaker!.trim()),
                 _detail('Origine', selection.source),
