@@ -10,19 +10,53 @@ on:
       - '.github/workflows/b76-flutter-validation.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   flutter-test:
+    name: Full Flutter regression (no upload)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - name: Prepare non-secret test environment
+        run: |
+          if [ ! -f .env ]; then
+            printf 'FOOTBALL_DATA_API_KEY=ci-placeholder\n' > .env
+          fi
       - name: Install dependencies
         run: flutter pub get
-      - name: Analyze changed application
-        run: dart analyze lib/services/personal_coupon_store.dart lib/screens/personal_coupons_screen.dart lib/widgets/add_to_personal_coupon_button.dart lib/widgets/menu_grid.dart
-      - name: Run personal coupon tests
-        run: flutter test test/services/personal_coupon_store_test.dart
+      - name: Analyze the whole Flutter project (errors are fatal)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run the entire Flutter test suite
+        run: flutter test --no-pub --reporter compact
+
+  ios-compile:
+    name: Compile iOS without signing or TestFlight
+    needs: flutter-test
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare non-secret test environment
+        run: |
+          if [ ! -f .env ]; then
+            printf 'FOOTBALL_DATA_API_KEY=ci-placeholder\n' > .env
+          fi
+      - name: Resolve Flutter and CocoaPods dependencies
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          cd ios
+          pod install
+      - name: Compile iOS without code signing
+        run: flutter build ios --release --no-codesign --no-pub
