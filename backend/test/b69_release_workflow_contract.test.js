@@ -39,5 +39,5 @@ test('B69: full backend and Flutter tests run before signing and upload', () => 
 
 test('B69: feature base retains last version until release branch is prepared', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:68|69|70|71|73|74|75)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:68|69|70|71|73|74|75|76)$/m);
 });
