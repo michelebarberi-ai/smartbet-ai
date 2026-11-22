@@ -18,7 +18,7 @@ class MenuGrid extends StatelessWidget {
     final items = <_MenuItem>[
       _MenuItem(
         icon: Icons.confirmation_number_outlined,
-        title: 'Le mie\\nSchedine',
+        title: 'Le mie\nSchedine',
         color: const Color(0xFF27E887),
         onTap: () => Navigator.push(context,
           MaterialPageRoute(builder: (_) => const PersonalCouponsScreen())),
