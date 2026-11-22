@@ -51,7 +51,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tutte le competizioni del catalogo'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('APPLICA (3)'));
+    // In B76 only the league with upcoming games is selectable.
+    await tester.tap(find.text('APPLICA (1)'));
     await tester.pumpAndSettle();
     expect(selected, isEmpty);
   });

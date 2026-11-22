@@ -41,6 +41,10 @@ void main() {
     await tester.tap(find.text('Apri filtro'));
     await tester.pumpAndSettle();
     expect(find.text('PARTITE SELEZIONATE: 3 / 3'), findsOneWidget);
+    // Catalog is a lazy list: scroll to the disabled league before reading it.
+    await tester.scrollUntilVisible(find.text('Serie B'), 150,
+      scrollable: find.byType(Scrollable).last, maxScrolls: 40,
+    );
     final noGames = tester.widget<CheckboxListTile>(find.ancestor(
       of: find.text('Serie B'),
       matching: find.byType(CheckboxListTile),
@@ -48,9 +52,11 @@ void main() {
     expect(noGames.onChanged, isNull);
 
     // Select one league, rather than a zero-match catalog entry.
-    await tester.tap(find.text('Tutti i campionati con partite disponibili'));
+    await tester.tap(find.text('Tutte le competizioni del catalogo'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Serie A'));
+    await tester.scrollUntilVisible(find.text('Serie A'), -150,
+      scrollable: find.byType(Scrollable).last, maxScrolls: 40,
+    );
     await tester.tap(find.text('Serie A'));
     await tester.pumpAndSettle();
     expect(find.text('PARTITE SELEZIONATE: 2 / 3'), findsOneWidget);

@@ -319,7 +319,7 @@ class CompetitionFilterSheet {
                       value: allSelected,
                       activeColor: _accent,
                       title: const Text(
-                        'Tutti i campionati con partite disponibili',
+                        'Tutte le competizioni del catalogo',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -328,7 +328,7 @@ class CompetitionFilterSheet {
                       subtitle: Text(
                         '${allKeys.length} nel catalogo · '
                         '${availabilityCounts.values.where((n) => n > 0).length} '
-                        'con partite future nel periodo',
+                        'con partite future nel periodo · solo queste selezionabili',
                         style: const TextStyle(color: Colors.white38),
                       ),
                       onChanged: (value) {
