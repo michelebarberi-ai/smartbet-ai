@@ -5025,10 +5025,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: AddToPersonalCouponButton(
-              fixtureId: ${m}.fixtureId.toString(),
-              match: '${${m}.homeTeam} - ${${m}.awayTeam}',
-              market: ${market},
-              source: '${source}',
+              fixtureId: item.match.fixtureId.toString(),
+              match: '${item.match.homeTeam} - ${item.match.awayTeam}',
+              market: item.market,
+              source: 'Crea Schedina',
             ),
           ),
           Row(
