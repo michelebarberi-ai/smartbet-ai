@@ -277,4 +277,34 @@ void main() {
     expect(odds?.oddFor('HCP ASIA OSPITE 0.5'), isNull);
     service.dispose();
   });
+  test('B79: quote away +1.5 and -1.5 retain different lines', () async {
+    OddsService.clearCache();
+    final client = MockClient((request) async => http.Response(
+      jsonEncode({
+        'errors': {},
+        'response': [{
+          'bookmakers': [{
+            'id': 80,
+            'name': 'Bet365',
+            'bets': [{
+              'id': 998,
+              'name': 'Asian Handicap',
+              'values': [
+                {'value': 'Away +1.5', 'odd': '1.35'},
+                {'value': 'Away -1.5', 'odd': '5.80'},
+              ],
+            }],
+          }],
+        }],
+      }),
+      200,
+    ));
+    final service = OddsService(client: client);
+    final odds = await service.getFixtureMarketOdds(fixtureId: 765432108);
+    expect(odds?.oddFor('HCP ASIA OSPITE 1.5')?.odd, 1.35);
+    expect(odds?.oddFor('HCP ASIA OSPITE -1.5')?.odd, 5.80);
+    expect(odds?.oddFor('HCP ASIA CASA 1.5'), isNull);
+    service.dispose();
+  });
+
 }
