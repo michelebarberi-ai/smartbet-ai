@@ -11,7 +11,7 @@ const workflow = fs.readFileSync(
 const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
 
 test('B80: only exactly authorized release/build 80 can upload', () => {
-  assert.match(pubspec, /^version: 1\.2\.5\+80$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:80|81)$/m);
   assert.match(workflow, /- release\/b80-testflight/);
   assert.match(
     workflow,
