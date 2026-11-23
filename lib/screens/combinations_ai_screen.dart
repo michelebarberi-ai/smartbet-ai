@@ -5334,8 +5334,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white10),
             ),
-            child: SwitchListTile(
-              value: _italyScheduleOnly,
+            child: Material(
+              color: Colors.transparent,
+              child: SwitchListTile(
+                value: _italyScheduleOnly,
               activeThumbColor: const Color(0xFF00C853),
               title: const Text(
                 'Palinsesto Italia',
@@ -5369,6 +5371,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                         _total = 0;
                       });
                     },
+              ),
             ),
           ),
 
