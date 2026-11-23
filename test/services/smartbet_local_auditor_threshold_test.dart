@@ -76,4 +76,40 @@ void main() {
     );
     expect(other.isBlocked, false);
   });
+  test('B79: anomalous 79%@13 and 88%@3.45 cannot enter CORE', () {
+    for (final pick in [(79, 13.00), (88, 3.45), (85, 6.50), (84, 2.75)]) {
+      final audit = SmartBetLocalAuditor.evaluate(
+        analysis: sample(),
+        market: 'HCP ASIA OSPITE 1.5',
+        probability: pick.$1,
+        odd: pick.$2,
+      );
+      expect(audit.isBlocked, true, reason: '${pick.$1}% @ ${pick.$2}');
+      expect(audit.reasons.single, contains('fortemente divergenti'));
+    }
+  });
+
+  test('B79: moderate positive discrepancy is flagged, not silently approved', () {
+    final audit = SmartBetLocalAuditor.evaluate(
+      analysis: sample(),
+      market: 'HCP ASIA OSPITE 1.5',
+      probability: 82,
+      odd: 1.93,
+    );
+    expect(audit.isBlocked, false);
+    expect(audit.isDoubt, true);
+    expect(audit.reasons.join(' '), contains('verificare'));
+  });
+
+  test('B79: ordinary market prices remain usable, sports estimate intact', () {
+    final audit = SmartBetLocalAuditor.evaluate(
+      analysis: sample(),
+      market: 'OVER 1.5',
+      probability: 81,
+      odd: 1.27,
+    );
+    expect(audit.isConfirmed, true);
+    expect(audit.isBlocked, false);
+  });
+
 }
