@@ -44,5 +44,5 @@ test('B66: feature build 65 and release build 66 have valid version metadata', (
     path.join(__dirname, '../../pubspec.yaml'),
     'utf8',
   );
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:65|66|67|68|69|70|71|73|74|75|76|77|78)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:65|66|67|68|69|70|71|73|74|75|76|77|78|79)$/m);
 });
