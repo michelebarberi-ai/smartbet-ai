@@ -179,4 +179,26 @@ void main() {
     expect(summary.pending, 1);
     expect(summary.verified, 2);
   });
+  test('B78: market error summary de-duplicates across slips and separates manual markets',
+      () {
+    final score = PersonalVerifiedScore(
+      homeGoals: 2, awayGoals: 1, verifiedAt: cutoff);
+    final unchanged = pick(fixture: '201', market: 'X')
+        .withVerifiedScore(score);
+    final edited = pick(fixture: '202', market: 'UNDER 4.5', chosen: 'X')
+        .withVerifiedScore(score);
+    final segments = svc.marketErrors([
+      PersonalCoupon(id: 'A', name: 'A', selections: [unchanged, edited]),
+      PersonalCoupon(id: 'B', name: 'B', selections: [unchanged]),
+    ], []);
+    expect(segments.length, 2);
+    final original = segments.singleWhere((s) => !s.editedByUser);
+    final personal = segments.singleWhere((s) => s.editedByUser);
+    expect(original.sampleSize, 1);
+    expect(original.wrong, 1);
+    expect(personal.sampleSize, 1);
+    expect(personal.wrong, 1);
+    expect(original.league, 'Jupiler Pro League');
+  });
+
 }

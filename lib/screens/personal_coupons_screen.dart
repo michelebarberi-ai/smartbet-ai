@@ -76,6 +76,7 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
     if (_refreshing) return;
     setState(() => _refreshing = true);
     try {
+      await store.initialize();
       await history.initialize();
       final report = await reviewService.fetchFinished(
         selections: store.coupons.expand((coupon) => coupon.selections),
@@ -166,6 +167,63 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
     return result.isFinite ? result : null;
   }
 
+  Widget _marketReviewPanel(List<SmartBetAnalysisRecord> records) {
+    final segments = reviewService.marketErrors(store.coupons, records);
+    return Card(
+      child: ExpansionTile(
+        key: const Key('b78-personal-market-review'),
+        leading: const Icon(Icons.bar_chart, color: Color(0xFF95D5B2)),
+        title: const Text('Mercati da rivedere'),
+        subtitle: const Text(
+          'Errori verificati per campionato e mercato, '
+          'senza contare più volte i pronostici ripetuti.',
+          style: TextStyle(fontSize: 11),
+        ),
+        children: [
+          if (segments.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: Text(
+                'Non ci sono ancora esiti sufficienti per mostrare '
+                'errori verificati sulle schedine personali.',
+              ),
+            ),
+          for (final segment in segments.take(6))
+            ListTile(
+              dense: true,
+              title: Text(
+                '${segment.league} · ${segment.market}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              subtitle: Text(
+                '${segment.country} · '
+                '${segment.editedByUser ? "Scelta personale" : "Mercato salvato dall’app"}'
+                ' · ${segment.sampleSize} esiti distinti',
+                style: const TextStyle(fontSize: 10),
+              ),
+              trailing: Text(
+                '${segment.wrong} errati',
+                style: const TextStyle(
+                  color: Colors.orangeAccent, fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 6, 14, 14),
+            child: Text(
+              'Campioni descrittivi, non classifiche affidabili né '
+              'misure dell’accuratezza dei singoli motori AI. '
+              'Le scelte personali sono tenute separate. '
+              'Per l’affidabilità per motore usa Qualità e apprendimento.',
+              style: TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -205,9 +263,10 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
         }
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-          itemCount: store.coupons.length,
+          itemCount: store.coupons.length + 1,
           itemBuilder: (context, index) {
-            final coupon = store.coupons[index];
+            if (index == 0) return _marketReviewPanel(records);
+            final coupon = store.coupons[index - 1];
             final total = _combinedOdds(coupon);
             final summary = reviewService.summarize(coupon, records);
             return Card(child: ExpansionTile(

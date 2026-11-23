@@ -57,6 +57,23 @@ class PersonalCouponRefreshReport {
   });
 }
 
+class PersonalMarketReviewSegment {
+  final String country;
+  final String league;
+  final String market;
+  final bool editedByUser;
+  final int correct;
+  final int wrong;
+
+  const PersonalMarketReviewSegment({
+    required this.country, required this.league,
+    required this.market, required this.editedByUser,
+    required this.correct, required this.wrong,
+  });
+
+  int get sampleSize => correct + wrong;
+}
+
 /// Private, read-only match assessment. An actual final score is required.
 /// Missing/unsettleable markets are NEVER classified as losing predictions.
 class PersonalCouponReviewService {
@@ -169,6 +186,81 @@ class PersonalCouponReviewService {
       correct: correct, wrong: wrong, pending: pending,
       unsupported: unsupported, disputed: disputed,
     );
+  }
+
+  /// Exploratory review of personal selections, not AI calibration.
+  /// Repeated fixtures/markets across several slips count only once.
+  List<PersonalMarketReviewSegment> marketErrors(
+    Iterable<PersonalCoupon> coupons,
+    Iterable<SmartBetAnalysisRecord> records,
+  ) {
+    final archived = records.toList(growable: false);
+    final seen = <String>{};
+    final groups = <String, List<PersonalSelection>>{};
+
+    for (final coupon in coupons) {
+      for (final pick in coupon.selections) {
+        final reviewStatus = review(pick, archived).status;
+        if (reviewStatus != PersonalPickReviewStatus.correct &&
+            reviewStatus != PersonalPickReviewStatus.wrong) {
+          continue;
+        }
+        final dedup = '${pick.fixtureId}|${pick.currentMarket.trim().toUpperCase()}|'
+            '${pick.editedByUser}';
+        if (!seen.add(dedup)) continue;
+        final league = pick.league?.trim().isNotEmpty == true
+            ? pick.league!.trim() : _historyLeague(pick.fixtureId, archived);
+        final country = pick.country?.trim().isNotEmpty == true
+            ? pick.country!.trim() : _historyCountry(pick.fixtureId, archived);
+        final group = '${country.toLowerCase()}|${league.toLowerCase()}|'
+            '${pick.currentMarket.trim().toUpperCase()}|${pick.editedByUser}';
+        (groups[group] ??= []).add(pick);
+      }
+    }
+
+    final segments = groups.values.map((group) {
+      final first = group.first;
+      final country = first.country?.trim().isNotEmpty == true
+          ? first.country!.trim() : _historyCountry(first.fixtureId, archived);
+      final league = first.league?.trim().isNotEmpty == true
+          ? first.league!.trim() : _historyLeague(first.fixtureId, archived);
+      final right = group.where((pick) =>
+          review(pick, archived).status == PersonalPickReviewStatus.correct).length;
+      return PersonalMarketReviewSegment(
+        country: country, league: league,
+        market: first.currentMarket, editedByUser: first.editedByUser,
+        correct: right, wrong: group.length - right,
+      );
+    }).toList();
+
+    segments.sort((a, b) {
+      final wrong = b.wrong.compareTo(a.wrong);
+      if (wrong != 0) return wrong;
+      final count = b.sampleSize.compareTo(a.sampleSize);
+      if (count != 0) return count;
+      return a.league.compareTo(b.league);
+    });
+    return List.unmodifiable(segments);
+  }
+
+  String _historyLeague(String id, List<SmartBetAnalysisRecord> records) {
+    for (final record in records) {
+      if (record.fixtureId.toString() == id &&
+          record.league.trim().isNotEmpty) {
+        return record.league.trim();
+      }
+    }
+    return 'Campionato N/D';
+  }
+
+  String _historyCountry(String id, List<SmartBetAnalysisRecord> records) {
+    for (final record in records) {
+      if (record.fixtureId.toString() == id &&
+          record.country.trim().isNotEmpty) {
+        return record.country.trim();
+      }
+    }
+    return 'Paese N/D';
   }
 
   /// Explicit user-triggered refresh only. One backend request per date,
