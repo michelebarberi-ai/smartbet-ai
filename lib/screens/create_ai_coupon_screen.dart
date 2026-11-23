@@ -671,6 +671,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
         continue;
       }
 
+      // B79: inspect ONLY the already-ranked, actually quoted candidate.
+      // An anomalous handicap sign/line or a huge model-price mismatch
+      // must not enter CORE. Try the next sporting candidate for the
+      // SAME match without changing the sports ranking or its estimates.
+      final quoteAudit = SmartBetLocalAuditor.evaluate(
+        analysis: preliminary.analysis,
+        market: market,
+        probability: probability,
+        odd: bestOdd.odd,
+      );
+      if (quoteAudit.isBlocked || quoteAudit.blocksMarket(market)) {
+        continue;
+      }
+
       // Value layer informativo.
       // Edge ed EV NON cambiano mercato né ranking.
       final p = probability / 100.0;
