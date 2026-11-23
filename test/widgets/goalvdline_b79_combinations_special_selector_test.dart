@@ -26,7 +26,7 @@ void main() {
     expect(find.text('Calci d’angolo'), findsOneWidget);
     expect(find.text('Tiri in porta'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Risultato 1° tempo'), 360);
+    await tester.scrollUntilVisible(find.text('Risultato 1° tempo'), 360, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Risultato 1° tempo'));
     await tester.pumpAndSettle();
     expect(find.text('1° tempo: X'), findsOneWidget);
@@ -38,7 +38,7 @@ void main() {
     expect(find.textContaining('ANALIZZA 1T X'), findsOneWidget);
     expect(find.byKey(const Key('b79-no-special-coupon')), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Calci d’angolo'), 360);
+    await tester.scrollUntilVisible(find.text('Calci d’angolo'), 360, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Calci d’angolo'));
     await tester.pumpAndSettle();
     expect(find.text('CORNER OVER 8.5'), findsOneWidget);
@@ -47,7 +47,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('ANALIZZA CORNER OVER 8.5'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Tiri in porta'), 360);
+    await tester.scrollUntilVisible(find.text('Tiri in porta'), 360, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Tiri in porta'));
     await tester.pumpAndSettle();
     expect(find.text('TIRI PORTA UNDER 6.5'), findsOneWidget);
@@ -58,7 +58,7 @@ void main() {
       findsOneWidget);
 
     // Returning to a normal pick restores the ordinary coupon workflow.
-    await tester.scrollUntilVisible(find.text('Risultato partita'), -360);
+    await tester.scrollUntilVisible(find.text('Risultato partita'), -360, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Risultato partita'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '1'));
