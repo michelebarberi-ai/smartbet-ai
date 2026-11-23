@@ -2277,14 +2277,29 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // SCANSIONE
   // ============================================================
 
-  /// Read-only search for newly selectable, uncalibrated markets.
-  /// Never creates, saves, shares or registers an official AI prediction.
+  /// Observation-only: a single market or every market in one chosen family.
+  /// No prices, coupon creation, learning registration or official rankings.
   Future<void> _findObservationalMarkets() async {
-    if (_loading || _selectedMarkets.length != 1 ||
-        !GoalVdLineExtraMarketsService.isExtraMarket(_selectedMarket)) {
+    if (_loading) return;
+    final family = _allExtraMarketFamily;
+    final comparesAll = family != null;
+    if (!comparesAll &&
+        (_selectedMarkets.length != 1 ||
+         !GoalVdLineExtraMarketsService.isExtraMarket(_selectedMarket))) {
       return;
     }
-    final market = _selectedMarket;
+
+    final chosenMarkets = comparesAll
+        ? GoalVdLineExtraMarketsService.marketFamilies[family]!
+        : <String>[_selectedMarket];
+    final isHalf = chosenMarkets.first.startsWith('1T ') ||
+        chosenMarkets.first.startsWith('2T ');
+    final countFamily = family ??
+        (chosenMarkets.first.startsWith('CORNER ')
+            ? GoalVdLineExtraMarketFamily.totalCorners
+            : GoalVdLineExtraMarketFamily.totalShotsOnTarget);
+    const extraService = GoalVdLineExtraMarketsService();
+
     setState(() {
       _loading = true;
       _checkingOdds = false;
@@ -2305,44 +2320,57 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             'Nessuna partita futura compatibile con i filtri selezionati.');
         return;
       }
-      final isHalf = market.startsWith('1T ') || market.startsWith('2T ');
       final count = isHalf
           ? math.min(matches.length, math.min(24, math.max(10, _topCount * 2)))
           : math.min(matches.length, _topCount);
       setState(() => _total = count);
       final observations = <_SpecialMarketObservation>[];
+
+      // Corner and shots: no historical sample is supplied here, so the
+      // evidence service deliberately returns N/D for every line.
+      // No ordering by fake confidence or odds is permitted.
+      final countEstimates = isHalf
+          ? const <GoalVdLineExtraMarketEstimate>[]
+          : extraService.countMarketEvidence(family: countFamily)
+              .where((value) => chosenMarkets.contains(value.market))
+              .toList(growable: false);
+
       for (final match in matches.take(count)) {
         if (!mounted) return;
-        if (isHalf) {
-          try {
-            final result = await SmartCore.analyze(match);
-            final estimate = const GoalVdLineExtraMarketsService()
-                .halfTimeScenarios(result)
-                .firstWhere((value) => value.market == market);
+        try {
+          List<GoalVdLineExtraMarketEstimate> estimates;
+          if (isHalf) {
+            final analysis = await SmartCore.analyze(match);
+            estimates = extraService.halfTimeScenarios(analysis)
+                .where((value) => chosenMarkets.contains(value.market))
+                .toList();
+            if (comparesAll) {
+              // Illustrative model scenarios, NOT validated reliability.
+              estimates.sort((a, b) => (b.probabilityPercent ?? -1)
+                  .compareTo(a.probabilityPercent ?? -1));
+            }
+          } else {
+            estimates = countEstimates;
+          }
+          if (estimates.isNotEmpty) {
             observations.add(_SpecialMarketObservation(
               match: match,
-              market: market,
-              probabilityPercent: estimate.probabilityPercent,
-              note: estimate.evidence,
+              estimates: estimates,
+              comparesAll: comparesAll,
             ));
-          } catch (error) {
-            debugPrint('B79 special analysis skipped '
-                '${match.fixtureId}: $error');
-            _errors++;
           }
-        } else {
-          observations.add(_SpecialMarketObservation(
-            match: match,
-            market: market,
-            probabilityPercent: null,
-            note: 'Storico corner/tiri insufficiente: servono '
-                'statistiche finali verificate per questo mercato.',
-          ));
+        } catch (error) {
+          debugPrint('B81 observation skipped ${match.fixtureId}: $error');
+          _errors++;
         }
         if (mounted) setState(() => _processed++);
       }
-      observations.sort((a, b) => (b.probabilityPercent ?? -1)
-          .compareTo(a.probabilityPercent ?? -1));
+      // Sort only scenarios that actually have comparable numeric estimates.
+      // If all entries are N/D, retain fixture order and show no leader.
+      if (isHalf) {
+        observations.sort((a, b) => (b.probabilityPercent ?? -1)
+            .compareTo(a.probabilityPercent ?? -1));
+      }
       if (!mounted) return;
       setState(() => _specialMarketObservations
         ..clear()
@@ -3582,6 +3610,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     // observation workflow that never masquerades as a bookable coupon.
     if (isSpecial || _isSpecialSelected) {
       setState(() {
+        _allExtraMarketFamily = null;
         _xPremiumEnabled = false;
         _multiMarketRankingEnabled = false;
         if (selected) {
@@ -3635,6 +3664,26 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       _results.clear();
       _combinationRankingCache.clear();
       _systemResults.clear();
+      _selectedSystemIndex = 0;
+      _errorMessage = null;
+    });
+  }
+
+  // The all-family choice is exclusive with single-market mode and
+  // ordinary coupons. It represents ONE observational search, not 12 bets.
+  void _toggleAllExtraMarkets(GoalVdLineExtraMarketFamily family) {
+    if (_loading || _checkingOdds) return;
+    setState(() {
+      _allExtraMarketFamily = _allExtraMarketFamily == family ? null : family;
+      _selectedMarkets.clear();
+      _selectedMarket = '';
+      _xPremiumEnabled = false;
+      _multiMarketRankingEnabled = false;
+      _results.clear();
+      _sportsOnlyPreview.clear();
+      _specialMarketObservations.clear();
+      _systemResults.clear();
+      _combinationRankingCache.clear();
       _selectedSystemIndex = 0;
       _errorMessage = null;
     });
