@@ -4826,6 +4826,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               bookmaker: item.bookmaker,
               market: item.market,
               source: 'Combinazioni AI',
+              aiPrimaryMarket: mainSport?.market,
+              aiPrimaryProbability: mainSport?.probability.toDouble(),
               probability: item.probability.toDouble(),
               odds: item.odd,
             ),

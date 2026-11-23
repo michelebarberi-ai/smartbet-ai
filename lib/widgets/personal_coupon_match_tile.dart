@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/personal_coupon_store.dart';
+import '../services/personal_coupon_review_service.dart';
 import '../services/smartbet_analysis_history_store.dart';
 
 /// A saved prediction expands into the original fixture summary.
@@ -11,11 +12,45 @@ class PersonalCouponMatchTile extends StatelessWidget {
     required this.selection,
     required this.onRemove,
     this.archivedMatch,
+    this.review,
+    this.repeatedAcrossCoupons = 0,
+    this.onEditMarket,
   });
 
   final PersonalSelection selection;
   final SmartBetAnalysisRecord? archivedMatch;
+  final PersonalPickReview? review;
+  final int repeatedAcrossCoupons;
+  final VoidCallback? onEditMarket;
   final VoidCallback onRemove;
+
+  String _statusLabel(PersonalPickReviewStatus status) {
+    switch (status) {
+      case PersonalPickReviewStatus.correct:
+        return 'Corretta';
+      case PersonalPickReviewStatus.wrong:
+        return 'Errata';
+      case PersonalPickReviewStatus.unsupported:
+        return 'Da verificare sul bookmaker';
+      case PersonalPickReviewStatus.pending:
+        return 'Esito non ancora verificato';
+      case PersonalPickReviewStatus.disputed:
+        return 'Esito da controllare';
+    }
+  }
+
+  Color _statusColor(PersonalPickReviewStatus status) {
+    switch (status) {
+      case PersonalPickReviewStatus.correct:
+        return const Color(0xFF69F0AE);
+      case PersonalPickReviewStatus.wrong:
+        return Colors.redAccent;
+      case PersonalPickReviewStatus.pending:
+      case PersonalPickReviewStatus.unsupported:
+      case PersonalPickReviewStatus.disputed:
+        return Colors.orangeAccent;
+    }
+  }
 
   String _firstKnown(String? saved, String? historic) {
     final first = saved?.trim() ?? '';
@@ -59,11 +94,12 @@ class PersonalCouponMatchTile extends StatelessWidget {
       if (country.isNotEmpty) country,
       if (league.isNotEmpty) league,
     ].join(' · ');
-    final probability = selection.probability;
-    final odds = selection.odds;
+    final probability = selection.currentProbability;
+    final odds = selection.currentOdds;
     final oddsValid = odds != null && odds.isFinite && odds > 1.20;
     final prediction = [
-      selection.market,
+      selection.currentMarket,
+      if (selection.editedByUser) 'Scelta personale',
       if (probability != null && probability.isFinite &&
           probability >= 0 && probability <= 100)
         'AI ${probability.toStringAsFixed(1)}%',
@@ -102,6 +138,26 @@ class PersonalCouponMatchTile extends StatelessWidget {
               prediction,
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
+            if (review != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Revisione: ${_statusLabel(review!.status)}',
+                key: const Key('personal-pick-review-status'),
+                style: TextStyle(
+                  color: _statusColor(review!.status), fontSize: 11,
+                ),
+              ),
+            ],
+            if (repeatedAcrossCoupons > 1) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Presente in $repeatedAcrossCoupons schedine',
+                key: const Key('personal-pick-repeated-warning'),
+                style: const TextStyle(
+                  color: Colors.orangeAccent, fontSize: 11,
+                ),
+              ),
+            ],
           ],
         ),
         children: [
@@ -131,16 +187,30 @@ class PersonalCouponMatchTile extends StatelessWidget {
                 _detail('Campionato', league.isEmpty ? 'Non disponibile' : league),
                 if (kickoff != null)
                   _detail('Inizio', _date(kickoff)),
-                _detail('Pronostico', selection.market),
+                _detail('Pronostico salvato dall’app', selection.market),
+                if (selection.aiPrimaryMarket?.trim().isNotEmpty == true)
+                  _detail('Pronostico principale AI',
+                    '${selection.aiPrimaryMarket}'
+                    '${selection.aiPrimaryProbability == null ? "" : " · ${selection.aiPrimaryProbability!.toStringAsFixed(1)}%"}'),
+                if (selection.editedByUser)
+                  _detail('Tua scelta', selection.currentMarket),
                 _detail(
-                  'Probabilità AI',
+                  selection.editedByUser
+                      ? 'Prob. iniziale'
+                      : 'Probabilità AI',
                   probability != null && probability.isFinite &&
                       probability >= 0 && probability <= 100
                       ? '${probability.toStringAsFixed(1)}%'
                       : 'Non disponibile',
                 ),
                 _detail('Quota',
-                  oddsValid ? odds.toStringAsFixed(2) : 'Non disponibile'),
+                  oddsValid ? odds.toStringAsFixed(2)
+                    : selection.editedByUser
+                        ? 'Da verificare per il mercato modificato'
+                        : 'Non disponibile'),
+                if (review?.score != null)
+                  _detail('Risultato finale',
+                    '${review!.score!.homeGoals}-${review!.score!.awayGoals}'),
                 if (selection.bookmaker?.trim().isNotEmpty == true)
                   _detail('Bookmaker', selection.bookmaker!.trim()),
                 _detail('Origine', selection.source),
@@ -154,14 +224,24 @@ class PersonalCouponMatchTile extends StatelessWidget {
               ],
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline, size: 18),
-              label: const Text('Rimuovi pronostico'),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            children: [
+              if (onEditMarket != null)
+                TextButton.icon(
+                  onPressed: onEditMarket,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Modifica scelta'),
+                ),
+              TextButton.icon(
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Rimuovi pronostico'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                ),
+              ),
+            ],
           ),
         ],
       ),

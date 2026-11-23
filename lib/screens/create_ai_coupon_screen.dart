@@ -5295,6 +5295,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               bookmaker: item.bookmaker,
               market: item.market,
               source: 'Crea Schedina',
+              aiPrimaryMarket: topSport?.market,
+              aiPrimaryProbability: topSport?.probability.toDouble(),
               probability: item.probability.toDouble(),
               odds: item.odd,
             ),

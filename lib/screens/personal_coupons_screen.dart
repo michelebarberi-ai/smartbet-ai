@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/personal_coupon_store.dart';
+import '../services/personal_coupon_review_service.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../widgets/personal_coupon_match_tile.dart';
 
@@ -12,6 +13,99 @@ class PersonalCouponsScreen extends StatefulWidget {
 class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
   final store = PersonalCouponStore.instance;
   final history = SmartBetAnalysisHistoryStore.instance;
+  final reviewService = const PersonalCouponReviewService();
+  bool _refreshing = false;
+
+  Future<void> _editMarket(PersonalCoupon coupon, PersonalSelection pick) async {
+    final controller = TextEditingController(text: pick.currentMarket);
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Modifica il mercato scelto'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Proposta iniziale: ${pick.market}'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              maxLength: 90,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Mercato della tua scelta',
+                hintText: 'Es. UNDER 3.5, 1X, GOAL',
+              ),
+            ),
+            const Text(
+              'La previsione iniziale resta salvata. '
+              'La quota e la probabilità originarie '
+              'non valgono per un mercato modificato.',
+              style: TextStyle(fontSize: 12, color: Colors.white70),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Salva scelta'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (chosen == null || chosen.isEmpty) return;
+    final changed = await store.changeSelectionMarket(
+      coupon.id, pick.fixtureId, pick.market, chosen,
+    );
+    if (!mounted) return;
+    if (!changed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Scelta non salvata: controlla il mercato o i duplicati.',
+        )),
+      );
+    }
+  }
+
+  Future<void> _refreshResults() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await history.initialize();
+      final report = await reviewService.fetchFinished(
+        selections: store.coupons.expand((coupon) => coupon.selections),
+        history: history.records,
+      );
+      final updated = await store.registerVerifiedResults(report.scores);
+      if (!mounted) return;
+      final message = [
+        'Risultati aggiornati: $updated selezioni.',
+        if (report.fixturesNotFinal > 0)
+          '${report.fixturesNotFinal} partite ancora non verificate.',
+        if (report.missingKickoff > 0)
+          'Alcuni vecchi pronostici non hanno la data per la ricerca.',
+        if (report.apiErrors > 0)
+          'Impossibile recuperare ${report.apiErrors} giornate.',
+      ].join(' ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Aggiornamento non riuscito. Nessun risultato è stato inventato.',
+        )),
+      );
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   /// Previous versions saved no country or league; recover those fields
   /// from the already persisted prediction archive without any network call.
@@ -65,7 +159,7 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
     if (ids.length != coupon.selections.length) return null;
     var result = 1.0;
     for (final pick in coupon.selections) {
-      final odd = pick.odds;
+      final odd = pick.currentOdds;
       if (odd == null || !odd.isFinite || odd <= 1.20) return null;
       result *= odd;
     }
@@ -74,7 +168,21 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Le mie schedine')),
+    appBar: AppBar(
+      title: const Text('Le mie schedine'),
+      actions: [
+        IconButton(
+          tooltip: 'Aggiorna gli esiti delle partite concluse',
+          onPressed: _refreshing ? null : _refreshResults,
+          icon: _refreshing
+              ? const SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh),
+        ),
+      ],
+    ),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: () async {
         final name = await _askName();
@@ -86,6 +194,8 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
     body: AnimatedBuilder(
       animation: Listenable.merge([store, history]),
       builder: (context, _) {
+        final records = history.records;
+        final repeated = reviewService.repeatedSelections(store.coupons);
         if (store.coupons.isEmpty) {
           return const Center(child: Padding(
             padding: EdgeInsets.all(28),
@@ -99,12 +209,26 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
           itemBuilder: (context, index) {
             final coupon = store.coupons[index];
             final total = _combinedOdds(coupon);
+            final summary = reviewService.summarize(coupon, records);
             return Card(child: ExpansionTile(
               leading: const Icon(Icons.confirmation_number_outlined),
               title: Text(coupon.name),
-              subtitle: Text(
-                '${coupon.selections.length} pronostici'
-                '${total == null ? '' : ' · Quota indicativa ${total.toStringAsFixed(2)}'}',
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${coupon.selections.length} pronostici'
+                    '${total == null ? '' : ' · Quota indicativa ${total.toStringAsFixed(2)}'}',
+                  ),
+                  if (coupon.selections.isNotEmpty)
+                    Text(
+                      'Esiti: ${summary.correct} corretti · '
+                      '${summary.wrong} errati · '
+                      '${summary.pending} in attesa'
+                      '${summary.unsupported == 0 ? '' : ' · ${summary.unsupported} da verificare'}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                ],
               ),
               children: [
                 for (final pick in coupon.selections)
@@ -113,6 +237,11 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
                         '${pick.fixtureId}-${pick.market}'),
                     selection: pick,
                     archivedMatch: _archivedMatch(pick),
+                    review: reviewService.review(pick, records),
+                    repeatedAcrossCoupons: reviewService.repeatedInCoupons(
+                      pick, repeated,
+                    ),
+                    onEditMarket: () => _editMarket(coupon, pick),
                     onRemove: () => store.removeSelection(
                         coupon.id, pick.fixtureId, pick.market),
                   ),
@@ -120,8 +249,11 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Text(
-                      'Quote indicative: verifica sempre mercati e disponibilità. '
-                      'Mercati diversi della stessa partita non si moltiplicano.',
+                      'Revisione basata su risultati finali verificati, '
+                      'non sulle probabilità dichiarate. Premi Aggiorna per '
+                      'controllare gli esiti disponibili (massimo 5 giornate). '
+                      'Mercati non riconosciuti restano da verificare sul bookmaker. '
+                      'Se cambi mercato, la quota iniziale non viene riutilizzata.',
                       style: TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                   ),
