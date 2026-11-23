@@ -91,7 +91,7 @@ class GoalVdLineMarketOpportunityPanel extends StatelessWidget {
         childrenPadding: EdgeInsets.zero,
         initiallyExpanded: false,
         title: const Text(
-          'Mercati più probabili · controllo quote',
+          'Mercati analizzati · controllo quote',
           style: TextStyle(
             color: Color(0xFF95D5B2),
             fontSize: 12,
