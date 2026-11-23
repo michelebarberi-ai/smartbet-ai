@@ -2,7 +2,7 @@ name: B76 Flutter validation
 
 on:
   push:
-    branches: [release/b80-testflight]
+    branches: [release/b81-testflight]
     paths:
       - 'lib/**'
       - 'test/**'
@@ -10,7 +10,7 @@ on:
       - 'pubspec.yaml'
       - '.github/workflows/b76-flutter-validation.yml'
   pull_request:
-    branches: [release/b75-testflight, release/b76-testflight, release/b77-testflight, release/b78-testflight, release/b79-testflight, release/b80-testflight]
+    branches: [release/b75-testflight, release/b76-testflight, release/b77-testflight, release/b78-testflight, release/b79-testflight, release/b80-testflight, release/b81-testflight]
     paths:
       - 'lib/**'
       - 'test/**'
