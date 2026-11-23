@@ -25,8 +25,7 @@ void main() {
       'MULTIGOL 1-4','MULTIGOL 2-4','MULTIGOL 2-5',
       'MULTIGOL 3-5','GOAL','NO GOAL',
       'HCP EURO CASA -1 1','HCP EURO CASA 1 2',
-      'HCP ASIA CASA -0.5','HCP ASIA OSPITE 0.5',
-    ]) {
+     ]) {
       expect(GoalVdLineCouponMarketPolicy.isAllowedCouponMarket(market),
           isTrue, reason: market);
     }
@@ -38,6 +37,8 @@ void main() {
       '1X + O1.5','X2 + U3.5','GOAL O OVER 2.5',
       '1X O UNDER 3.5','HCP EURO CASA 3 1','HCP EURO CASA -3 2',
       'HCP ASIA CASA -2.5',
+      'HCP ASIA CASA -0.5', 'HCP ASIA OSPITE 0.5',
+      'HCP ASIA CASA 1.5',
       '1T 1','2T X','CORNER OVER 8.5','TIRI PORTA OVER 6.5',
     ]) {
       expect(GoalVdLineCouponMarketPolicy.isAllowedCouponMarket(excluded),
@@ -68,8 +69,15 @@ void main() {
     expect(candidates.every((c) => c.probability > 0 &&
         c.probability <= 100), isTrue);
     expect(candidates.any((c) => c.market.startsWith('HCP EURO CASA')), isTrue);
-    expect(candidates.any((c) => c.market.startsWith('HCP ASIA')), isTrue);
+    expect(candidates.any((c) => c.market.startsWith('HCP ASIA')), isFalse);
     expect(candidates.any((c) => c.market.contains(' -3 ')), isFalse);
+    final analysisOnly = GoalVdLineCouponMarketPolicy.analysisHandicaps(
+      basicAnalysis(),
+    );
+    expect(analysisOnly.any((c) => c.market.startsWith('HCP ASIA')),
+        isTrue);
+    expect(analysisOnly.any((c) => c.market.startsWith('HCP EURO')),
+        isTrue);
   });
 
   test('B78: no xG means no invented handicap probabilities', () {
