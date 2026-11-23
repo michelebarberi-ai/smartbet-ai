@@ -22,8 +22,9 @@ class SmartBetAnalysisMarketSettlement {
 
     // B78: un mercato OPPURE è una DISGIUNZIONE, non la combo AND (+).
     // Separiamo solo la parola O isolata, quindi OVER non viene spezzato.
-    // Una condizione vera basta; se nessuna è vera e almeno una non è
-    // valutabile dal solo punteggio, l'esito resta NON VERIFICABILE.
+    // Entrambe le condizioni devono essere note e valutabili.
+    // Se una è incompleta/sconosciuta, il mercato non viene classificato
+    // neppure quando l'altra condizione risulterebbe vera.
     final orParts = normalized.split(RegExp(r'\s+O\s+'));
     if (orParts.length > 1) {
       if (orParts.length != 2 || orParts.any((part) => part.isEmpty)) {
