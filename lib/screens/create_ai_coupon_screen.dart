@@ -412,7 +412,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ? 'quota non disponibile'
             : 'quota ${odd.toStringAsFixed(2)}';
         text.writeln('${i + 1}. ${pick.match.homeTeam} - '
-            '${pick.match.awayTeam} | ${pick.market} | '
+            '${pick.match.awayTeam} | ${GoalVdLineMarketRelationService.displayMarket(pick.market)} | '
             '${pick.probability}% | $oddLabel');
       }
     }
@@ -3275,7 +3275,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ? 'Partita ${pick.fixtureId}'
               : '${match.homeTeam} - ${match.awayTeam}';
           buffer.writeln(
-            '$matchName | ${pick.market} '
+            '$matchName | ${GoalVdLineMarketRelationService.displayMarket(pick.market)} '
             '| ${pick.probability}% | ${pick.odd.toStringAsFixed(2)}'
             ' | ${pick.bookmaker}',
           );
@@ -3324,14 +3324,17 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     for (var i = 0; i < _results.length; i++) {
       final item = _results[i];
+      final displayMarket = GoalVdLineMarketRelationService.displayMarket(
+        item.market,
+      );
 
       text
         ..writeln('${i + 1}. ${item.match.homeTeam} - ${item.match.awayTeam}')
         ..writeln(
           item.odd == null
-              ? '   ${item.market} — ${item.probability}% '
+              ? '   $displayMarket — ${item.probability}% '
                     '(quota combo non disponibile)'
-              : '   ${item.market} @ ${item.odd!.toStringAsFixed(2)} '
+              : '   $displayMarket @ ${item.odd!.toStringAsFixed(2)} '
                     '— ${item.probability}%',
         );
 
