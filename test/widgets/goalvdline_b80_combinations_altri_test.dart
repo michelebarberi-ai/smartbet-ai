@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:smartbet_ai_new/screens/combinations_ai_screen.dart';
 
 void main() {
@@ -9,6 +11,8 @@ void main() {
   testWidgets('B80: Altri groups selectable observational markets safely',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     tester.view.physicalSize = const Size(1100, 2600);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
