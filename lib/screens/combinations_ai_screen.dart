@@ -4242,23 +4242,33 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     ),
                   ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(item.leading.market,
-                        style: const TextStyle(color: Color(0xFF9EE3CC))),
-                    ),
-                    Text(
-                      item.probabilityPercent == null
-                          ? 'DATI N/D'
-                          : '${item.probabilityPercent!.toStringAsFixed(1)}%*',
-                      style: const TextStyle(color: Colors.orangeAccent),
-                    ),
-                  ],
-                ),
-                Text(item.leading.evidence,
-                    style: const TextStyle(
-                      color: Colors.white60, fontSize: 10)),
+                if (item.comparesAll && item.probabilityPercent == null)
+                  const Text(
+                    'Nessun mercato indicato come migliore: '
+                    'tutte le opzioni sono DATI N/D. '
+                    'Apri il confronto per visualizzarle.',
+                    style: TextStyle(
+                      color: Colors.white60, fontSize: 11),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.leading.market,
+                          style: const TextStyle(color: Color(0xFF9EE3CC))),
+                      ),
+                      Text(
+                        item.probabilityPercent == null
+                            ? 'DATI N/D'
+                            : '${item.probabilityPercent!.toStringAsFixed(1)}%*',
+                        style: const TextStyle(color: Colors.orangeAccent),
+                      ),
+                    ],
+                  ),
+                  Text(item.leading.evidence,
+                      style: const TextStyle(
+                        color: Colors.white60, fontSize: 10)),
+                ],
                 if (item.comparesAll) ...[
                   const SizedBox(height: 7),
                   Theme(
