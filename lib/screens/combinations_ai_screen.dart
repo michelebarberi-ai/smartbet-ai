@@ -60,16 +60,17 @@ class CombinationsAiScreen extends StatefulWidget {
 
 class _SpecialMarketObservation {
   final MatchModel match;
-  final String market;
-  final double? probabilityPercent;
-  final String note;
+  final List<GoalVdLineExtraMarketEstimate> estimates;
+  final bool comparesAll;
 
   const _SpecialMarketObservation({
     required this.match,
-    required this.market,
-    required this.probabilityPercent,
-    required this.note,
+    required this.estimates,
+    required this.comparesAll,
   });
+
+  GoalVdLineExtraMarketEstimate get leading => estimates.first;
+  double? get probabilityPercent => leading.probabilityPercent;
 }
 
 class _ComboChance {
@@ -175,8 +176,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // P19C — una, due o tre famiglie; Combo Chance resta esclusiva.
   final Set<String> _selectedMarkets = <String>{'X'};
   String? _expandedMarketGroup;
+  GoalVdLineExtraMarketFamily? _allExtraMarketFamily;
   bool get _multiMarketMode => _selectedMarkets.length > 1;
-  String get _selectedMarketLabel => _selectedMarkets.join(' + ');
+  String get _selectedMarketLabel {
+    final family = _allExtraMarketFamily;
+    if (family != null) {
+      return '${_allExtraMarketFamilyLabel(family)} · TUTTI I MERCATI';
+    }
+    return _selectedMarkets.join(' + ');
+  }
   int _topCount = 5;
   int _minimumSmartScore = 0;
   // P20.5: consigliato 65%; l'opt-out "Qualsiasi" resta esplicito.
@@ -267,6 +275,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // system slips, sharing, saved personal coupons or AI accuracy metrics.
   final List<_SpecialMarketObservation> _specialMarketObservations = [];
   bool get _isSpecialSelected =>
+      _allExtraMarketFamily != null ||
       _selectedMarkets.any(GoalVdLineExtraMarketsService.isExtraMarket);
 
   // P5B — combinazioni coordinate realmente disponibili nella UI.
@@ -307,6 +316,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       );
 
   static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
+
+  static const Map<String, GoalVdLineExtraMarketFamily> _extraFamilyGroups = {
+    'Risultato 1° tempo': GoalVdLineExtraMarketFamily.firstHalf,
+    'Risultato 2° tempo': GoalVdLineExtraMarketFamily.secondHalf,
+    'Calci d’angolo': GoalVdLineExtraMarketFamily.totalCorners,
+    'Tiri in porta': GoalVdLineExtraMarketFamily.totalShotsOnTarget,
+  };
+
+  String _allExtraMarketFamilyLabel(GoalVdLineExtraMarketFamily family) {
+    for (final group in _extraFamilyGroups.entries) {
+      if (group.value == family) return group.key;
+    }
+    return 'Altri';
+  }
 
   // P19I — gruppi di sola presentazione. I valori dei mercati restano
   // invariati per quote, probabilita, Auditor e storico.
@@ -2254,14 +2277,29 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // SCANSIONE
   // ============================================================
 
-  /// Read-only search for newly selectable, uncalibrated markets.
-  /// Never creates, saves, shares or registers an official AI prediction.
+  /// Observation-only: a single market or every market in one chosen family.
+  /// No prices, coupon creation, learning registration or official rankings.
   Future<void> _findObservationalMarkets() async {
-    if (_loading || _selectedMarkets.length != 1 ||
-        !GoalVdLineExtraMarketsService.isExtraMarket(_selectedMarket)) {
+    if (_loading) return;
+    final family = _allExtraMarketFamily;
+    final comparesAll = family != null;
+    if (!comparesAll &&
+        (_selectedMarkets.length != 1 ||
+         !GoalVdLineExtraMarketsService.isExtraMarket(_selectedMarket))) {
       return;
     }
-    final market = _selectedMarket;
+
+    final chosenMarkets = comparesAll
+        ? GoalVdLineExtraMarketsService.marketFamilies[family]!
+        : <String>[_selectedMarket];
+    final isHalf = chosenMarkets.first.startsWith('1T ') ||
+        chosenMarkets.first.startsWith('2T ');
+    final countFamily = family ??
+        (chosenMarkets.first.startsWith('CORNER ')
+            ? GoalVdLineExtraMarketFamily.totalCorners
+            : GoalVdLineExtraMarketFamily.totalShotsOnTarget);
+    const extraService = GoalVdLineExtraMarketsService();
+
     setState(() {
       _loading = true;
       _checkingOdds = false;
@@ -2282,44 +2320,57 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             'Nessuna partita futura compatibile con i filtri selezionati.');
         return;
       }
-      final isHalf = market.startsWith('1T ') || market.startsWith('2T ');
       final count = isHalf
           ? math.min(matches.length, math.min(24, math.max(10, _topCount * 2)))
           : math.min(matches.length, _topCount);
       setState(() => _total = count);
       final observations = <_SpecialMarketObservation>[];
+
+      // Corner and shots: no historical sample is supplied here, so the
+      // evidence service deliberately returns N/D for every line.
+      // No ordering by fake confidence or odds is permitted.
+      final countEstimates = isHalf
+          ? const <GoalVdLineExtraMarketEstimate>[]
+          : extraService.countMarketEvidence(family: countFamily)
+              .where((value) => chosenMarkets.contains(value.market))
+              .toList(growable: false);
+
       for (final match in matches.take(count)) {
         if (!mounted) return;
-        if (isHalf) {
-          try {
-            final result = await SmartCore.analyze(match);
-            final estimate = const GoalVdLineExtraMarketsService()
-                .halfTimeScenarios(result)
-                .firstWhere((value) => value.market == market);
+        try {
+          List<GoalVdLineExtraMarketEstimate> estimates;
+          if (isHalf) {
+            final analysis = await SmartCore.analyze(match);
+            estimates = extraService.halfTimeScenarios(analysis)
+                .where((value) => chosenMarkets.contains(value.market))
+                .toList();
+            if (comparesAll) {
+              // Illustrative model scenarios, NOT validated reliability.
+              estimates.sort((a, b) => (b.probabilityPercent ?? -1)
+                  .compareTo(a.probabilityPercent ?? -1));
+            }
+          } else {
+            estimates = countEstimates;
+          }
+          if (estimates.isNotEmpty) {
             observations.add(_SpecialMarketObservation(
               match: match,
-              market: market,
-              probabilityPercent: estimate.probabilityPercent,
-              note: estimate.evidence,
+              estimates: estimates,
+              comparesAll: comparesAll,
             ));
-          } catch (error) {
-            debugPrint('B79 special analysis skipped '
-                '${match.fixtureId}: $error');
-            _errors++;
           }
-        } else {
-          observations.add(_SpecialMarketObservation(
-            match: match,
-            market: market,
-            probabilityPercent: null,
-            note: 'Storico corner/tiri insufficiente: servono '
-                'statistiche finali verificate per questo mercato.',
-          ));
+        } catch (error) {
+          debugPrint('B81 observation skipped ${match.fixtureId}: $error');
+          _errors++;
         }
         if (mounted) setState(() => _processed++);
       }
-      observations.sort((a, b) => (b.probabilityPercent ?? -1)
-          .compareTo(a.probabilityPercent ?? -1));
+      // Sort only scenarios that actually have comparable numeric estimates.
+      // If all entries are N/D, retain fixture order and show no leader.
+      if (isHalf) {
+        observations.sort((a, b) => (b.probabilityPercent ?? -1)
+            .compareTo(a.probabilityPercent ?? -1));
+      }
       if (!mounted) return;
       setState(() => _specialMarketObservations
         ..clear()
@@ -3559,6 +3610,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     // observation workflow that never masquerades as a bookable coupon.
     if (isSpecial || _isSpecialSelected) {
       setState(() {
+        _allExtraMarketFamily = null;
         _xPremiumEnabled = false;
         _multiMarketRankingEnabled = false;
         if (selected) {
@@ -3617,6 +3669,26 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     });
   }
 
+  // The all-family choice is exclusive with single-market mode and
+  // ordinary coupons. It represents ONE observational search, not 12 bets.
+  void _toggleAllExtraMarkets(GoalVdLineExtraMarketFamily family) {
+    if (_loading || _checkingOdds) return;
+    setState(() {
+      _allExtraMarketFamily = _allExtraMarketFamily == family ? null : family;
+      _selectedMarkets.clear();
+      _selectedMarket = '';
+      _xPremiumEnabled = false;
+      _multiMarketRankingEnabled = false;
+      _results.clear();
+      _sportsOnlyPreview.clear();
+      _specialMarketObservations.clear();
+      _systemResults.clear();
+      _combinationRankingCache.clear();
+      _selectedSystemIndex = 0;
+      _errorMessage = null;
+    });
+  }
+
   String _marketDisplayName(String market) {
     switch (market) {
       case 'DRAW NO BET':
@@ -3660,6 +3732,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     required IconData icon,
     required List<String> markets,
   }) {
+    final extraFamily = _extraFamilyGroups[title];
     final expanded = _expandedMarketGroup == title;
     final selectedCount = markets
         .where((market) => _selectedMarkets.contains(market) ||
@@ -3755,6 +3828,38 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (extraFamily != null) ...[
+                    ChoiceChip(
+                      key: Key('b81-all-${extraFamily.name}'),
+                      label: const Text('Analizza tutti i mercati'),
+                      selected: _allExtraMarketFamily == extraFamily,
+                      showCheckmark: false,
+                      onSelected: (_loading || _checkingOdds)
+                          ? null
+                          : (_) => _toggleAllExtraMarkets(extraFamily),
+                      selectedColor: const Color(0xFF00C853),
+                      backgroundColor: const Color(0xFF111827),
+                      side: BorderSide(
+                        color: _allExtraMarketFamily == extraFamily
+                            ? const Color(0xFF00C853) : Colors.white24,
+                      ),
+                      labelStyle: TextStyle(
+                        color: _allExtraMarketFamily == extraFamily
+                            ? Colors.black87 : Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Confronta tutte le linee disponibili oppure '
+                      'seleziona un singolo mercato qui sotto. '
+                      'Risultati solo osservativi, non giocabili.',
+                      style: TextStyle(
+                        color: Colors.white54, fontSize: 10),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   Wrap(
                     spacing: 7,
                     runSpacing: 7,
@@ -3886,7 +3991,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     ];
     final selectedCount = extraFamilies
         .where(_selectedMarkets.contains)
-        .length;
+        .length + (_allExtraMarketFamily == null ? 0 : 1);
     return Container(
       key: const Key('b80-altri-market-menu'),
       margin: const EdgeInsets.only(bottom: 9),
@@ -3912,9 +4017,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
           subtitle: Text(
-            selectedCount > 0
-                ? '$selectedCount mercato selezionato · solo osservazione'
-                : '1°/2° tempo · Corner · Tiri in porta',
+            _allExtraMarketFamily != null
+                ? 'Tutti i mercati · solo osservazione'
+                : selectedCount > 0
+                    ? '$selectedCount mercato selezionato · solo osservazione'
+                    : '1°/2° tempo · Corner · Tiri in porta',
             style: const TextStyle(color: Colors.white54, fontSize: 10),
           ),
           children: [
@@ -3982,7 +4089,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ),
             Text(
-              '${_selectedMarkets.length}/3',
+              _allExtraMarketFamily != null
+                  ? 'TUTTI · OSSERVAZIONE'
+                  : '${_selectedMarkets.length}/3',
               style: const TextStyle(
                 color: Color(0xFF00C853),
                 fontSize: 12,
@@ -3995,7 +4104,23 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         Wrap(
           spacing: 7,
           runSpacing: 7,
-          children: _selectedMarkets.map((market) {
+          children: [
+            if (_allExtraMarketFamily != null)
+              InputChip(
+                key: const Key('b81-all-active'),
+                label: Text(_selectedMarketLabel),
+                onDeleted: _loading
+                    ? null : () => _toggleAllExtraMarkets(
+                        _allExtraMarketFamily!),
+                deleteIcon: const Icon(Icons.close, size: 15),
+                backgroundColor: const Color(0xFF173F32),
+                side: const BorderSide(color: Color(0xFF00C853)),
+                labelStyle: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11),
+              ),
+            ..._selectedMarkets.map((market) {
             return InputChip(
               label: Text(_marketDisplayName(market)),
               onDeleted: (_loading || _checkingOdds)
@@ -4011,9 +4136,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
-          }).toList(),
+          }),
+          ],
         ),
-        if (_selectedMarkets.isEmpty) ...[
+        if (_selectedMarkets.isEmpty && !_isSpecialSelected) ...[
           const SizedBox(height: 8),
           const Text(
             'Nessun mercato selezionato. Scegline almeno uno per cercare.',
@@ -4061,9 +4187,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
-        const Text(
-          'MERCATI AGGIUNTIVI · SOLO OSSERVAZIONE',
-          style: TextStyle(
+        Text(
+          _allExtraMarketFamily == null
+              ? 'MERCATO AGGIUNTIVO · SOLO OSSERVAZIONE'
+              : 'CONFRONTO TUTTI I MERCATI · SOLO OSSERVAZIONE',
+          style: const TextStyle(
             color: Colors.orangeAccent,
             fontSize: 13,
             fontWeight: FontWeight.bold,
@@ -4071,10 +4199,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Mercati selezionabili per consultazione: non entrano '
-          'in schedine, sistemi o statistiche ufficiali. '
-          'Il risultato dei tempi è una simulazione non calibrata; '
-          'corner e tiri richiedono dati verificati.',
+          'Queste analisi non generano schedine, sistemi o statistiche '
+          'ufficiali. Per primo/secondo tempo le percentuali sono '
+          'scenari Poisson NON calibrati; non dimostrano affidabilità. '
+          'Per corner e tiri in porta il confronto non assegna '
+          'un mercato migliore senza storico verificato.',
           style: TextStyle(color: Colors.white60, fontSize: 11),
         ),
         const SizedBox(height: 9),
@@ -4096,29 +4225,104 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 const SizedBox(height: 4),
                 Text(
                   GoalVdLineCompetitionOrder.matchCompetitionLabel(
-                    item.match.country, item.match.league),
+                      item.match.country, item.match.league),
                   style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(child: Text(item.market,
-                      style: const TextStyle(color: Color(0xFF9EE3CC)))),
-                    Text(
-                      item.probabilityPercent == null
-                          ? 'DATI N/D'
-                          : '${item.probabilityPercent!.toStringAsFixed(1)}%*',
-                      style: const TextStyle(color: Colors.orangeAccent),
+                const SizedBox(height: 8),
+                if (item.comparesAll)
+                  Text(
+                    item.probabilityPercent == null
+                        ? 'Confronto senza graduatoria: DATI N/D'
+                        : 'Scenario con stima più alta (NON calibrata)',
+                    key: const Key('b81-comparison-status'),
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
-                Text(item.note,
-                  style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                  ),
+                const SizedBox(height: 4),
+                if (item.comparesAll && item.probabilityPercent == null)
+                  const Text(
+                    'Nessun mercato indicato come migliore: '
+                    'tutte le opzioni sono DATI N/D. '
+                    'Apri il confronto per visualizzarle.',
+                    style: TextStyle(
+                      color: Colors.white60, fontSize: 11),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.leading.market,
+                          style: const TextStyle(color: Color(0xFF9EE3CC))),
+                      ),
+                      Text(
+                        item.probabilityPercent == null
+                            ? 'DATI N/D'
+                            : '${item.probabilityPercent!.toStringAsFixed(1)}%*',
+                        style: const TextStyle(color: Colors.orangeAccent),
+                      ),
+                    ],
+                  ),
+                  Text(item.leading.evidence,
+                      style: const TextStyle(
+                        color: Colors.white60, fontSize: 10)),
+                ],
+                if (item.comparesAll) ...[
+                  const SizedBox(height: 7),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: Key('b81-comparison-${item.match.fixtureId}'),
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: EdgeInsets.zero,
+                      title: Text(
+                        'Tutti i ${item.estimates.length} mercati confrontati',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Stime indicative o N/D · nessuna quota verificata',
+                        style: TextStyle(
+                          color: Colors.white54, fontSize: 10),
+                      ),
+                      children: [
+                        for (final estimate in item.estimates)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(
+                                  estimate.market,
+                                  style: const TextStyle(
+                                    color: Colors.white70, fontSize: 11),
+                                )),
+                                Text(
+                                  estimate.probabilityPercent == null
+                                      ? 'DATI N/D'
+                                      : '${estimate.probabilityPercent!.toStringAsFixed(1)}%*',
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         const Text(
-          '*Percentuali non calibrate: non sono consigli di gioco.',
+          '*Stime non calibrate. Nessuna selezione giocabile: '
+          'l’affidabilità richiede esiti verificati, calibrazione '
+          'e quote reali riferite al mercato esatto.',
           style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
         ),
       ],
@@ -5312,6 +5516,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ? 'Ranking multimercato: probabilita sportive senza quote.'
                 : _xPremiumEnabled
                 ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
+                : _isSpecialSelected
+                ? 'Altri: sola osservazione, senza quote né pronostici calibrati. '
+                  'I filtri SmartScore e probabilità non certificano queste simulazioni.'
                 : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
                 : 'Filtro automatico: solo selezioni con quota reale > 1.20.',
@@ -5634,7 +5841,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                           _multiMarketFamilies.isEmpty) ||
                       (!_xPremiumEnabled &&
                           !_multiMarketRankingEnabled &&
-                          _selectedMarkets.isEmpty))
+                          _selectedMarkets.isEmpty &&
+                          !_isSpecialSelected))
                   ? null
                   : (_xPremiumEnabled
                         ? _findXPremium
