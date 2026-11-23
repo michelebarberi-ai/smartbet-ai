@@ -60,16 +60,17 @@ class CombinationsAiScreen extends StatefulWidget {
 
 class _SpecialMarketObservation {
   final MatchModel match;
-  final String market;
-  final double? probabilityPercent;
-  final String note;
+  final List<GoalVdLineExtraMarketEstimate> estimates;
+  final bool comparesAll;
 
   const _SpecialMarketObservation({
     required this.match,
-    required this.market,
-    required this.probabilityPercent,
-    required this.note,
+    required this.estimates,
+    required this.comparesAll,
   });
+
+  GoalVdLineExtraMarketEstimate get leading => estimates.first;
+  double? get probabilityPercent => leading.probabilityPercent;
 }
 
 class _ComboChance {
@@ -175,8 +176,15 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // P19C — una, due o tre famiglie; Combo Chance resta esclusiva.
   final Set<String> _selectedMarkets = <String>{'X'};
   String? _expandedMarketGroup;
+  GoalVdLineExtraMarketFamily? _allExtraMarketFamily;
   bool get _multiMarketMode => _selectedMarkets.length > 1;
-  String get _selectedMarketLabel => _selectedMarkets.join(' + ');
+  String get _selectedMarketLabel {
+    final family = _allExtraMarketFamily;
+    if (family != null) {
+      return '${_allExtraMarketFamilyLabel(family)} · TUTTI I MERCATI';
+    }
+    return _selectedMarkets.join(' + ');
+  }
   int _topCount = 5;
   int _minimumSmartScore = 0;
   // P20.5: consigliato 65%; l'opt-out "Qualsiasi" resta esplicito.
@@ -267,6 +275,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // system slips, sharing, saved personal coupons or AI accuracy metrics.
   final List<_SpecialMarketObservation> _specialMarketObservations = [];
   bool get _isSpecialSelected =>
+      _allExtraMarketFamily != null ||
       _selectedMarkets.any(GoalVdLineExtraMarketsService.isExtraMarket);
 
   // P5B — combinazioni coordinate realmente disponibili nella UI.
@@ -307,6 +316,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       );
 
   static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
+
+  static const Map<String, GoalVdLineExtraMarketFamily> _extraFamilyGroups = {
+    'Risultato 1° tempo': GoalVdLineExtraMarketFamily.firstHalf,
+    'Risultato 2° tempo': GoalVdLineExtraMarketFamily.secondHalf,
+    'Calci d’angolo': GoalVdLineExtraMarketFamily.totalCorners,
+    'Tiri in porta': GoalVdLineExtraMarketFamily.totalShotsOnTarget,
+  };
+
+  String _allExtraMarketFamilyLabel(GoalVdLineExtraMarketFamily family) {
+    for (final group in _extraFamilyGroups.entries) {
+      if (group.value == family) return group.key;
+    }
+    return 'Altri';
+  }
 
   // P19I — gruppi di sola presentazione. I valori dei mercati restano
   // invariati per quote, probabilita, Auditor e storico.
