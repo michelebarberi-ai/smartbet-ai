@@ -4268,7 +4268,6 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                       key: Key('b81-comparison-${item.match.fixtureId}'),
                       tilePadding: EdgeInsets.zero,
                       childrenPadding: EdgeInsets.zero,
-                      dense: true,
                       title: Text(
                         'Tutti i ${item.estimates.length} mercati confrontati',
                         style: const TextStyle(
