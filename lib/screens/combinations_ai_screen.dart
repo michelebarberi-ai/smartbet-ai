@@ -3732,6 +3732,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     required IconData icon,
     required List<String> markets,
   }) {
+    final extraFamily = _extraFamilyGroups[title];
     final expanded = _expandedMarketGroup == title;
     final selectedCount = markets
         .where((market) => _selectedMarkets.contains(market) ||
@@ -3827,6 +3828,38 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (extraFamily != null) ...[
+                    ChoiceChip(
+                      key: Key('b81-all-${extraFamily.name}'),
+                      label: const Text('Analizza tutti i mercati'),
+                      selected: _allExtraMarketFamily == extraFamily,
+                      showCheckmark: false,
+                      onSelected: (_loading || _checkingOdds)
+                          ? null
+                          : (_) => _toggleAllExtraMarkets(extraFamily),
+                      selectedColor: const Color(0xFF00C853),
+                      backgroundColor: const Color(0xFF111827),
+                      side: BorderSide(
+                        color: _allExtraMarketFamily == extraFamily
+                            ? const Color(0xFF00C853) : Colors.white24,
+                      ),
+                      labelStyle: TextStyle(
+                        color: _allExtraMarketFamily == extraFamily
+                            ? Colors.black87 : Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Confronta tutte le linee disponibili oppure '
+                      'seleziona un singolo mercato qui sotto. '
+                      'Risultati solo osservativi, non giocabili.',
+                      style: TextStyle(
+                        color: Colors.white54, fontSize: 10),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   Wrap(
                     spacing: 7,
                     runSpacing: 7,
@@ -3958,7 +3991,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     ];
     final selectedCount = extraFamilies
         .where(_selectedMarkets.contains)
-        .length;
+        .length + (_allExtraMarketFamily == null ? 0 : 1);
     return Container(
       key: const Key('b80-altri-market-menu'),
       margin: const EdgeInsets.only(bottom: 9),
@@ -3984,9 +4017,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ),
           subtitle: Text(
-            selectedCount > 0
-                ? '$selectedCount mercato selezionato · solo osservazione'
-                : '1°/2° tempo · Corner · Tiri in porta',
+            _allExtraMarketFamily != null
+                ? 'Tutti i mercati · solo osservazione'
+                : selectedCount > 0
+                    ? '$selectedCount mercato selezionato · solo osservazione'
+                    : '1°/2° tempo · Corner · Tiri in porta',
             style: const TextStyle(color: Colors.white54, fontSize: 10),
           ),
           children: [
@@ -4054,7 +4089,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ),
             Text(
-              '${_selectedMarkets.length}/3',
+              _allExtraMarketFamily != null
+                  ? 'TUTTI · OSSERVAZIONE'
+                  : '${_selectedMarkets.length}/3',
               style: const TextStyle(
                 color: Color(0xFF00C853),
                 fontSize: 12,
@@ -4067,7 +4104,23 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         Wrap(
           spacing: 7,
           runSpacing: 7,
-          children: _selectedMarkets.map((market) {
+          children: [
+            if (_allExtraMarketFamily != null)
+              InputChip(
+                key: const Key('b81-all-active'),
+                label: Text(_selectedMarketLabel),
+                onDeleted: _loading
+                    ? null : () => _toggleAllExtraMarkets(
+                        _allExtraMarketFamily!),
+                deleteIcon: const Icon(Icons.close, size: 15),
+                backgroundColor: const Color(0xFF173F32),
+                side: const BorderSide(color: Color(0xFF00C853)),
+                labelStyle: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11),
+              ),
+            ..._selectedMarkets.map((market) {
             return InputChip(
               label: Text(_marketDisplayName(market)),
               onDeleted: (_loading || _checkingOdds)
@@ -4083,9 +4136,10 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
-          }).toList(),
+          }),
+          ],
         ),
-        if (_selectedMarkets.isEmpty) ...[
+        if (_selectedMarkets.isEmpty && !_isSpecialSelected) ...[
           const SizedBox(height: 8),
           const Text(
             'Nessun mercato selezionato. Scegline almeno uno per cercare.',
@@ -5384,6 +5438,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 ? 'Ranking multimercato: probabilita sportive senza quote.'
                 : _xPremiumEnabled
                 ? 'X Premium: quote non consultate; probabilita simulative senza valore economico stimato.'
+                : _isSpecialSelected
+                ? 'Altri: sola osservazione, senza quote né pronostici calibrati. '
+                  'I filtri SmartScore e probabilità non certificano queste simulazioni.'
                 : _selectedMarket == 'COMBO CHANCE'
                 ? 'Modalità modello: migliori Combo Chance per probabilità congiunta stimata. Nessuna quota bookmaker richiesta.'
                 : 'Filtro automatico: solo selezioni con quota reale > 1.20.',
@@ -5706,7 +5763,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                           _multiMarketFamilies.isEmpty) ||
                       (!_xPremiumEnabled &&
                           !_multiMarketRankingEnabled &&
-                          _selectedMarkets.isEmpty))
+                          _selectedMarkets.isEmpty &&
+                          !_isSpecialSelected))
                   ? null
                   : (_xPremiumEnabled
                         ? _findXPremium
