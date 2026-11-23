@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
 import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../widgets/goalvdline_extra_markets_panel.dart';
 import '../services/goalvdline_market_opportunity_service.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_league_market_reliability_service.dart';
@@ -5333,6 +5334,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
           const SizedBox(height: 12),
           GoalVdLineMarketOpportunityPanel(report: opportunity),
+          GoalVdLineExtraMarketsPanel(analysis: item.analysis),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,

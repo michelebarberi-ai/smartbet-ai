@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
 import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../widgets/goalvdline_extra_markets_panel.dart';
 import '../services/goalvdline_market_opportunity_service.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -3808,6 +3809,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           icon: Icons.tune_outlined,
           markets: _marketGroups['Handicap']!,
         ),
+        const SizedBox(height: 9),
+        const GoalVdLineExtraMarketsPanel(),
       ],
     );
   }
@@ -4841,6 +4844,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           ),
           const SizedBox(height: 10),
           GoalVdLineMarketOpportunityPanel(report: marketOpportunity),
+          GoalVdLineExtraMarketsPanel(analysis: result),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,
