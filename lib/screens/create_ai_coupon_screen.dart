@@ -4852,7 +4852,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     Text(
                       [
                         if (forecast.match.country.trim().isNotEmpty)
-                          forecast.match.country.trim(),
+                          GoalVdLineCouponMarketPolicy.displayCountry(
+                            forecast.match.country,
+                            forecast.match.league,
+                          ).trim(),
                         if (forecast.match.league.trim().isNotEmpty)
                           forecast.match.league.trim(),
                       ].join(' • '),
@@ -4918,9 +4921,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     var position = 0;
 
     for (final item in _results) {
-      final country = item.match.country.trim().isEmpty
+      final displayCountry = GoalVdLineCouponMarketPolicy.displayCountry(
+        item.match.country,
+        item.match.league,
+      ).trim();
+      final country = displayCountry.isEmpty
           ? 'Internazionale'
-          : item.match.country.trim();
+          : displayCountry;
       final league = item.match.league.trim().isEmpty
           ? 'Competizione'
           : item.match.league.trim();
@@ -5105,9 +5112,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            item.match.country.trim().isEmpty
+            GoalVdLineCouponMarketPolicy.displayCountry(
+              item.match.country,
+              item.match.league,
+            ).trim().isEmpty
                 ? item.match.league
-                : '${item.match.country} • ${item.match.league}',
+                : '${GoalVdLineCouponMarketPolicy.displayCountry(item.match.country, item.match.league)} • ${item.match.league}',
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 13),
