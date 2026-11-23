@@ -36,10 +36,9 @@ class GoalVdLineCouponMarketPolicy {
     'HCP ASIA OSPITE 0.5', 'HCP ASIA OSPITE 1.5',
   ];
 
-  static const List<String> couponHandicapMarkets = [
-    ..._europeanLines,
-    ..._asianLines,
-  ];
+  // Crea Schedina B79: ONLY European Handicap is selectable.
+  // Asian lines remain available in Combinazioni AI and the full analysis.
+  static const List<String> couponHandicapMarkets = _europeanLines;
 
   static bool isAllowedCouponMarket(String market) {
     final normalized = market.trim().toUpperCase();
@@ -69,12 +68,20 @@ class GoalVdLineCouponMarketPolicy {
       expectedAwayGoals: analysis.expectedAwayGoals,
       quotedOutcomes: _europeanLines,
     );
+    return european;
+  }
+
+  /// Complete information panel: includes Asian handicap as well, but
+  /// does not alter the restricted coupon selection or its price filter.
+  static List<({String market, int probability})> analysisHandicaps(
+    AnalysisResult analysis,
+  ) {
     final asian = SmartBetRefundableMarketCandidateService.asianCandidates(
       analysis: analysis,
       quotedOutcomes: _asianLines,
     );
     return [
-      ...european,
+      ...sportingHandicaps(analysis),
       ...asian,
     ];
   }

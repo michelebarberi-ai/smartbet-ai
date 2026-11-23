@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
 import '../widgets/goalvdline_market_opportunity_panel.dart';
 import '../widgets/goalvdline_extra_markets_panel.dart';
+import '../services/goalvdline_extra_markets_service.dart';
 import '../services/goalvdline_market_opportunity_service.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -55,6 +56,20 @@ class CombinationsAiScreen extends StatefulWidget {
 
   @override
   State<CombinationsAiScreen> createState() => _CombinationsAiScreenState();
+}
+
+class _SpecialMarketObservation {
+  final MatchModel match;
+  final String market;
+  final double? probabilityPercent;
+  final String note;
+
+  const _SpecialMarketObservation({
+    required this.match,
+    required this.market,
+    required this.probabilityPercent,
+    required this.note,
+  });
 }
 
 class _ComboChance {
@@ -248,6 +263,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   final List<_CombinationCandidate> _results = [];
   // Display-only sports forecasts; never used in coupon/share/system output.
   final List<_CombinationCandidate> _sportsOnlyPreview = [];
+  // B79: informational scenarios ONLY. Never included in _results,
+  // system slips, sharing, saved personal coupons or AI accuracy metrics.
+  final List<_SpecialMarketObservation> _specialMarketObservations = [];
+  bool get _isSpecialSelected =>
+      _selectedMarkets.any(GoalVdLineExtraMarketsService.isExtraMarket);
 
   // P5B — combinazioni coordinate realmente disponibili nella UI.
   final List<_CombinationSystemShadow> _systemResults = [];
@@ -303,6 +323,14 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
     ],
     'Combinazioni avanzate': ['COMBO AVANZATE', 'MERCATI OPPURE'],
     'Handicap': ['HANDICAP EUROPEO', 'HANDICAP ASIATICO'],
+    'Risultato 1° tempo':
+        GoalVdLineExtraMarketsService.firstHalfMarkets,
+    'Risultato 2° tempo':
+        GoalVdLineExtraMarketsService.secondHalfMarkets,
+    'Calci d’angolo':
+        GoalVdLineExtraMarketsService.cornerMarkets,
+    'Tiri in porta':
+        GoalVdLineExtraMarketsService.shotsOnTargetMarkets,
   };
 
   @override
@@ -2226,7 +2254,91 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
   // SCANSIONE
   // ============================================================
 
+  /// Read-only search for newly selectable, uncalibrated markets.
+  /// Never creates, saves, shares or registers an official AI prediction.
+  Future<void> _findObservationalMarkets() async {
+    if (_loading || _selectedMarkets.length != 1 ||
+        !GoalVdLineExtraMarketsService.isExtraMarket(_selectedMarket)) {
+      return;
+    }
+    final market = _selectedMarket;
+    setState(() {
+      _loading = true;
+      _checkingOdds = false;
+      _processed = 0;
+      _total = 0;
+      _errors = 0;
+      _errorMessage = null;
+      _results.clear();
+      _sportsOnlyPreview.clear();
+      _specialMarketObservations.clear();
+      _systemResults.clear();
+    });
+    try {
+      final matches = _eligibleFixtures(await _loadMatchesForSelectedPeriod());
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(() => _errorMessage =
+            'Nessuna partita futura compatibile con i filtri selezionati.');
+        return;
+      }
+      final isHalf = market.startsWith('1T ') || market.startsWith('2T ');
+      final count = isHalf
+          ? math.min(matches.length, math.min(24, math.max(10, _topCount * 2)))
+          : math.min(matches.length, _topCount);
+      setState(() => _total = count);
+      final observations = <_SpecialMarketObservation>[];
+      for (final match in matches.take(count)) {
+        if (!mounted) return;
+        if (isHalf) {
+          try {
+            final result = await SmartCore.analyze(match);
+            final estimate = const GoalVdLineExtraMarketsService()
+                .halfTimeScenarios(result)
+                .firstWhere((value) => value.market == market);
+            observations.add(_SpecialMarketObservation(
+              match: match,
+              market: market,
+              probabilityPercent: estimate.probabilityPercent,
+              note: estimate.evidence,
+            ));
+          } catch (error) {
+            debugPrint('B79 special analysis skipped '
+                '${match.fixtureId}: $error');
+            _errors++;
+          }
+        } else {
+          observations.add(_SpecialMarketObservation(
+            match: match,
+            market: market,
+            probabilityPercent: null,
+            note: 'Storico corner/tiri insufficiente: servono '
+                'statistiche finali verificate per questo mercato.',
+          ));
+        }
+        if (mounted) setState(() => _processed++);
+      }
+      observations.sort((a, b) => (b.probabilityPercent ?? -1)
+          .compareTo(a.probabilityPercent ?? -1));
+      if (!mounted) return;
+      setState(() => _specialMarketObservations
+        ..clear()
+        ..addAll(observations.take(_topCount)));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage =
+            'Analisi sperimentale non riuscita: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _findCombinations() async {
+    if (_isSpecialSelected) {
+      await _findObservationalMarkets();
+      return;
+    }
     if (_loading) {
       return;
     }
@@ -3441,6 +3553,31 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
     final selected = _selectedMarkets.contains(market);
     final isComboChance = market == 'COMBO CHANCE';
+    final isSpecial = GoalVdLineExtraMarketsService.isExtraMarket(market);
+
+    // Special markets are selectable one at a time, in a protected
+    // observation workflow that never masquerades as a bookable coupon.
+    if (isSpecial || _isSpecialSelected) {
+      setState(() {
+        if (selected) {
+          _selectedMarkets.clear();
+        } else {
+          _selectedMarkets
+            ..clear()
+            ..add(market);
+        }
+        _selectedMarket =
+            _selectedMarkets.isEmpty ? '' : _selectedMarkets.last;
+        _results.clear();
+        _sportsOnlyPreview.clear();
+        _specialMarketObservations.clear();
+        _systemResults.clear();
+        _combinationRankingCache.clear();
+        _selectedSystemIndex = 0;
+        _errorMessage = null;
+      });
+      return;
+    }
 
     if (!selected &&
         !isComboChance &&
@@ -3469,6 +3606,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       }
 
       _selectedMarket = _selectedMarkets.isEmpty ? '' : _selectedMarkets.last;
+      _specialMarketObservations.clear();
       _results.clear();
       _combinationRankingCache.clear();
       _systemResults.clear();
@@ -3497,6 +3635,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         return 'Ospite segna';
       case 'NO GOAL':
         return 'No Goal';
+      case '1T 1':
+        return '1° tempo: 1';
+      case '1T X':
+        return '1° tempo: X';
+      case '1T 2':
+        return '1° tempo: 2';
+      case '2T 1':
+        return '2° tempo: 1';
+      case '2T X':
+        return '2° tempo: X';
+      case '2T 2':
+        return '2° tempo: 2';
       default:
         return market;
     }
@@ -3809,8 +3959,117 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           icon: Icons.tune_outlined,
           markets: _marketGroups['Handicap']!,
         ),
+        _marketGroupTile(
+          title: 'Risultato 1° tempo',
+          subtitle: '1 / X / 2 · simulazioni in osservazione',
+          icon: Icons.timer_outlined,
+          markets: _marketGroups['Risultato 1° tempo']!,
+        ),
+        _marketGroupTile(
+          title: 'Risultato 2° tempo',
+          subtitle: '1 / X / 2 · simulazioni in osservazione',
+          icon: Icons.av_timer_outlined,
+          markets: _marketGroups['Risultato 2° tempo']!,
+        ),
+        _marketGroupTile(
+          title: 'Calci d’angolo',
+          subtitle: 'Totale Over/Under · dati storici in raccolta',
+          icon: Icons.flag_outlined,
+          markets: _marketGroups['Calci d’angolo']!,
+        ),
+        _marketGroupTile(
+          title: 'Tiri in porta',
+          subtitle: 'Totale Over/Under partita · dati storici in raccolta',
+          icon: Icons.gps_fixed_outlined,
+          markets: _marketGroups['Tiri in porta']!,
+        ),
+        if (_isSpecialSelected)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 6, 4, 10),
+            child: Text(
+              'Mercato sperimentale selezionato: la ricerca è solo '
+              'informativa e non crea schedine. Un mercato per volta. '
+              'Per corner e tiri in porta servono statistiche verificate.',
+              key: Key('b79-special-market-mode-explainer'),
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+            ),
+          ),
         const SizedBox(height: 9),
         const GoalVdLineExtraMarketsPanel(),
+      ],
+    );
+  }
+
+  Widget _specialObservationResults() {
+    if (_loading || !_isSpecialSelected ||
+        _specialMarketObservations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      key: const Key('b79-special-market-observations'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        const Text(
+          'MERCATI AGGIUNTIVI · SOLO OSSERVAZIONE',
+          style: TextStyle(
+            color: Colors.orangeAccent,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Mercati selezionabili per consultazione: non entrano '
+          'in schedine, sistemi o statistiche ufficiali. '
+          'Il risultato dei tempi è una simulazione non calibrata; '
+          'corner e tiri richiedono dati verificati.',
+          style: TextStyle(color: Colors.white60, fontSize: 11),
+        ),
+        const SizedBox(height: 9),
+        for (final item in _specialMarketObservations)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F2937),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${item.match.homeTeam} - ${item.match.awayTeam}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  GoalVdLineCompetitionOrder.matchCompetitionLabel(
+                    item.match.country, item.match.league),
+                  style: const TextStyle(color: Colors.white54, fontSize: 10),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(child: Text(item.market,
+                      style: const TextStyle(color: Color(0xFF9EE3CC)))),
+                    Text(
+                      item.probabilityPercent == null
+                          ? 'DATI N/D'
+                          : '${item.probabilityPercent!.toStringAsFixed(1)}%*',
+                      style: const TextStyle(color: Colors.orangeAccent),
+                    ),
+                  ],
+                ),
+                Text(item.note,
+                  style: const TextStyle(color: Colors.white60, fontSize: 10)),
+              ],
+            ),
+          ),
+        const Text(
+          '*Percentuali non calibrate: non sono consigli di gioco.',
+          style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
+        ),
       ],
     );
   }
@@ -5217,9 +5476,20 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ),
             const SizedBox(height: 9),
-            _outputModeSelector(),
+            if (!_isSpecialSelected)
+              _outputModeSelector()
+            else
+              const Text(
+                'Solo osservazione: questo mercato non genera '
+                'schedine né sistemi automatici.',
+                key: Key('b79-no-special-coupon'),
+                style: TextStyle(
+                  color: Colors.orangeAccent, fontSize: 11,
+                ),
+              ),
 
-            if (_outputMode == _CombinationOutputMode.system) ...[
+            if (!_isSpecialSelected &&
+                _outputMode == _CombinationOutputMode.system) ...[
               const SizedBox(height: 12),
               _systemControls(),
             ],
@@ -5331,6 +5601,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     ? 'AVVIA X PREMIUM • $_topCount PARTITE'
                     : _multiMarketRankingEnabled
                     ? 'AVVIA MULTIMERCATO • $_topCount PARTITE'
+                    : _isSpecialSelected
+                    ? 'ANALIZZA $_selectedMarketLabel · OSSERVAZIONE'
                     : _outputMode == _CombinationOutputMode.system
                     ? 'CREA SISTEMA $_selectedMarketLabel'
                     : 'TROVA LE MIGLIORI '
@@ -5396,7 +5668,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           // Non mostrare selezioni provvisorie prima della verifica quote
           // e dell'Auditor, soprattutto con Palinsesto Italia attivo.
           if (!_loading && !_checkingOdds && !_xPremiumEnabled &&
-              !_multiMarketRankingEnabled &&
+              !_multiMarketRankingEnabled && !_isSpecialSelected &&
               _results.isNotEmpty) ...[
             const SizedBox(height: 24),
 
@@ -5497,6 +5769,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           if (!_xPremiumEnabled &&
               !_multiMarketRankingEnabled &&
+              !_isSpecialSelected &&
               !_loading &&
               _combinationFixtureCount > 0 &&
               _outputMode == _CombinationOutputMode.single &&
@@ -5518,6 +5791,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           if (!_xPremiumEnabled &&
               !_multiMarketRankingEnabled &&
+              !_isSpecialSelected &&
               !_loading &&
               (_results.isEmpty ||
                   (_outputMode == _CombinationOutputMode.single &&
@@ -5583,6 +5857,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
 
           if (!_xPremiumEnabled &&
               !_multiMarketRankingEnabled &&
+              !_isSpecialSelected &&
               !_loading &&
               _results.isEmpty &&
               _processed > 0 &&
@@ -5615,6 +5890,7 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             ),
           ],
 
+          _specialObservationResults(),
           const SizedBox(height: 14),
 
           const Text(

@@ -5046,7 +5046,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       for (final entry in _markets(item.analysis).entries)
         entry.key: entry.value.toDouble(),
       for (final candidate
-          in GoalVdLineCouponMarketPolicy.sportingHandicaps(item.analysis))
+          in GoalVdLineCouponMarketPolicy.analysisHandicaps(item.analysis))
         candidate.market: candidate.probability.toDouble(),
     };
     final quoted = <String, double>{
