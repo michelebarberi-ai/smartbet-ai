@@ -91,4 +91,28 @@ void main() {
       GoalVdLineMarketRelationKind.unavailable,
     );
   });
+  test('B79: Asian +1.5 away is logically implied by X2', () {
+    final result = compare('HCP ASIA OSPITE 1.5', 'X2');
+    expect(result.kind, GoalVdLineMarketRelationKind.compatible);
+    expect(result.title, 'DIEGO IMPLICA GOALVDLINE');
+  });
+
+  test('B79: Asian -1.5 away conflicts with home-or-draw', () {
+    final result = compare('HCP ASIA OSPITE -1.5', '1X');
+    expect(result.kind, GoalVdLineMarketRelationKind.incompatible);
+  });
+
+  test('B79: Asian positive sign is explicit in the UI, not odds key', () {
+    expect(
+      GoalVdLineMarketRelationService.displayMarket('HCP ASIA OSPITE 1.5'),
+      'HCP ASIA OSPITE +1.5',
+    );
+    expect(
+      GoalVdLineMarketRelationService.displayMarket('HCP ASIA OSPITE -1.5'),
+      'HCP ASIA OSPITE -1.5',
+    );
+    expect(compare('HCP ASIA OSPITE -0.75', 'X2').kind,
+        GoalVdLineMarketRelationKind.unavailable);
+  });
+
 }
