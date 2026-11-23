@@ -4187,9 +4187,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
-        const Text(
-          'MERCATI AGGIUNTIVI · SOLO OSSERVAZIONE',
-          style: TextStyle(
+        Text(
+          _allExtraMarketFamily == null
+              ? 'MERCATO AGGIUNTIVO · SOLO OSSERVAZIONE'
+              : 'CONFRONTO TUTTI I MERCATI · SOLO OSSERVAZIONE',
+          style: const TextStyle(
             color: Colors.orangeAccent,
             fontSize: 13,
             fontWeight: FontWeight.bold,
@@ -4197,10 +4199,11 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Mercati selezionabili per consultazione: non entrano '
-          'in schedine, sistemi o statistiche ufficiali. '
-          'Il risultato dei tempi è una simulazione non calibrata; '
-          'corner e tiri richiedono dati verificati.',
+          'Queste analisi non generano schedine, sistemi o statistiche '
+          'ufficiali. Per primo/secondo tempo le percentuali sono '
+          'scenari Poisson NON calibrati; non dimostrano affidabilità. '
+          'Per corner e tiri in porta il confronto non assegna '
+          'un mercato migliore senza storico verificato.',
           style: TextStyle(color: Colors.white60, fontSize: 11),
         ),
         const SizedBox(height: 9),
@@ -4222,14 +4225,29 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                 const SizedBox(height: 4),
                 Text(
                   GoalVdLineCompetitionOrder.matchCompetitionLabel(
-                    item.match.country, item.match.league),
+                      item.match.country, item.match.league),
                   style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
+                if (item.comparesAll)
+                  Text(
+                    item.probabilityPercent == null
+                        ? 'Confronto senza graduatoria: DATI N/D'
+                        : 'Scenario con stima più alta (NON calibrata)',
+                    key: const Key('b81-comparison-status'),
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                const SizedBox(height: 4),
                 Row(
                   children: [
-                    Expanded(child: Text(item.market,
-                      style: const TextStyle(color: Color(0xFF9EE3CC)))),
+                    Expanded(
+                      child: Text(item.leading.market,
+                        style: const TextStyle(color: Color(0xFF9EE3CC))),
+                    ),
                     Text(
                       item.probabilityPercent == null
                           ? 'DATI N/D'
@@ -4238,13 +4256,64 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
                     ),
                   ],
                 ),
-                Text(item.note,
-                  style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                Text(item.leading.evidence,
+                    style: const TextStyle(
+                      color: Colors.white60, fontSize: 10)),
+                if (item.comparesAll) ...[
+                  const SizedBox(height: 7),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: Key('b81-comparison-${item.match.fixtureId}'),
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(
+                        'Tutti i ${item.estimates.length} mercati confrontati',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Stime indicative o N/D · nessuna quota verificata',
+                        style: TextStyle(
+                          color: Colors.white54, fontSize: 10),
+                      ),
+                      children: [
+                        for (final estimate in item.estimates)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(
+                                  estimate.market,
+                                  style: const TextStyle(
+                                    color: Colors.white70, fontSize: 11),
+                                )),
+                                Text(
+                                  estimate.probabilityPercent == null
+                                      ? 'DATI N/D'
+                                      : '${estimate.probabilityPercent!.toStringAsFixed(1)}%*',
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         const Text(
-          '*Percentuali non calibrate: non sono consigli di gioco.',
+          '*Stime non calibrate. Nessuna selezione giocabile: '
+          'l’affidabilità richiede esiti verificati, calibrazione '
+          'e quote reali riferite al mercato esatto.',
           style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
         ),
       ],
