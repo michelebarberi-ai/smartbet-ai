@@ -42,10 +42,10 @@ void main() {
     await tester.ensureVisible(find.text('1° tempo: X'));
     await tester.tap(find.text('1° tempo: X'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('b79-special-market-mode-explainer')),
+    expect(tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, '1° tempo: X')).selected, isTrue);
+    expect(find.textContaining('mercato selezionato · solo osservazione'),
         findsOneWidget);
-    expect(find.textContaining('ANALIZZA 1T X'), findsOneWidget);
-    expect(find.byKey(const Key('b79-no-special-coupon')), findsOneWidget);
 
     await tester.ensureVisible(find.text('Calci d’angolo'));
     await tester.tap(find.text('Calci d’angolo'));
@@ -54,7 +54,8 @@ void main() {
     await tester.ensureVisible(find.text('CORNER OVER 8.5'));
     await tester.tap(find.text('CORNER OVER 8.5'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('ANALIZZA CORNER OVER 8.5'), findsOneWidget);
+    expect(tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'CORNER OVER 8.5')).selected, isTrue);
 
     await tester.ensureVisible(find.text('Tiri in porta'));
     await tester.tap(find.text('Tiri in porta'));
@@ -63,8 +64,9 @@ void main() {
     await tester.ensureVisible(find.text('TIRI PORTA UNDER 6.5'));
     await tester.tap(find.text('TIRI PORTA UNDER 6.5'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('ANALIZZA TIRI PORTA UNDER 6.5'),
-        findsOneWidget);
+    expect(tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'TIRI PORTA UNDER 6.5')).selected,
+        isTrue);
 
     await tester.ensureVisible(find.text('Risultato partita'));
     await tester.tap(find.text('Risultato partita'));
@@ -72,9 +74,9 @@ void main() {
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '1'));
     await tester.tap(find.widgetWithText(ChoiceChip, '1'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('b79-special-market-mode-explainer')),
-        findsNothing);
-    expect(find.byKey(const Key('b79-no-special-coupon')),
+    expect(tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, '1')).selected, isTrue);
+    expect(find.textContaining('mercato selezionato · solo osservazione'),
         findsNothing);
   });
 }
