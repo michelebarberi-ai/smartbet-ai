@@ -32,32 +32,54 @@ class GoalVdLineExtraMarketsPanel extends StatelessWidget {
       sample: shotsSample,
     );
 
-    Widget group(String title, List<GoalVdLineExtraMarketEstimate> rows,
-        String note, {int maxRows = 6}) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 9),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(
+
+    Widget group({
+      required Key key,
+      required String title,
+      required List<GoalVdLineExtraMarketEstimate> rows,
+      required String note,
+    }) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111827),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: ExpansionTile(
+          key: key,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Text(
+            title,
+            style: const TextStyle(
               color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold,
-            )),
-            const SizedBox(height: 3),
+            ),
+          ),
+          subtitle: Text(
+            '${rows.length} mercati · in osservazione',
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+          children: [
             Text(note, style: const TextStyle(
               color: Colors.white60, fontSize: 10,
             )),
-            const SizedBox(height: 7),
-            for (final item in rows.take(maxRows))
+            const SizedBox(height: 8),
+            for (final item in rows)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
-                    Expanded(child: Text(
-                      item.market,
-                      style: const TextStyle(
-                        color: Colors.white70, fontSize: 11,
+                    Expanded(
+                      child: Text(
+                        item.market,
+                        style: const TextStyle(
+                          color: Colors.white70, fontSize: 11,
+                        ),
                       ),
-                    )),
+                    ),
                     const SizedBox(width: 9),
                     Text(
                       item.probabilityPercent == null
@@ -93,60 +115,82 @@ class GoalVdLineExtraMarketsPanel extends StatelessWidget {
           ]
         : half;
 
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        key: const Key('b78-extra-markets-panel'),
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: EdgeInsets.zero,
-        title: const Text(
-          'Mercati aggiuntivi · in osservazione',
-          style: TextStyle(
-            color: Color(0xFF9EE3CC),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
+    final firstHalfRows = halfRows
+        .where((item) => item.market.startsWith('1T '))
+        .toList(growable: false);
+    final secondHalfRows = halfRows
+        .where((item) => item.market.startsWith('2T '))
+        .toList(growable: false);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const Key('b78-extra-markets-panel'),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: const Icon(Icons.more_horiz, color: Color(0xFF00C853)),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: const Text(
+            'Altri',
+            style: TextStyle(
+              color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        subtitle: const Text(
-          'Primo/secondo tempo · Corner · Tiri in porta',
-          style: TextStyle(color: Colors.white60, fontSize: 10),
-        ),
-        children: [
-          const Text(
-            'Mercati sperimentali: non entrano nella schedina automatica '
-            'né nelle statistiche ufficiali finché non sono disponibili '
-            'esiti verificati, quote reali e calibrazione.',
-            style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
-          ),
-          const SizedBox(height: 7),
-          group(
-            'Risultato 1° e 2° tempo (1 / X / 2)',
-            halfRows,
-            'Solo scenario Poisson: ripartizione ipotetica dei gol '
-            '45% primo tempo e 55% secondo. Non calibrato.',
-          ),
-          group(
-            'Calci d’angolo · totale partita',
-            corners,
-            'Over/Under corner: servono 100 partite concluse '
-            'e almeno 14 giornate prima di mostrare frequenze storiche.',
-            maxRows: 12,
-          ),
-          group(
-            'Tiri in porta · totale partita',
-            shots,
-            'Non sono i tiri del singolo giocatore: '
-            'le offerte Sostituto+ richiedono dati e regole separate.',
-            maxRows: 12,
-          ),
-          const Text(
-            'Il bookmaker può offrire anche soglie diverse: '
-            'nessuna quota è inventata o dedotta da altri mercati. '
-            'Il valore economico si verifica solo alla fine.',
+          subtitle: const Text(
+            '1° e 2° tempo · Corner · Tiri in porta',
             style: TextStyle(color: Colors.white54, fontSize: 10),
           ),
-          const SizedBox(height: 8),
-        ],
+          children: [
+            const Text(
+              'Questi nuovi mercati sono in osservazione. Puoi consultarli, '
+              'ma non selezionarli per le schedine fino alla validazione '
+              'con risultati verificati, quote reali e calibrazione.',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 10),
+            ),
+            const SizedBox(height: 10),
+            group(
+              key: const Key('b79-altri-primo-tempo'),
+              title: 'Primo tempo · 1 / X / 2',
+              rows: firstHalfRows,
+              note: 'Scenario Poisson: quota gol del primo tempo ipotizzata '
+                  'al 45%. Non calibrato.',
+            ),
+            group(
+              key: const Key('b79-altri-secondo-tempo'),
+              title: 'Secondo tempo · 1 / X / 2',
+              rows: secondHalfRows,
+              note: 'Scenario Poisson: quota gol del secondo tempo ipotizzata '
+                  'al 55%. Non calibrato.',
+            ),
+            group(
+              key: const Key('b79-altri-corner'),
+              title: 'Corner · totale partita',
+              rows: corners,
+              note: 'Over/Under corner: servono almeno 100 incontri '
+                  'conclusi e 14 giornate con dati verificati.',
+            ),
+            group(
+              key: const Key('b79-altri-tiri-porta'),
+              title: 'Tiri in porta · totale partita',
+              rows: shots,
+              note: 'Solo tiri in porta complessivi, non statistiche '
+                  'dei singoli giocatori o scommesse Sostituto+.',
+            ),
+            const Text(
+              'Nessuna quota viene inventata o dedotta da altri mercati. '
+              'La disponibilità sul bookmaker va verificata separatamente.',
+              style: TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ],
+        ),
       ),
     );
   }

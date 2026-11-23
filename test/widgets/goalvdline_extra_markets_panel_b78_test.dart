@@ -4,7 +4,7 @@ import 'package:smartbet_ai_new/models/analysis_result.dart';
 import 'package:smartbet_ai_new/widgets/goalvdline_extra_markets_panel.dart';
 
 void main() {
-  testWidgets('B78: new three families visible without API calls or estimates',
+  testWidgets('B79: Altri groups four read-only market families',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
@@ -13,16 +13,25 @@ void main() {
         ),
       ),
     ));
-    expect(find.textContaining('Primo/secondo tempo'), findsOneWidget);
-    await tester.tap(find.text('Mercati aggiuntivi · in osservazione'));
+    expect(find.text('Altri'), findsOneWidget);
+    await tester.tap(find.text('Altri'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Risultato 1° e 2° tempo'), findsOneWidget);
-    expect(find.textContaining('Calci d’angolo'), findsOneWidget);
-    expect(find.textContaining('Tiri in porta · totale'), findsOneWidget);
-    expect(find.textContaining('Dati N/D'), findsWidgets);
+
+    expect(find.text('Primo tempo · 1 / X / 2'), findsOneWidget);
+    expect(find.text('Secondo tempo · 1 / X / 2'), findsOneWidget);
+    expect(find.text('Corner · totale partita'), findsOneWidget);
+    expect(find.text('Tiri in porta · totale partita'), findsOneWidget);
+    expect(find.textContaining('non selezionarli per le schedine'),
+        findsOneWidget);
+
+    await tester.tap(find.text('Primo tempo · 1 / X / 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('1T 1'), findsOneWidget);
+    expect(find.text('Dati N/D'), findsWidgets);
+    expect(find.byType(ChoiceChip), findsNothing);
   });
 
-  testWidgets('B78: period model labelled simulation, not reliable coupon pick',
+  testWidgets('B79: Altri labels experimental probabilities correctly',
       (tester) async {
     final result = AnalysisResult(
       smartScore: 75, homeProbability: 52,
@@ -38,10 +47,17 @@ void main() {
         ),
       ),
     ));
-    await tester.tap(find.text('Mercati aggiuntivi · in osservazione'));
+    await tester.tap(find.text('Altri'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('45% primo tempo e 55% secondo'), findsOneWidget);
+    await tester.tap(find.text('Primo tempo · 1 / X / 2'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('45%'), findsOneWidget);
     expect(find.textContaining('Non calibrato'), findsOneWidget);
-    expect(find.textContaining('TIRI PORTA OVER 4.5'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Tiri in porta · totale partita'));
+    await tester.tap(find.text('Tiri in porta · totale partita'));
+    await tester.pumpAndSettle();
+    expect(find.text('TIRI PORTA OVER 4.5'), findsOneWidget);
+    expect(find.text('TIRI PORTA UNDER 9.5'), findsOneWidget);
   });
 }
