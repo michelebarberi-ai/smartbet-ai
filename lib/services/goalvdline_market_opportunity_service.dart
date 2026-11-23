@@ -106,7 +106,7 @@ class GoalVdLineMarketOpportunityService {
         verdict = 'Quota apparentemente facile, stima AI sotto il pareggio';
       } else if (!qualified) {
         verdict = 'Dati storici insufficienti: vantaggio non dimostrato';
-      } else if (evidence!.calibrationGapPoints! < -5) {
+      } else if (evidence.calibrationGapPoints! < -5) {
         verdict = 'Storico: il modello tende a sovrastimare questo mercato';
       } else if (edge != null && edge < minimumNominalMarginPoints) {
         verdict = 'Margine nominale troppo piccolo per confermare valore';
