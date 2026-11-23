@@ -41,5 +41,5 @@ test('B67: backend and full Flutter regression run before signing assets', () =>
 
 test('B67: version only advances on deliberately prepared release branch', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:66|67|68|69|70|71|73|74|75|76|77|78|79)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:66|67|68|69|70|71|73|74|75|76|77|78|79|80)$/m);
 });
