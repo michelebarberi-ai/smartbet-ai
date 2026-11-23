@@ -60,7 +60,31 @@ class SmartBetLocalAuditor {
     }
 
     final implied = 100.0 / odd;
-    if (probability - implied < -12.0) {
+    final positiveGap = probability - implied;
+
+    // B79: a very large positive gap is NOT evidence of a valuable bet.
+    // It may indicate an inverted Asian handicap sign, the wrong line,
+    // a stale/provider quote, or a badly calibrated sports estimate.
+    // Quarantine the *quoted selection*, not the sports prediction itself.
+    // This check runs only after the model has ranked its markets.
+    if (probability >= 65 && positiveGap > 35.0) {
+      return const SmartBetLocalAudit(
+        status: SmartBetLocalAuditStatus.block,
+        reasons: <String>[
+          'Quota e probabilità fortemente divergenti: verificare '
+              'mercato, segno handicap e quota del bookmaker.',
+        ],
+      );
+    }
+
+    if (positiveGap > 25.0) {
+      reasons.add(
+        'Probabilità AI molto superiore a quella implicita nella quota: '
+            'mercato da verificare.',
+      );
+    }
+
+    if (positiveGap < -12.0) {
       reasons.add(
         'Probabilità GoalVdLine inferiore alla probabilità implicita.',
       );

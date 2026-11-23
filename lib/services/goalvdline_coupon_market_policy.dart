@@ -47,6 +47,16 @@ class GoalVdLineCouponMarketPolicy {
         couponHandicapMarkets.contains(normalized);
   }
 
+  /// Only presentation metadata: AFC Champions League is Asian even if
+  /// an upstream fixture catalog incorrectly labels the region as Europe.
+  /// Never changes the fixture identity, Italian filters or sports model.
+  static String displayCountry(String country, String league) {
+    if (league.trim().toUpperCase().contains('AFC CHAMPIONS LEAGUE')) {
+      return 'Asia';
+    }
+    return country;
+  }
+
   /// Candidate handicap probabilities are generated from a FIXED sporting
   /// catalogue, even when the bookmaker feed is missing. The canonical
   /// quotedOutcomes parameter is only a market-ID whitelist here; no

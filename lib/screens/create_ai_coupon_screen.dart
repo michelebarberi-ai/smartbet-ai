@@ -412,7 +412,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ? 'quota non disponibile'
             : 'quota ${odd.toStringAsFixed(2)}';
         text.writeln('${i + 1}. ${pick.match.homeTeam} - '
-            '${pick.match.awayTeam} | ${pick.market} | '
+            '${pick.match.awayTeam} | ${GoalVdLineMarketRelationService.displayMarket(pick.market)} | '
             '${pick.probability}% | $oddLabel');
       }
     }
@@ -668,6 +668,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               (!ItalyScheduleFilter.allows(preliminary.match) ||
                   !ItalianBookmakerMarketFilter.appearsInItalianMarket(
                       bestOdd.bookmakerName)))) {
+        continue;
+      }
+
+      // B79: inspect ONLY the already-ranked, actually quoted candidate.
+      // An anomalous handicap sign/line or a huge model-price mismatch
+      // must not enter CORE. Try the next sporting candidate for the
+      // SAME match without changing the sports ranking or its estimates.
+      final quoteAudit = SmartBetLocalAuditor.evaluate(
+        analysis: preliminary.analysis,
+        market: market,
+        probability: probability,
+        odd: bestOdd.odd,
+      );
+      if (quoteAudit.isBlocked || quoteAudit.blocksMarket(market)) {
         continue;
       }
 
@@ -3261,7 +3275,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               ? 'Partita ${pick.fixtureId}'
               : '${match.homeTeam} - ${match.awayTeam}';
           buffer.writeln(
-            '$matchName | ${pick.market} '
+            '$matchName | ${GoalVdLineMarketRelationService.displayMarket(pick.market)} '
             '| ${pick.probability}% | ${pick.odd.toStringAsFixed(2)}'
             ' | ${pick.bookmaker}',
           );
@@ -3310,14 +3324,17 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
 
     for (var i = 0; i < _results.length; i++) {
       final item = _results[i];
+      final displayMarket = GoalVdLineMarketRelationService.displayMarket(
+        item.market,
+      );
 
       text
         ..writeln('${i + 1}. ${item.match.homeTeam} - ${item.match.awayTeam}')
         ..writeln(
           item.odd == null
-              ? '   ${item.market} — ${item.probability}% '
+              ? '   $displayMarket — ${item.probability}% '
                     '(quota combo non disponibile)'
-              : '   ${item.market} @ ${item.odd!.toStringAsFixed(2)} '
+              : '   $displayMarket @ ${item.odd!.toStringAsFixed(2)} '
                     '— ${item.probability}%',
         );
 
@@ -4838,7 +4855,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
                     Text(
                       [
                         if (forecast.match.country.trim().isNotEmpty)
-                          forecast.match.country.trim(),
+                          GoalVdLineCouponMarketPolicy.displayCountry(
+                            forecast.match.country,
+                            forecast.match.league,
+                          ).trim(),
                         if (forecast.match.league.trim().isNotEmpty)
                           forecast.match.league.trim(),
                       ].join(' • '),
@@ -4904,9 +4924,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     var position = 0;
 
     for (final item in _results) {
-      final country = item.match.country.trim().isEmpty
+      final displayCountry = GoalVdLineCouponMarketPolicy.displayCountry(
+        item.match.country,
+        item.match.league,
+      ).trim();
+      final country = displayCountry.isEmpty
           ? 'Internazionale'
-          : item.match.country.trim();
+          : displayCountry;
       final league = item.match.league.trim().isEmpty
           ? 'Competizione'
           : item.match.league.trim();
@@ -5091,9 +5115,12 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            item.match.country.trim().isEmpty
+            GoalVdLineCouponMarketPolicy.displayCountry(
+              item.match.country,
+              item.match.league,
+            ).trim().isEmpty
                 ? item.match.league
-                : '${item.match.country} • ${item.match.league}',
+                : '${GoalVdLineCouponMarketPolicy.displayCountry(item.match.country, item.match.league)} • ${item.match.league}',
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 13),

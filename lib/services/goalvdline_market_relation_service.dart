@@ -34,9 +34,19 @@ class GoalVdLineMarketRelationService {
     final handicap = RegExp(
       r'^HCP EURO CASA ([+-]?[0-9]+) ([1X2])$',
     ).firstMatch(normalized);
-    if (handicap == null) return market;
-    return 'HANDICAP EUROPEO · CASA ${handicap.group(1)} '
-        '· ESITO ${handicap.group(2)}';
+    if (handicap != null) {
+      return 'HANDICAP EUROPEO · CASA ${handicap.group(1)} '
+          '· ESITO ${handicap.group(2)}';
+    }
+    final asian = RegExp(
+      r'^HCP ASIA (CASA|OSPITE) ([+-]?[012]\.5)$',
+    ).firstMatch(normalized);
+    if (asian != null) {
+      final line = double.parse(asian.group(2)!);
+      final sign = line > 0 ? '+' : '';
+      return 'HCP ASIA ${asian.group(1)} $sign${line.toStringAsFixed(1)}';
+    }
+    return market;
   }
 
   static bool Function(int, int)? _condition(String market) {
@@ -104,6 +114,18 @@ class GoalVdLineMarketRelationService {
         case '2':
           return (h, a) => h + line < a;
       }
+    }
+
+    // B79: signed full-time Asian half-goal lines have binary outcomes.
+    // Keep integer/quarter lines unavailable (refund/partial settlement).
+    final asian = RegExp(
+      r'^HCP ASIA (CASA|OSPITE) ([+-]?[012]\.5)$',
+    ).firstMatch(market);
+    if (asian != null) {
+      final line = double.parse(asian.group(2)!);
+      return asian.group(1) == 'CASA'
+          ? (h, a) => h + line > a
+          : (h, a) => a + line > h;
     }
 
     // Mercati che richiedono cronologia degli eventi

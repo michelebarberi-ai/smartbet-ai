@@ -2,7 +2,7 @@ name: B76 Flutter validation
 
 on:
   pull_request:
-    branches: [release/b75-testflight, release/b76-testflight, release/b77-testflight]
+    branches: [release/b75-testflight, release/b76-testflight, release/b77-testflight, release/b78-testflight]
     paths:
       - 'lib/**'
       - 'test/**'
