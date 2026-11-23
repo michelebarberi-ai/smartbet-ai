@@ -84,6 +84,56 @@ class PersonalCouponStore extends ChangeNotifier {
     return true;
   }
 
+  /// User's market can be edited without overwriting the original saved pick.
+  Future<bool> changeSelectionMarket(
+    String couponId, String fixtureId, String originalMarket,
+    String chosenMarket,
+  ) async {
+    await initialize();
+    final changed = chosenMarket.trim();
+    if (changed.isEmpty || changed.length > 90) return false;
+    final index = _coupons.indexWhere((e) => e.id == couponId);
+    if (index < 0) return false;
+    final coupon = _coupons[index];
+    final selectionIndex = coupon.selections.indexWhere((pick) =>
+        pick.fixtureId == fixtureId && pick.market == originalMarket);
+    if (selectionIndex < 0) return false;
+    if (coupon.selections.any((pick) =>
+        pick.fixtureId == fixtureId &&
+        pick.market != originalMarket &&
+        pick.currentMarket.trim().toLowerCase() == changed.toLowerCase())) {
+      return false;
+    }
+    final selections = [...coupon.selections];
+    selections[selectionIndex] = selections[selectionIndex].withChosenMarket(changed);
+    _coupons[index] = coupon.copyWith(selections: selections);
+    await _save();
+    return true;
+  }
+
+  /// Persist only verified FT or regulation-time scores, shared across coupons.
+  Future<int> registerVerifiedResults(
+    Map<String, PersonalVerifiedScore> results,
+  ) async {
+    await initialize();
+    if (results.isEmpty) return 0;
+    var updated = 0;
+    for (var i = 0; i < _coupons.length; i++) {
+      final coupon = _coupons[i];
+      final selections = coupon.selections.map((pick) {
+        final score = results[pick.fixtureId];
+        if (score == null) return pick;
+        if (pick.verifiedHomeGoals == score.homeGoals &&
+            pick.verifiedAwayGoals == score.awayGoals) return pick;
+        updated++;
+        return pick.withVerifiedScore(score);
+      }).toList(growable: false);
+      _coupons[i] = coupon.copyWith(selections: selections);
+    }
+    if (updated > 0) await _save();
+    return updated;
+  }
+
   Future<void> removeSelection(String id, String fixtureId, String market) async {
     await initialize();
     final index = _coupons.indexWhere((e) => e.id == id);
@@ -135,11 +185,51 @@ class PersonalSelection {
   final String? league;
   final DateTime? kickoffAt;
   final String? bookmaker;
+  /// Null means the selected market is still the one initially saved.
+  final String? chosenMarket;
+  /// Independent top sporting pick, when the originating UI supplied it.
+  final String? aiPrimaryMarket;
+  final double? aiPrimaryProbability;
+  /// Only from confirmed final fixture scores, not AI or user predictions.
+  final int? verifiedHomeGoals;
+  final int? verifiedAwayGoals;
+  final DateTime? scoreVerifiedAt;
   final DateTime capturedAt;
   const PersonalSelection({required this.fixtureId, required this.match,
     required this.market, required this.source, required this.capturedAt,
     this.odds, this.probability, this.country, this.league, this.kickoffAt,
-    this.bookmaker});
+    this.bookmaker, this.chosenMarket, this.aiPrimaryMarket,
+    this.aiPrimaryProbability, this.verifiedHomeGoals,
+    this.verifiedAwayGoals, this.scoreVerifiedAt});
+
+  String get currentMarket => chosenMarket ?? market;
+  bool get editedByUser =>
+      currentMarket.trim().toLowerCase() != market.trim().toLowerCase();
+  double? get currentOdds => editedByUser ? null : odds;
+  double? get currentProbability => editedByUser ? null : probability;
+
+  PersonalSelection withChosenMarket(String newMarket) => PersonalSelection(
+    fixtureId: fixtureId, match: match, market: market, source: source,
+    capturedAt: capturedAt, odds: odds, probability: probability,
+    country: country, league: league, kickoffAt: kickoffAt,
+    bookmaker: bookmaker, chosenMarket: newMarket,
+    aiPrimaryMarket: aiPrimaryMarket,
+    aiPrimaryProbability: aiPrimaryProbability,
+    verifiedHomeGoals: verifiedHomeGoals,
+    verifiedAwayGoals: verifiedAwayGoals, scoreVerifiedAt: scoreVerifiedAt,
+  );
+
+  PersonalSelection withVerifiedScore(PersonalVerifiedScore score) =>
+      PersonalSelection(
+    fixtureId: fixtureId, match: match, market: market, source: source,
+    capturedAt: capturedAt, odds: odds, probability: probability,
+    country: country, league: league, kickoffAt: kickoffAt,
+    bookmaker: bookmaker, chosenMarket: chosenMarket,
+    aiPrimaryMarket: aiPrimaryMarket,
+    aiPrimaryProbability: aiPrimaryProbability,
+    verifiedHomeGoals: score.homeGoals,
+    verifiedAwayGoals: score.awayGoals, scoreVerifiedAt: score.verifiedAt,
+  );
 
   Map<String, dynamic> toJson() => {
     'fixtureId': fixtureId, 'match': match, 'market': market,
@@ -148,6 +238,14 @@ class PersonalSelection {
     if (league != null) 'league': league,
     if (kickoffAt != null) 'kickoffAt': kickoffAt!.toUtc().toIso8601String(),
     if (bookmaker != null) 'bookmaker': bookmaker,
+    if (chosenMarket != null) 'chosenMarket': chosenMarket,
+    if (aiPrimaryMarket != null) 'aiPrimaryMarket': aiPrimaryMarket,
+    if (aiPrimaryProbability != null)
+      'aiPrimaryProbability': aiPrimaryProbability,
+    if (verifiedHomeGoals != null) 'verifiedHomeGoals': verifiedHomeGoals,
+    if (verifiedAwayGoals != null) 'verifiedAwayGoals': verifiedAwayGoals,
+    if (scoreVerifiedAt != null)
+      'scoreVerifiedAt': scoreVerifiedAt!.toUtc().toIso8601String(),
     'capturedAt': capturedAt.toIso8601String(),
   };
   factory PersonalSelection.fromJson(Map<String, dynamic> json) =>
@@ -163,6 +261,29 @@ class PersonalSelection {
         kickoffAt: DateTime.tryParse(json['kickoffAt']?.toString() ?? ''),
         bookmaker: json['bookmaker'] is String
             ? json['bookmaker'] as String : null,
+        chosenMarket: json['chosenMarket'] is String
+            ? json['chosenMarket'] as String : null,
+        aiPrimaryMarket: json['aiPrimaryMarket'] is String
+            ? json['aiPrimaryMarket'] as String : null,
+        aiPrimaryProbability: (json['aiPrimaryProbability'] as num?)?.toDouble(),
+        verifiedHomeGoals: json['verifiedHomeGoals'] is int
+            ? json['verifiedHomeGoals'] as int : null,
+        verifiedAwayGoals: json['verifiedAwayGoals'] is int
+            ? json['verifiedAwayGoals'] as int : null,
+        scoreVerifiedAt: DateTime.tryParse(
+            json['scoreVerifiedAt']?.toString() ?? ''),
         capturedAt: DateTime.parse(json['capturedAt'] as String),
       );
+}
+
+class PersonalVerifiedScore {
+  final int homeGoals;
+  final int awayGoals;
+  final DateTime verifiedAt;
+
+  const PersonalVerifiedScore({
+    required this.homeGoals,
+    required this.awayGoals,
+    required this.verifiedAt,
+  });
 }

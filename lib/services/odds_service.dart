@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'smartbet_european_handicap_odds_parser.dart';
 import 'smartbet_extra_markets_odds_parser.dart';
+import 'goalvdline_extra_markets_odds_parser.dart';
 import 'smartbet_refundable_markets_odds_parser.dart';
 import 'italian_bookmaker_market_filter.dart';
 
@@ -502,6 +503,26 @@ class OddsService {
             for (final valueItem in values) {
               if (valueItem is! Map<String, dynamic>) continue;
               final outcome = SmartBetExtraMarketsOddsParser.outcomeFor(
+                betName: betName,
+                value: valueItem['value']?.toString() ?? '',
+              );
+              if (outcome == null) continue;
+              final odd = _toDouble(valueItem['odd']);
+              if (!odd.isFinite || odd <= 1) continue;
+              _setBest(
+                bestByOutcome,
+                outcome: outcome,
+                odd: odd,
+                bookmakerId: bookmakerId,
+                bookmakerName: bookmakerName,
+              );
+            }
+
+            // B78: only explicit provider quote lines for extra markets.
+            // No xG-to-odds conversion and no substitution of FT odds.
+            for (final valueItem in values) {
+              if (valueItem is! Map<String, dynamic>) continue;
+              final outcome = GoalVdLineExtraMarketsOddsParser.outcomeFor(
                 betName: betName,
                 value: valueItem['value']?.toString() ?? '',
               );

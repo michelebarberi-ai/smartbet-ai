@@ -4,6 +4,8 @@ import '../models/match_model.dart';
 import '../services/goalvdline_competition_order.dart';
 import '../services/goalvdline_market_relation_service.dart';
 import '../services/goalvdline_three_coupon_system.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import 'goalvdline_coupon_risk_notice.dart';
 
 /// Solo presentazione: le tre varianti sono gia' state validate e non
 /// vengono mai ricalcolate o modificate da questa schermata.
@@ -30,6 +32,13 @@ class _GoalVdLineThreeCouponViewerState
   int _selectedIndex = 0;
 
   Widget _couponSummary(List<GoalVdLineSystemSelection> coupon) {
+    final risk = const GoalVdLineCouponRiskService().evaluate(
+      coupon.map((pick) => GoalVdLineCouponRiskSelection(
+        fixtureId: pick.fixtureId.toString(),
+        probabilityPercent: pick.probability.toDouble(),
+        realOdd: pick.odd,
+      )),
+    );
     final totalOdd = coupon.fold<double>(1.0, (value, pick) => value * pick.odd);
     final meanProbability = coupon.isEmpty
         ? 0.0
@@ -76,6 +85,8 @@ class _GoalVdLineThreeCouponViewerState
             '${changed == 1 ? '1 mercato cambiato' : '$changed mercati cambiati'}',
             style: const TextStyle(color: Colors.white70, fontSize: 11),
           ),
+          const SizedBox(height: 9),
+          GoalVdLineCouponRiskNotice(report: risk, compact: true),
           const SizedBox(height: 4),
           const Text(
             'Sono stime per singola partita, non una probabilità '

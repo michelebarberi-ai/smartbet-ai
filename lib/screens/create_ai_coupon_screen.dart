@@ -3,6 +3,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
+import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../widgets/goalvdline_extra_markets_panel.dart';
+import '../services/goalvdline_market_opportunity_service.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -12,6 +17,9 @@ import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_odds_scan_guard.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import '../services/goalvdline_coupon_market_policy.dart';
+import '../widgets/goalvdline_coupon_risk_notice.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
 import '../services/italy_schedule_filter.dart';
@@ -361,6 +369,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   String? _notice;
 
   final List<_CouponPick> _results = [];
+  SmartBetLeagueMarketReliabilityReport? _marketHistoryReadOnly;
+
+  Future<void> _loadMarketHistoryReadOnly() async {
+    try {
+      final history = SmartBetAnalysisHistoryStore.instance;
+      await history.initialize();
+      final report = const SmartBetLeagueMarketReliabilityService().evaluate(
+        records: history.records,
+        asOf: DateTime.now().toUtc(),
+      );
+      if (mounted) setState(() => _marketHistoryReadOnly = report);
+    } catch (error) {
+      debugPrint('B78: market history unavailable: $error');
+    }
+  }
 
   // P3B — portfolio automatico attivo.
   //
@@ -431,34 +454,16 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   static const double _minimumOdd = GoalVdLineQuotePolicy.minimumOdd;
   // PATCH 02F-A — CAMPIONATI + RECOVERY RAPIDA
 
-  static const List<String> _marketOrder = [
-    '1',
-    'X',
-    '2',
-    '1X',
-    'X2',
-    '12',
-    'OVER 1.5',
-    'UNDER 1.5',
-    'OVER 2.5',
-    'UNDER 2.5',
-    'GOAL',
-    'NO GOAL',
-    'OVER 3.5',
-    'UNDER 3.5',
-    'OVER 4.5',
-    'UNDER 4.5',
-    'CASA SEGNA',
-    'OSPITE SEGNA',
-    'GOAL + O2.5',
-    'NO GOAL + U2.5',
-    ...SmartBetMarketProbabilityService.orMarkets,
-  ];
+  // Mercati ammessi nelle schedine: solo principali, Multigol e Handicap.
+  // Combo avanzate, OPPURE e mercati speciali restano nell'analisi completa.
+  static const List<String> _marketOrder =
+      GoalVdLineCouponMarketPolicy.coreMarketOrder;
 
   @override
   void initState() {
     super.initState();
     _restoreDeviceLearningPreference();
+    _loadMarketHistoryReadOnly();
   }
 
   @override
@@ -573,10 +578,20 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
       candidates.add((market: market, probability: probability, order: index));
     }
 
-    // Gli handicap vengono esaminati separatamente come mercati opzionali.
-    // Non devono entrare nel ranking CORE solo perche' il feed quote ne
-    // pubblica una linea molto ampia (es. -4 o -5).
-    // In particolare le quote non generano candidati nel cervello sportivo.
+    // Handicap di linee limitate: modelli sportivi indipendenti dalle quote.
+    // Le linee ampie (es. +/-3) non entrano nella schedina principale.
+    for (final candidate in GoalVdLineCouponMarketPolicy.sportingHandicaps(
+      analysis,
+    )) {
+      if (candidate.probability <= 0) continue;
+      candidates.add((
+        market: candidate.market,
+        probability: candidate.probability,
+        order: _marketOrder.length +
+            GoalVdLineCouponMarketPolicy.couponHandicapMarkets
+                .indexOf(candidate.market),
+      ));
+    }
 
     // Classifica puramente sportiva.
     //
@@ -825,7 +840,9 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     }
 
     for (final market in odds.bestByOutcome.keys) {
-      if (!market.startsWith('HCP EURO CASA ')) continue;
+      if (!GoalVdLineCouponMarketPolicy.isAllowedCouponMarket(market)) {
+        continue;
+      }
 
       final quote = odds.oddFor(market);
       if (quote != null && quote.odd > _minimumOdd) {
@@ -4923,6 +4940,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   Widget _summary() {
+    final risk = const GoalVdLineCouponRiskService().evaluate(
+      _results.map((pick) => GoalVdLineCouponRiskSelection(
+        fixtureId: pick.match.fixtureId.toString(),
+        probabilityPercent: pick.probability.toDouble(),
+        realOdd: pick.odd,
+      )),
+    );
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -4949,6 +4973,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             '${(_combinedProbability * 100).toStringAsFixed(2)}%',
           ),
           _summaryRow('Rischio indicativo', _riskLabel),
+          if (_results.length >= 2) ...[
+            const SizedBox(height: 9),
+            GoalVdLineCouponRiskNotice(report: risk, compact: true),
+          ],
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
@@ -4988,6 +5016,27 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     // A different quoted pick is explicitly labeled as a coupon alternative.
     final rankedSports = _sportsMarketCandidates(item.analysis);
     final topSport = rankedSports.isEmpty ? null : rankedSports.first;
+    // Preserve ALL modeled markets in the expandable analysis, even though
+    // coupon selection is restricted to the core whitelist.
+    final modelMarkets = <String, double>{
+      for (final entry in _markets(item.analysis).entries)
+        entry.key: entry.value.toDouble(),
+      for (final candidate
+          in GoalVdLineCouponMarketPolicy.sportingHandicaps(item.analysis))
+        candidate.market: candidate.probability.toDouble(),
+    };
+    final quoted = <String, double>{
+      if (item.odd != null && item.odd!.isFinite)
+        item.market: item.odd!,
+    };
+    final opportunity = const GoalVdLineMarketOpportunityService().compare(
+      sportingPercent: modelMarkets,
+      country: item.match.country,
+      league: item.match.league,
+      history: _marketHistoryReadOnly,
+      quotedOdds: quoted,
+      selectedMarket: item.market,
+    );
     final isQuotedAlternative =
         topSport != null && topSport.market != item.market;
     final probabilityColor = _probabilityColor(item.probability);
@@ -5283,6 +5332,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          GoalVdLineMarketOpportunityPanel(report: opportunity),
+          GoalVdLineExtraMarketsPanel(analysis: item.analysis),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,
@@ -5295,6 +5346,8 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
               bookmaker: item.bookmaker,
               market: item.market,
               source: 'Crea Schedina',
+              aiPrimaryMarket: topSport?.market,
+              aiPrimaryProbability: topSport?.probability.toDouble(),
               probability: item.probability.toDouble(),
               odds: item.odd,
             ),

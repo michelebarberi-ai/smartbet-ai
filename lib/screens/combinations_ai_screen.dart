@@ -2,6 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
+import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../widgets/goalvdline_extra_markets_panel.dart';
+import '../services/goalvdline_market_opportunity_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -10,6 +13,8 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import '../widgets/goalvdline_coupon_risk_notice.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
@@ -3804,6 +3809,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
           icon: Icons.tune_outlined,
           markets: _marketGroups['Handicap']!,
         ),
+        const SizedBox(height: 9),
+        const GoalVdLineExtraMarketsPanel(),
       ],
     );
   }
@@ -4507,6 +4514,28 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         .toList()
       ..sort((a, b) => b.probability.compareTo(a.probability));
     final mainSport = modelOptions.isEmpty ? null : modelOptions.first;
+    final sportingOptions = <String, double>{
+      for (final option in modelOptions)
+        option.market: option.probability.toDouble(),
+      if (!modelOptions.any((option) => option.market == item.market))
+        item.market: item.probability.toDouble(),
+    };
+    final quotedOptions = <String, double>{
+      for (final option in modelOptions)
+        if (option.odd != null && option.odd!.isFinite)
+          option.market: option.odd!,
+      if (item.odd != null && item.odd!.isFinite)
+        item.market: item.odd!,
+    };
+    final marketOpportunity =
+        const GoalVdLineMarketOpportunityService().compare(
+      sportingPercent: sportingOptions,
+      quotedOdds: quotedOptions,
+      country: item.match.country,
+      league: item.match.league,
+      history: _historicalEvidence,
+      selectedMarket: item.market,
+    );
     final isQuotedAlternative =
         mainSport != null && mainSport.market != item.market;
 
@@ -4813,7 +4842,9 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             'Rischio pre-analisi: ${result.risk}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          GoalVdLineMarketOpportunityPanel(report: marketOpportunity),
+          GoalVdLineExtraMarketsPanel(analysis: result),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,
@@ -4826,6 +4857,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               bookmaker: item.bookmaker,
               market: item.market,
               source: 'Combinazioni AI',
+              aiPrimaryMarket: mainSport?.market,
+              aiPrimaryProbability: mainSport?.probability.toDouble(),
               probability: item.probability.toDouble(),
               odds: item.odd,
             ),
@@ -5434,7 +5467,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ],
             const SizedBox(height: 12),
-
+            if (_results.length >= 2) ...[
+              GoalVdLineCouponRiskNotice(
+                report: const GoalVdLineCouponRiskService().evaluate(
+                  _results.map((pick) => GoalVdLineCouponRiskSelection(
+                    fixtureId: pick.match.fixtureId.toString(),
+                    probabilityPercent: pick.probability.toDouble(),
+                    realOdd: pick.odd,
+                  )),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             ..._groupedResultWidgets(),
             const SizedBox(height: 6),
             SizedBox(
