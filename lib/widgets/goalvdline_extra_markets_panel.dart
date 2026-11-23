@@ -130,14 +130,14 @@ class GoalVdLineExtraMarketsPanel extends StatelessWidget {
             corners,
             'Over/Under corner: servono 100 partite concluse '
             'e almeno 14 giornate prima di mostrare frequenze storiche.',
-            maxRows: 6,
+            maxRows: 12,
           ),
           group(
             'Tiri in porta · totale partita',
             shots,
             'Non sono i tiri del singolo giocatore: '
             'le offerte Sostituto+ richiedono dati e regole separate.',
-            maxRows: 6,
+            maxRows: 12,
           ),
           const Text(
             'Il bookmaker può offrire anche soglie diverse: '
