@@ -3,6 +3,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
+import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../services/goalvdline_market_opportunity_service.dart';
+import '../services/smartbet_analysis_history_store.dart';
+import '../services/smartbet_league_market_reliability_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -361,6 +365,21 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   String? _notice;
 
   final List<_CouponPick> _results = [];
+  SmartBetLeagueMarketReliabilityReport? _marketHistoryReadOnly;
+
+  Future<void> _loadMarketHistoryReadOnly() async {
+    try {
+      final history = SmartBetAnalysisHistoryStore.instance;
+      await history.initialize();
+      final report = const SmartBetLeagueMarketReliabilityService().evaluate(
+        records: history.records,
+        asOf: DateTime.now().toUtc(),
+      );
+      if (mounted) setState(() => _marketHistoryReadOnly = report);
+    } catch (error) {
+      debugPrint('B78: market history unavailable: $error');
+    }
+  }
 
   // P3B — portfolio automatico attivo.
   //
@@ -459,6 +478,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   void initState() {
     super.initState();
     _restoreDeviceLearningPreference();
+    _loadMarketHistoryReadOnly();
   }
 
   @override
@@ -4988,6 +5008,22 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
     // A different quoted pick is explicitly labeled as a coupon alternative.
     final rankedSports = _sportsMarketCandidates(item.analysis);
     final topSport = rankedSports.isEmpty ? null : rankedSports.first;
+    final modelMarkets = <String, double>{
+      for (final candidate in rankedSports)
+        candidate.market: candidate.probability.toDouble(),
+    };
+    final quoted = <String, double>{
+      if (item.odd != null && item.odd!.isFinite)
+        item.market: item.odd!,
+    };
+    final opportunity = const GoalVdLineMarketOpportunityService().compare(
+      sportingPercent: modelMarkets,
+      country: item.match.country,
+      league: item.match.league,
+      history: _marketHistoryReadOnly,
+      quotedOdds: quoted,
+      selectedMarket: item.market,
+    );
     final isQuotedAlternative =
         topSport != null && topSport.market != item.market;
     final probabilityColor = _probabilityColor(item.probability);
@@ -5283,6 +5319,7 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          GoalVdLineMarketOpportunityPanel(report: opportunity),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,

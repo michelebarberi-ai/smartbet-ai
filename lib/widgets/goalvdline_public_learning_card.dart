@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../services/smartbet_scorer_learning_service.dart';
 import 'goalvdline_home_league_ranking_panel.dart';
+import 'goalvdline_home_market_ranking_panel.dart';
 
 /// A minimal, non-technical public summary.
 /// It intentionally excludes legacy retrospective copies and never presents
@@ -243,6 +244,10 @@ class GoalVdLinePublicLearningCard extends StatelessWidget {
               style: TextStyle(color: Colors.white54, fontSize: 10),
             ),
             GoalVdLineHomeLeagueRankingPanel(
+              records: records,
+              asOf: asOf,
+            ),
+            GoalVdLineHomeMarketRankingPanel(
               records: records,
               asOf: asOf,
             ),

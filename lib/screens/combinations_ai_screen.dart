@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../widgets/add_to_personal_coupon_button.dart';
+import '../widgets/goalvdline_market_opportunity_panel.dart';
+import '../services/goalvdline_market_opportunity_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/smartcore.dart';
@@ -4507,6 +4509,28 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
         .toList()
       ..sort((a, b) => b.probability.compareTo(a.probability));
     final mainSport = modelOptions.isEmpty ? null : modelOptions.first;
+    final sportingOptions = <String, double>{
+      for (final option in modelOptions)
+        option.market: option.probability.toDouble(),
+      if (!modelOptions.any((option) => option.market == item.market))
+        item.market: item.probability.toDouble(),
+    };
+    final quotedOptions = <String, double>{
+      for (final option in modelOptions)
+        if (option.odd != null && option.odd!.isFinite)
+          option.market: option.odd!,
+      if (item.odd != null && item.odd!.isFinite)
+        item.market: item.odd!,
+    };
+    final marketOpportunity =
+        const GoalVdLineMarketOpportunityService().compare(
+      sportingPercent: sportingOptions,
+      quotedOdds: quotedOptions,
+      country: item.match.country,
+      league: item.match.league,
+      history: _historicalEvidence,
+      selectedMarket: item.market,
+    );
     final isQuotedAlternative =
         mainSport != null && mainSport.market != item.market;
 
@@ -4813,7 +4837,8 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
             'Rischio pre-analisi: ${result.risk}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          GoalVdLineMarketOpportunityPanel(report: marketOpportunity),
           const Divider(color: Colors.white12),
           Align(
             alignment: Alignment.centerRight,
