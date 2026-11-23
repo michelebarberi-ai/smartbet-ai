@@ -64,7 +64,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('UNDER 4.5 · SmartBet'), findsOneWidget);
     expect(find.textContaining('MEI '), findsOneWidget);
-    expect(find.textContaining('120 corretti'), findsNothing);
     expect(find.textContaining('/120 corretti'), findsOneWidget);
   });
 }
