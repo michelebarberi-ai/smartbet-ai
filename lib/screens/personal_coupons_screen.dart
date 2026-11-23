@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/personal_coupon_store.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import '../widgets/goalvdline_coupon_risk_notice.dart';
 import '../services/personal_coupon_review_service.dart';
 import '../services/smartbet_analysis_history_store.dart';
 import '../widgets/personal_coupon_match_tile.dart';
@@ -269,6 +271,13 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
             final coupon = store.coupons[index - 1];
             final total = _combinedOdds(coupon);
             final summary = reviewService.summarize(coupon, records);
+            final risk = const GoalVdLineCouponRiskService().evaluate(
+              coupon.selections.map((pick) => GoalVdLineCouponRiskSelection(
+                fixtureId: pick.fixtureId,
+                probabilityPercent: pick.currentProbability,
+                realOdd: pick.currentOdds,
+              )),
+            );
             return Card(child: ExpansionTile(
               leading: const Icon(Icons.confirmation_number_outlined),
               title: Text(coupon.name),
@@ -290,6 +299,15 @@ class _PersonalCouponsScreenState extends State<PersonalCouponsScreen> {
                 ],
               ),
               children: [
+                if (coupon.selections.length >= 2)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 9,
+                    ),
+                    child: GoalVdLineCouponRiskNotice(
+                      report: risk, compact: true,
+                    ),
+                  ),
                 for (final pick in coupon.selections)
                   PersonalCouponMatchTile(
                     key: ValueKey('personal-selection-${coupon.id}-'

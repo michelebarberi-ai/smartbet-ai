@@ -20,6 +20,34 @@ class SmartBetAnalysisMarketSettlement {
       return SmartBetAnalysisSettlement.unsupported;
     }
 
+    // B78: un mercato OPPURE è una DISGIUNZIONE, non la combo AND (+).
+    // Separiamo solo la parola O isolata, quindi OVER non viene spezzato.
+    // Una condizione vera basta; se nessuna è vera e almeno una non è
+    // valutabile dal solo punteggio, l'esito resta NON VERIFICABILE.
+    final orParts = normalized.split(RegExp(r'\s+O\s+'));
+    if (orParts.length > 1) {
+      if (orParts.length != 2 || orParts.any((part) => part.isEmpty)) {
+        return SmartBetAnalysisSettlement.unsupported;
+      }
+      var hasUnsupported = false;
+      for (final part in orParts) {
+        final outcome = evaluate(
+          market: _expandComboToken(part),
+          homeGoals: homeGoals,
+          awayGoals: awayGoals,
+        );
+        if (outcome == SmartBetAnalysisSettlement.correct) {
+          return SmartBetAnalysisSettlement.correct;
+        }
+        if (outcome == SmartBetAnalysisSettlement.unsupported) {
+          hasUnsupported = true;
+        }
+      }
+      return hasUnsupported
+          ? SmartBetAnalysisSettlement.unsupported
+          : SmartBetAnalysisSettlement.wrong;
+    }
+
     // ============================================================
     // COMBO
     // Esempi:

@@ -12,6 +12,8 @@ import '../models/match_model.dart';
 import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import '../widgets/goalvdline_coupon_risk_notice.dart';
 import '../services/smartbet_market_probability_service.dart';
 import '../services/smartbet_high_handicap_alternative_service.dart';
 import '../services/smartbet_multi_market_selection_service.dart';
@@ -5461,7 +5463,18 @@ class _CombinationsAiScreenState extends State<CombinationsAiScreen> {
               ),
             ],
             const SizedBox(height: 12),
-
+            if (_results.length >= 2) ...[
+              GoalVdLineCouponRiskNotice(
+                report: const GoalVdLineCouponRiskService().evaluate(
+                  _results.map((pick) => GoalVdLineCouponRiskSelection(
+                    fixtureId: pick.match.fixtureId.toString(),
+                    probabilityPercent: pick.probability.toDouble(),
+                    realOdd: pick.odd,
+                  )),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             ..._groupedResultWidgets(),
             const SizedBox(height: 6),
             SizedBox(

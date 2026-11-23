@@ -16,6 +16,8 @@ import '../repositories/match_repository.dart';
 import '../services/odds_service.dart';
 import '../services/goalvdline_odds_scan_guard.dart';
 import '../services/goalvdline_quote_policy.dart';
+import '../services/goalvdline_coupon_risk_service.dart';
+import '../widgets/goalvdline_coupon_risk_notice.dart';
 import '../services/football_competition_catalog_service.dart';
 import '../services/italian_bookmaker_market_filter.dart';
 import '../services/italy_schedule_filter.dart';
@@ -4943,6 +4945,13 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
   }
 
   Widget _summary() {
+    final risk = const GoalVdLineCouponRiskService().evaluate(
+      _results.map((pick) => GoalVdLineCouponRiskSelection(
+        fixtureId: pick.match.fixtureId.toString(),
+        probabilityPercent: pick.probability.toDouble(),
+        realOdd: pick.odd,
+      )),
+    );
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -4969,6 +4978,10 @@ class _CreateAiCouponScreenState extends State<CreateAiCouponScreen> {
             '${(_combinedProbability * 100).toStringAsFixed(2)}%',
           ),
           _summaryRow('Rischio indicativo', _riskLabel),
+          if (_results.length >= 2) ...[
+            const SizedBox(height: 9),
+            GoalVdLineCouponRiskNotice(report: risk, compact: true),
+          ],
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
