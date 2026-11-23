@@ -82,6 +82,8 @@ class GoalVdLineMarketOpportunityPanel extends StatelessWidget {
             selected.market.trim().toUpperCase())) {
       top.add(selected);
     }
+    final rest = options.asMap().entries.where((entry) =>
+        !top.any((item) => item.market == entry.value.market)).toList();
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -124,6 +126,27 @@ class GoalVdLineMarketOpportunityPanel extends StatelessWidget {
               style: TextStyle(color: Colors.white70),
             ),
           for (var i = 0; i < top.length; i++) _market(top[i], i),
+          // The coupon may only SELECT core markets, but its analysis
+          // must retain access to every modeled market (OR, combos, team
+          // goals, handicap) without a second expensive AI request.
+          if (rest.isNotEmpty)
+            ExpansionTile(
+              key: const Key('b78-all-market-possibilities'),
+              initiallyExpanded: false,
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                'Mostra tutte le ${options.length} possibilità di mercato',
+                style: const TextStyle(
+                  color: Color(0xFF9EE3CC),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              children: [
+                for (final entry in rest)
+                  _market(entry.value, entry.key),
+              ],
+            ),
           if (selected != null && !report.selectedMarketIsTopSporting)
             const Text(
               'Il mercato della schedina non è il primo nella classifica '
