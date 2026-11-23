@@ -82,4 +82,19 @@ void main() {
     );
     expect(GoalVdLineCouponMarketPolicy.sportingHandicaps(analysis), isEmpty);
   });
+  test('B79: AFC geography is corrected only for display', () {
+    expect(
+      GoalVdLineCouponMarketPolicy.displayCountry(
+        'Europa', 'AFC Champions League Elite',
+      ),
+      'Asia',
+    );
+    expect(
+      GoalVdLineCouponMarketPolicy.displayCountry(
+        'Brasile', 'Serie A',
+      ),
+      'Brasile',
+    );
+  });
+
 }
