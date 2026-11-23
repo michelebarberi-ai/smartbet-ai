@@ -83,6 +83,9 @@ void main() {
     expect(svc.review(pick(market: 'Goal O Under')
         .withVerifiedScore(outcome), []).status,
       PersonalPickReviewStatus.unsupported);
+    expect(svc.review(pick(market: 'GOAL O UNDER 2.5')
+        .withVerifiedScore(outcome), []).status,
+      PersonalPickReviewStatus.correct);
     expect(svc.review(pick(), []).status,
       PersonalPickReviewStatus.pending);
   });

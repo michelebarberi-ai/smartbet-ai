@@ -373,6 +373,9 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
     _preferences ??= await SharedPreferences.getInstance();
 
     await _load();
+    // Reconcile previously unsupported OR markets only from scores already
+    // observed on this device. No network, no historical backfill or upload.
+    if (_reclassifyVerifiedOrMarkets() > 0) await _save();
 
     _initialized = true;
 
@@ -471,6 +474,45 @@ class SmartBetAnalysisHistoryStore extends ChangeNotifier {
     notifyListeners();
 
     return record;
+  }
+
+  /// B78: after adding the OR market settlement, old records already
+  /// containing a verified final score can be classified locally.
+  ///
+  /// The original first-seen, kickoff and outcome-known timestamps are kept:
+  /// a retrospective record is NEVER promoted into prospective evidence.
+  int _reclassifyVerifiedOrMarkets() {
+    var changed = 0;
+    for (var index = 0; index < _records.length; index++) {
+      final record = _records[index];
+      final knownAt = record.outcomeKnownBy;
+      final home = record.actualHomeGoals;
+      final away = record.actualAwayGoals;
+      if (record.status != SmartBetAnalysisStatus.unsupported ||
+          record.asianSettlement != null ||
+          !record.prospectiveEligible ||
+          !record.firstSeenAt.isBefore(record.matchDate) ||
+          knownAt == null || !knownAt.isAfter(record.matchDate) ||
+          home == null || away == null || home < 0 || away < 0 ||
+          !RegExp(r'\s+O\s+').hasMatch(
+            normalizeAnalysisMarket(record.market),
+          )) {
+        continue;
+      }
+      final result = SmartBetAnalysisMarketSettlement.evaluate(
+        market: record.market, homeGoals: home, awayGoals: away,
+      );
+      if (result == SmartBetAnalysisSettlement.unsupported) continue;
+      _records[index] = record.withActualResult(
+        homeGoals: home, awayGoals: away,
+        status: result == SmartBetAnalysisSettlement.correct
+            ? SmartBetAnalysisStatus.correct
+            : SmartBetAnalysisStatus.wrong,
+        updatedAt: knownAt,
+      );
+      changed++;
+    }
+    return changed;
   }
 
   Future<int> registerActualResult({

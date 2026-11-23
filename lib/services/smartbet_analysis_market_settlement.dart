@@ -30,6 +30,7 @@ class SmartBetAnalysisMarketSettlement {
         return SmartBetAnalysisSettlement.unsupported;
       }
       var hasUnsupported = false;
+      var hasCorrect = false;
       for (final part in orParts) {
         final outcome = evaluate(
           market: _expandComboToken(part),
@@ -37,14 +38,16 @@ class SmartBetAnalysisMarketSettlement {
           awayGoals: awayGoals,
         );
         if (outcome == SmartBetAnalysisSettlement.correct) {
-          return SmartBetAnalysisSettlement.correct;
+          hasCorrect = true;
         }
         if (outcome == SmartBetAnalysisSettlement.unsupported) {
           hasUnsupported = true;
         }
       }
-      return hasUnsupported
-          ? SmartBetAnalysisSettlement.unsupported
+      // Una condizione malformata non può rendere verificabile un mercato.
+      if (hasUnsupported) return SmartBetAnalysisSettlement.unsupported;
+      return hasCorrect
+          ? SmartBetAnalysisSettlement.correct
           : SmartBetAnalysisSettlement.wrong;
     }
 
@@ -105,6 +108,7 @@ class SmartBetAnalysisMarketSettlement {
         return _result(homeGoals >= awayGoals);
 
       case 'X2':
+      case '2X': // Alias colloquiale; la chiave bookmaker resta X2.
         return _result(awayGoals >= homeGoals);
 
       case '12':

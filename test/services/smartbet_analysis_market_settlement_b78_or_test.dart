@@ -17,12 +17,12 @@ void main() {
         for (var away = 0; away <= 6; away++) {
           final a = check(parts[0], home, away);
           final b = check(parts[1], home, away);
-          final expected = a == SmartBetAnalysisSettlement.correct ||
-                  b == SmartBetAnalysisSettlement.correct
-              ? SmartBetAnalysisSettlement.correct
-              : a == SmartBetAnalysisSettlement.unsupported ||
-                      b == SmartBetAnalysisSettlement.unsupported
-                  ? SmartBetAnalysisSettlement.unsupported
+          final expected = a == SmartBetAnalysisSettlement.unsupported ||
+                  b == SmartBetAnalysisSettlement.unsupported
+              ? SmartBetAnalysisSettlement.unsupported
+              : a == SmartBetAnalysisSettlement.correct ||
+                      b == SmartBetAnalysisSettlement.correct
+                  ? SmartBetAnalysisSettlement.correct
                   : SmartBetAnalysisSettlement.wrong;
           expect(check(market, home, away), expected,
               reason: '$market · $home-$away');
@@ -61,7 +61,7 @@ void main() {
     expect(check('1X O MERCATO SCONOSCIUTO', 0, 1),
         SmartBetAnalysisSettlement.unsupported);
     expect(check('1X O MERCATO SCONOSCIUTO', 1, 1),
-        SmartBetAnalysisSettlement.correct);
+        SmartBetAnalysisSettlement.unsupported);
     expect(check('GOAL O UNDER', 2, 0),
         SmartBetAnalysisSettlement.unsupported);
     expect(check('GOAL O OVER 2.5 O X', 0, 0),
@@ -69,7 +69,7 @@ void main() {
     expect(check('CASA SEGNA PRIMA O GOAL', 3, 0),
         SmartBetAnalysisSettlement.unsupported);
     expect(check('CASA SEGNA PRIMA O GOAL', 2, 1),
-        SmartBetAnalysisSettlement.correct);
+        SmartBetAnalysisSettlement.unsupported);
   });
 
   test('B78: normalizzazione e invalid score sono prudenti', () {
