@@ -9,7 +9,7 @@ const workflow = fs.readFileSync(path.join(root, '.github/workflows/ios-testflig
 const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
 
 test('B78: TestFlight only from exact authorized release commit', () => {
-  assert.match(pubspec, /^version: 1\.2\.5\+78$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:78|79)$/m);
   assert.match(workflow, /^      - release\/b78-testflight$/m);
   assert.equal(
     (workflow.match(/github\.ref != 'refs\/heads\/release\/b78-testflight'/g) || []).length,

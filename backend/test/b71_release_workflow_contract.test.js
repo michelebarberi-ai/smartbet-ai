@@ -31,5 +31,5 @@ test('B71: full regression must finish before signing/upload', () => {
 
 test('B71: feature version is base build 70 and release is pinned separately', () => {
   const pubspec = fs.readFileSync(path.join(__dirname, '../../pubspec.yaml'), 'utf8');
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:70|71|73|74|75|76|77|78)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:70|71|73|74|75|76|77|78|79)$/m);
 });

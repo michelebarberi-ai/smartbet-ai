@@ -9,7 +9,7 @@ test('B77: upload requires explicit authorization and exact iOS build 77', () =>
     path.join(root, '.github/workflows/ios-testflight.yml'), 'utf8');
   const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
 
-  assert.match(pubspec, /^version: 1\.2\.5\+(?:77|78)$/m);
+  assert.match(pubspec, /^version: 1\.2\.5\+(?:77|78|79)$/m);
   assert.match(workflow, /^      - release\/b77-testflight$/m);
   assert.equal(
     (workflow.match(/github\.ref != 'refs\/heads\/release\/b77-testflight'/g) || []).length,

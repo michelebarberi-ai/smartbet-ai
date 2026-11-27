@@ -31,6 +31,7 @@ on:
       - release/b76-testflight
       - release/b77-testflight
       - release/b78-testflight
+      - release/b79-testflight
 
 jobs:
   build-ios:
@@ -62,7 +63,8 @@ jobs:
        github.ref != 'refs/heads/release/b75-testflight' &&
        github.ref != 'refs/heads/release/b76-testflight' &&
        github.ref != 'refs/heads/release/b77-testflight' &&
-       github.ref != 'refs/heads/release/b78-testflight') ||
+       github.ref != 'refs/heads/release/b78-testflight' &&
+       github.ref != 'refs/heads/release/b79-testflight') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref != 'refs/heads/release/b47-testflight' &&
        github.ref != 'refs/heads/release/b48-testflight' &&
@@ -84,7 +86,8 @@ jobs:
        github.ref != 'refs/heads/release/b74-testflight' &&
        github.ref != 'refs/heads/release/b76-testflight' &&
        github.ref != 'refs/heads/release/b77-testflight' &&
-       github.ref != 'refs/heads/release/b78-testflight') ||
+       github.ref != 'refs/heads/release/b78-testflight' &&
+       github.ref != 'refs/heads/release/b79-testflight') ||
       (github.event_name == 'push' &&
        ((github.ref == 'refs/heads/release/b45-testflight' &&
          github.event.head_commit.message == 'release(build45): authorize TestFlight upload') ||
@@ -131,7 +134,9 @@ jobs:
         (github.ref == 'refs/heads/release/b77-testflight' &&
          github.event.head_commit.message == 'release(build77): authorize TestFlight upload') ||
         (github.ref == 'refs/heads/release/b78-testflight' &&
-         github.event.head_commit.message == 'release(build78): authorize TestFlight upload')))
+         github.event.head_commit.message == 'release(build78): authorize TestFlight upload') ||
+        (github.ref == 'refs/heads/release/b79-testflight' &&
+         github.event.head_commit.message == 'release(build79): authorize TestFlight upload')))
     runs-on: macos-26-intel
 
     steps:
@@ -199,7 +204,8 @@ jobs:
           github.ref == 'refs/heads/release/b75-testflight' ||
           github.ref == 'refs/heads/release/b76-testflight' ||
           github.ref == 'refs/heads/release/b77-testflight' ||
-          github.ref == 'refs/heads/release/b78-testflight'
+          github.ref == 'refs/heads/release/b78-testflight' ||
+          github.ref == 'refs/heads/release/b79-testflight'
         run: |
           node --check backend/server.js
           node --check backend/auto_coupon/background_worker.js
@@ -220,7 +226,8 @@ jobs:
           github.ref == 'refs/heads/release/b75-testflight' ||
           github.ref == 'refs/heads/release/b76-testflight' ||
           github.ref == 'refs/heads/release/b77-testflight' ||
-          github.ref == 'refs/heads/release/b78-testflight'
+          github.ref == 'refs/heads/release/b78-testflight' ||
+          github.ref == 'refs/heads/release/b79-testflight'
         run: |
           npm --prefix backend ci --no-audit --no-fund
           npm --prefix backend test
@@ -292,7 +299,8 @@ jobs:
           github.ref == 'refs/heads/release/b75-testflight' ||
           github.ref == 'refs/heads/release/b76-testflight' ||
           github.ref == 'refs/heads/release/b77-testflight' ||
-          github.ref == 'refs/heads/release/b78-testflight'
+          github.ref == 'refs/heads/release/b78-testflight' ||
+          github.ref == 'refs/heads/release/b79-testflight'
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter test --no-pub --reporter compact
@@ -396,7 +404,7 @@ jobs:
 
           # B73: a notification permission prompt alone is NOT APNs.
           # Reject the old Store profile, which lacks aps-environment.
-          if [[ "$GITHUB_REF" == "refs/heads/release/b73-testflight" || "$GITHUB_REF" == "refs/heads/release/b74-testflight" || "$GITHUB_REF" == "refs/heads/release/b75-testflight" || "$GITHUB_REF" == "refs/heads/release/b76-testflight" || "$GITHUB_REF" == "refs/heads/release/b77-testflight" || "$GITHUB_REF" == "refs/heads/release/b78-testflight" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/release/b73-testflight" || "$GITHUB_REF" == "refs/heads/release/b74-testflight" || "$GITHUB_REF" == "refs/heads/release/b75-testflight" || "$GITHUB_REF" == "refs/heads/release/b76-testflight" || "$GITHUB_REF" == "refs/heads/release/b77-testflight" || "$GITHUB_REF" == "refs/heads/release/b78-testflight" || "$GITHUB_REF" == "refs/heads/release/b79-testflight" ]]; then
             APNS_ENTITLEMENT="$(security cms -D -i "$PROFILE_PATH" |
               plutil -extract Entitlements.aps-environment raw - 2>/dev/null || true)"
             if [[ "$APNS_ENTITLEMENT" != "production" ]]; then
@@ -583,6 +591,12 @@ jobs:
               exit 1
             }
             BUILD_NUMBER="78"
+          elif [[ "$GITHUB_REF" == "refs/heads/release/b79-testflight" ]]; then
+            grep -qx 'version: 1.2.5+79' pubspec.yaml || {
+              echo "ERROR: Build 79 release version mismatch"
+              exit 1
+            }
+            BUILD_NUMBER="79"
           else
             BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
